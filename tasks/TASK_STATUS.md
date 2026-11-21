@@ -12,6 +12,8 @@ Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/
 
 Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验收](../docs/PHASE_7_ACCEPTANCE.md#phase-7-集成验收)。Gate 3 的 SQL 一致性随 Phase 8 和 Phase 9 验收。
 
+Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../docs/PHASE_8_ACCEPTANCE.md#phase-8-集成验收)。Gate 4 的 MySQL 8.0 执行与元数据核对待 P9-04。
+
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
 | P0-01 | 仓库与环境勘察 | DONE | GPT | `23ea2fd`，`sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
@@ -55,11 +57,11 @@ Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验�
 | P8-02 | 单表 DDL | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-02-单表-ddl)。本地 13 表、149 字段、13 主键、68 注释逐项核对，默认值、自增、转义由合成用例覆盖。测试与 vet 通过 | 实际执行随 P9-04 |
 | P8-03 | 索引/主键/约束 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-03-索引和约束)。本地 13 个主键各声明一次，合成 XML 的复合主键、前缀索引与唯一索引核对通过。外键编译、阻断诊断及 vet 通过 | 真实 MySQL 索引及外键实测随 P9-04 |
 | P8-04 | 全库依赖与外键策略 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-04-全库依赖和外键策略)。本地 13 表计划无阻断，合成跨 Package 循环的 2 条外键与 4 个列映射一致。冲突、缺失引用和多库边界测试通过 | |
-| P8-05 | 全库初始化 SQL | IN_PROGRESS | DeepSeek / GPT | | |
+| P8-05 | 全库初始化 SQL | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-05-全库初始化-sql)。本地 13 表的建表语句与单表输出逐字节一致。合成 2 表循环的外键均在建表后。重复生成一致，阻断返回空 SQL。`make check`、样本 SHA-256 复核通过 | 排序规则可用性与实际执行随 P9-04 |
 | P9-01 | SQL 预览与复制 | TODO | DeepSeek | | |
 | P9-02 | SQL 文件导出 | TODO | DeepSeek | | |
 | P9-03 | Golden Tests | TODO | DeepSeek | | |
-| P9-04 | MySQL 8.0 集成测试 | TODO | GPT | | |
+| P9-04 | MySQL 8.0 集成测试 | TODO | GPT | NOT RUN | Gate 4 执行及元数据核对待验收 |
 | P10-01 | macOS 验收与打包 | TODO | GPT | | |
 | P10-02 | Windows x64 验收 | TODO | GPT | | |
 | P10-03 | 文档与发布检查 | TODO | GPT | | |

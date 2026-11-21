@@ -26,3 +26,16 @@
 - 外部表快捷方式、SQL 对象的解析结构错误、多根 Model 和无法映射的库或 Schema 限定生成带位置的阻断诊断。SQL 相关的未知 XML 项保留为警告。Package 仅用于组织表和关系。
 - 本地 `yian.pdm` 的计划含 13 张表和 0 个外键，零阻断。合成 XML 的 2 张表、2 个跨 Package 循环外键和 4 个有序列映射逐项一致。通过忽略目录中的 `go test -overlay` 夹具核对，全库和单表的 `CREATE TABLE` 复用由包级测试断言。
 - `go test -count=1 ./internal/sqlgen ./internal/pdm`、对应 `go vet`、`make format-check` 及 `git diff --check` 通过。
+
+## P8-05 全库初始化 SQL
+
+- `GenerateDatabase` 依次生成 `CREATE DATABASE IF NOT EXISTS`、`USE`、所有 `CREATE TABLE` 与延后的 `ALTER TABLE ... ADD CONSTRAINT`。库名优先用显式选项，其次取 Model Code，回退到 Model Name 时给出警告。限定库名和系统库名阻断。
+- 冻结的 PDM 模型没有已验证的数据库级字符集与排序规则来源。生成器接受显式 `CharacterSet` 和 `Collation` 选项，检查 ASCII 语法、字符集识别和排序规则前缀匹配。缺省选项沿用目标实例的默认设置。指定排序规则的完整名称可用性由 P9-04 在目标 MySQL 8.0 实例复核。[MySQL 8.0 CREATE DATABASE 规则](https://dev.mysql.com/doc/refman/8.0/en/create-database.html)
+- 本地 `yian.pdm` 生成 13 条 `CREATE TABLE`，与 13 次单表生成的对应语句逐字节一致。合成循环 XML 的 2 条 `CREATE TABLE` 同样逐字节一致，2 条 `ALTER TABLE` 都在全部建表语句之后，约束名、动作及 4 个列映射均与 XML 一致。重复生成两份脚本均逐字节一致。
+- 两份公开导出在本地复测，分别报告 26 个不支持的外键动作和 5 个不支持的默认表达式。两次均返回空 SQL。合成用例覆盖数据库名转义、非法字符集参数、排序规则与字符集错配、改换输入顺序后的确定性和阻断时无部分输出。
+
+## Phase 8 集成验收
+
+- 2026-11-21 使用 Go 1.27.4、macOS arm64 和 `CGO_ENABLED=0`。`go test -count=1 ./internal/sqlgen ./internal/pdm`、`make check`（格式、全项目测试与 vet）和 `git diff --check` 通过。
+- 本地业务样本仅由本机验证程序读取。`shasum -a 256 -c .local/phase3/sample.sha256` 通过。验收程序和业务样本均在 Git 忽略范围内。
+- P9-04 MySQL 8.0 实际执行为 **NOT RUN**。Gate 4 的执行及元数据核对待 P9-04，包括排序规则可用性、索引字节限制以及目标实例的 SQL 模式。P4-03 的 PowerDesigner 应用内对照继续为 **BLOCKED**。
