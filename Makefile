@@ -3,7 +3,7 @@ VERSION ?= 0.1.0
 export CGO_ENABLED := 0
 go_files = find . -type d \( -name .git -o -name .local -o -name .out \) -prune -o -type f -name '*.go'
 
-.PHONY: env fmt format-check test vet check probe package-macos
+.PHONY: env fmt format-check test vet check probe package-macos package-windows
 
 env:
 	sh scripts/check-environment.sh
@@ -32,3 +32,8 @@ package-macos: export GO := $(GO)
 package-macos: export VERSION := $(VERSION)
 package-macos:
 	sh scripts/package-macos.sh
+
+package-windows: export GO := $(GO)
+package-windows: export VERSION := $(VERSION)
+package-windows:
+	sh scripts/package-windows.sh
