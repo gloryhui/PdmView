@@ -54,13 +54,14 @@ const (
 // the single reusable grid-tile lookup; retained title and field TextLayouts
 // are not counted as cache hits or misses.
 type FrameStats struct {
-	VisibleNodes int
-	VisibleEdges int
-	Arrows       int
-	FieldRows    int
-	CacheHits    int
-	CacheMisses  int
-	LOD          LOD
+	VisibleNodes    int
+	VisibleEdges    int
+	UnpreparedNodes int
+	Arrows          int
+	FieldRows       int
+	CacheHits       int
+	CacheMisses     int
+	LOD             LOD
 }
 
 type labelVariant struct {
@@ -501,6 +502,9 @@ func (c *Canvas) DrawWithHover(
 		for _, offset := range c.nodeOffsets {
 			if offset < 0 || offset >= len(c.scene.Nodes) {
 				continue
+			}
+			if stats.LOD != Far && c.nodes[offset] == nil {
+				stats.UnpreparedNodes++
 			}
 			stats.FieldRows += c.drawNode(p, offset, selected, hovered, camera, t, stats.LOD)
 		}

@@ -96,6 +96,30 @@ func (c Config) Validate() error {
 	return nil
 }
 
+func benchmarkScene(cfg Config) (graph.Scene, error) {
+	scene, err := graph.Generate(cfg.Nodes, cfg.Seed, cfg.Density)
+	if err != nil {
+		return graph.Scene{}, err
+	}
+	dataTypes := [...]string{"BIGINT", "BIGINT", "TIMESTAMP", "VARCHAR(30)", "TEXT"}
+	for offset := range scene.Nodes {
+		node := &scene.Nodes[offset]
+		node.Code = fmt.Sprintf("bench_table_%03d", offset+1)
+		for fieldOffset, dataType := range dataTypes {
+			field := &node.Fields[fieldOffset]
+			field.DataType = dataType
+			field.PrimaryKey = fieldOffset == 0
+			field.ForeignKey = fieldOffset == 1
+		}
+		node.Fields[0].Name = "id"
+		node.Fields[1].Name = "parent_id"
+	}
+	for offset := range scene.Edges {
+		scene.Edges[offset].Directed = true
+	}
+	return scene, nil
+}
+
 type motionSample struct {
 	Fit   bool
 	Scale float64
@@ -192,9 +216,10 @@ type Bench struct {
 	began     bool
 	done      bool
 
-	viewportW, viewportH int
-	gpu                  bool
-	scale                float32
+	viewportW, viewportH     int
+	unexpectedW, unexpectedH int
+	gpu                      bool
+	scale                    float32
 
 	intervals   []time.Duration
 	callbacks   []time.Duration
@@ -207,13 +232,23 @@ type Bench struct {
 	lodCounts   map[renderer.LOD]int
 	cacheHits   int
 	cacheMisses int
+	fieldRows   int
+	arrows      int
+	unprepared  int
 }
 
 func NewBench(cfg Config, scene graph.Scene, index graph.SpatialQuery, out io.Writer, native, pageNil bool) *Bench {
+	canvas := renderer.New(scene, index)
+	area := ui.Rect{W: float32(cfg.Width), H: float32(cfg.Height)}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: float64(cfg.Width), Y: float64(cfg.Height)}})
+	for elapsed := time.Duration(0); elapsed < motionCycle; elapsed += 5 * time.Millisecond {
+		applyMotion(camera, scene, area, elapsed)
+		canvas.PrepareVisible(camera, graph.Hit{})
+	}
 	return &Bench{
 		cfg:       cfg,
 		scene:     scene,
-		renderer:  renderer.New(scene, index),
+		renderer:  canvas,
 		out:       out,
 		native:    native,
 		pageNil:   pageNil,
@@ -246,6 +281,9 @@ func (b *Bench) Frame(p *ui.Painter, area ui.Rect, camera *graph.Camera) bool {
 	b.viewportW, b.viewportH = int(math.Round(float64(area.W))), int(math.Round(float64(area.H)))
 	b.gpu, b.scale = p.Accelerated(), p.Scale()
 	sampling := !start.Before(b.measureAt)
+	if sampling && (b.viewportW != b.cfg.Width || b.viewportH != b.cfg.Height) {
+		b.unexpectedW, b.unexpectedH = b.viewportW, b.viewportH
+	}
 	if sampling && !b.began {
 		b.began = true
 		b.printBegin()
@@ -275,6 +313,9 @@ func (b *Bench) addFrameStats(frame renderer.FrameStats) {
 	b.lodCounts[frame.LOD]++
 	b.cacheHits += frame.CacheHits
 	b.cacheMisses += frame.CacheMisses
+	b.fieldRows += frame.FieldRows
+	b.arrows += frame.Arrows
+	b.unprepared += frame.UnpreparedNodes
 }
 
 type Result struct {
@@ -293,6 +334,9 @@ type Result struct {
 	CacheHits       int
 	CacheMisses     int
 	CacheHitPercent float64
+	FieldRows       int
+	Arrows          int
+	UnpreparedNodes int
 	ViewportW       int
 	ViewportH       int
 	Native          bool
@@ -305,6 +349,10 @@ type Result struct {
 func (b *Bench) Result() (Result, error) {
 	if !b.native || !b.pageNil {
 		return Result{}, fmt.Errorf("expected a native MyGo window without a web page")
+	}
+	if b.unexpectedW != 0 || b.unexpectedH != 0 {
+		return Result{}, fmt.Errorf("sampled viewport changed to %dx%d DIP, expected %dx%d",
+			b.unexpectedW, b.unexpectedH, b.cfg.Width, b.cfg.Height)
 	}
 	frames := len(b.callbacks)
 	if frames < MinFrameSamples {
@@ -343,6 +391,9 @@ func (b *Bench) Result() (Result, error) {
 		CacheHits:       b.cacheHits,
 		CacheMisses:     b.cacheMisses,
 		CacheHitPercent: cachePercent,
+		FieldRows:       b.fieldRows,
+		Arrows:          b.arrows,
+		UnpreparedNodes: b.unprepared,
 		ViewportW:       b.viewportW,
 		ViewportH:       b.viewportH,
 		Native:          b.native,
@@ -382,13 +433,14 @@ func PrintEnd(out io.Writer, result Result, err error) {
 		errorField = fmt.Sprintf(" error=%q", err)
 	}
 	fmt.Fprintf(out,
-		"CANVAS_BENCH END frames=%d fps=%.2f interval_p95_ms=%.3f callback_p95_ms=%.3f callback_mean_ms=%.3f nodes_min=%d nodes_max=%d nodes_mean=%.2f edges_min=%d edges_max=%d edges_mean=%.2f lod_far=%d lod_medium=%d lod_near=%d cache_hits=%d cache_misses=%d cache_hit_pct=%.1f viewport_dip=%dx%d native=%t page_nil=%t gpu=%t hidpi=%t scale=%.2f%s\n",
+		"CANVAS_BENCH END frames=%d fps=%.2f interval_p95_ms=%.3f callback_p95_ms=%.3f callback_mean_ms=%.3f nodes_min=%d nodes_max=%d nodes_mean=%.2f edges_min=%d edges_max=%d edges_mean=%.2f lod_far=%d lod_medium=%d lod_near=%d cache_hits=%d cache_misses=%d cache_hit_pct=%.1f field_rows=%d arrows=%d unprepared_nodes=%d viewport_dip=%dx%d native=%t page_nil=%t gpu=%t hidpi=%t scale=%.2f%s\n",
 		result.Frames, result.FPS,
 		durationMS(result.IntervalP95), durationMS(result.CallbackP95), durationMS(result.CallbackMean),
 		result.NodesMin, result.NodesMax, result.NodesMean,
 		result.EdgesMin, result.EdgesMax, result.EdgesMean,
 		result.LODCounts[renderer.Far], result.LODCounts[renderer.Medium], result.LODCounts[renderer.Near],
 		result.CacheHits, result.CacheMisses, result.CacheHitPercent,
+		result.FieldRows, result.Arrows, result.UnpreparedNodes,
 		result.ViewportW, result.ViewportH,
 		result.Native, result.PageNil, result.GPU, result.HiDPI, result.Scale,
 		errorField,

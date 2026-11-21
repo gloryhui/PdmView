@@ -103,6 +103,32 @@ func TestMotionCycleFitAndTargetScales(t *testing.T) {
 	}
 }
 
+func TestBenchmarkSceneExercisesFormalRendering(t *testing.T) {
+	cfg := DefaultConfig()
+	scene, err := benchmarkScene(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scene.Nodes) != cfg.Nodes || len(scene.Edges) != 2*cfg.Nodes {
+		t.Fatalf("benchmark has %d nodes and %d edges", len(scene.Nodes), len(scene.Edges))
+	}
+	for _, node := range scene.Nodes {
+		if node.Code == "" || !node.Fields[0].PrimaryKey || !node.Fields[1].ForeignKey {
+			t.Fatalf("benchmark table %d lacks a code or key marker", node.ID)
+		}
+		for _, field := range node.Fields {
+			if field.DataType == "" {
+				t.Fatalf("benchmark table %d has an untyped field", node.ID)
+			}
+		}
+	}
+	for _, edge := range scene.Edges {
+		if !edge.Directed {
+			t.Fatalf("benchmark edge %d has no arrow direction", edge.ID)
+		}
+	}
+}
+
 func TestPercentileDuration(t *testing.T) {
 	values := make([]time.Duration, 100)
 	for i := range values {

@@ -18,7 +18,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "canvas-bench:", err)
 		os.Exit(2)
 	}
-	scene, err := graph.Generate(cfg.Nodes, cfg.Seed, cfg.Density)
+	scene, err := benchmarkScene(cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "canvas-bench:", err)
 		os.Exit(2)
@@ -34,12 +34,14 @@ func main() {
 		var bench *Bench
 		var watchdog *time.Timer
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:          "PdmView Canvas Benchmark",
-			Width:          cfg.Width,
-			Height:         cfg.Height,
-			UseContentSize: true,
-			MinWidth:       320,
-			MinHeight:      240,
+			Title:           "PdmView Canvas Benchmark",
+			Width:           cfg.Width,
+			Height:          cfg.Height,
+			UseContentSize:  true,
+			DisableResize:   true,
+			DisableMaximize: true,
+			MinWidth:        320,
+			MinHeight:       240,
 			Content: ui.View(func(c *ui.Context) {
 				ui.Box(c).Fill().Draw(func(p *ui.Painter, area ui.Rect) {
 					if stopping.Load() || bench == nil {
