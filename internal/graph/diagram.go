@@ -58,12 +58,13 @@ const (
 func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 	result := DiagramGraph{}
 	tables, orderedTables := collectDiagramTables(model)
+	decorations := collectTableDecorations(model)
 
 	if diagram == nil {
 		if model == nil {
 			return result
 		}
-		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(orderedTables)
+		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(orderedTables, decorations)
 		result.Scene.Bounds = sceneBounds(result.Scene.Nodes, nil)
 		return result
 	}
@@ -71,9 +72,10 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 	result.DiagramID = diagram.ID
 	if len(diagram.TableSymbols) > 0 {
 		result.Scene.Nodes, result.NodeSources, result.AutoLayout =
-			symbolNodes(diagram.TableSymbols, tables)
+			symbolNodes(diagram.TableSymbols, tables, decorations)
 	} else if contents, ok := ownerContents(model, diagram.OwnerID); ok {
-		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(contents.Tables)
+		result.Scene.Nodes, result.NodeSources, result.AutoLayout =
+			fallbackNodes(contents.Tables, decorations)
 	}
 
 	symbolIndex := uniqueSymbolNodeIndex(diagram.TableSymbols)
@@ -82,7 +84,11 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 	return result
 }
 
-func symbolNodes(symbols []pdm.TableSymbol, tables map[string]pdm.Table) ([]Node, []DiagramNodeSource, bool) {
+func symbolNodes(
+	symbols []pdm.TableSymbol,
+	tables map[string]pdm.Table,
+	decorations map[string]tableDecoration,
+) ([]Node, []DiagramNodeSource, bool) {
 	var validBounds Rect
 	hasValid := false
 	for _, symbol := range symbols {
@@ -127,7 +133,8 @@ func symbolNodes(symbols []pdm.TableSymbol, tables map[string]pdm.Table) ([]Node
 		}
 		if resolved {
 			node.Name = tableDisplayName(table)
-			node.Fields = tableFields(table)
+			node.Code = table.Code
+			node.Fields = tableFields(table, decorations[table.ID])
 		}
 		nodes = append(nodes, node)
 		sources = append(sources, DiagramNodeSource{
@@ -139,7 +146,10 @@ func symbolNodes(symbols []pdm.TableSymbol, tables map[string]pdm.Table) ([]Node
 	return nodes, sources, autoCount > 0
 }
 
-func fallbackNodes(tables []pdm.Table) ([]Node, []DiagramNodeSource, bool) {
+func fallbackNodes(
+	tables []pdm.Table,
+	decorations map[string]tableDecoration,
+) ([]Node, []DiagramNodeSource, bool) {
 	nodes := make([]Node, 0, len(tables))
 	sources := make([]DiagramNodeSource, 0, len(tables))
 	for _, table := range tables {
@@ -147,7 +157,8 @@ func fallbackNodes(tables []pdm.Table) ([]Node, []DiagramNodeSource, bool) {
 			ID:     len(nodes),
 			Bounds: autoBounds(len(nodes), 0, 0),
 			Name:   tableDisplayName(table),
-			Fields: tableFields(table),
+			Code:   table.Code,
+			Fields: tableFields(table, decorations[table.ID]),
 		})
 		sources = append(sources, DiagramNodeSource{TableID: table.ID})
 	}
@@ -259,10 +270,100 @@ func tableDisplayName(table pdm.Table) string {
 	return firstDisplayName(table.Name, table.Code, table.ID)
 }
 
-func tableFields(table pdm.Table) []Field {
+type tableDecoration struct {
+	primary map[string]struct{}
+	foreign map[string]struct{}
+}
+
+func collectTableDecorations(model *pdm.Model) map[string]tableDecoration {
+	decorations := make(map[string]tableDecoration)
+	if model == nil {
+		return decorations
+	}
+	owners := make(map[string]string)
+	collectColumnOwners(model.Contents, owners)
+	collectDecorations(model.Contents, decorations, owners)
+	return decorations
+}
+
+func collectColumnOwners(contents pdm.Contents, owners map[string]string) {
+	for _, table := range contents.Tables {
+		for _, column := range table.Columns {
+			if column.ID != "" {
+				if _, exists := owners[column.ID]; !exists {
+					owners[column.ID] = table.ID
+				}
+			}
+		}
+	}
+	for _, pkg := range contents.Packages {
+		collectColumnOwners(pkg.Contents, owners)
+	}
+}
+
+func collectDecorations(
+	contents pdm.Contents,
+	decorations map[string]tableDecoration,
+	owners map[string]string,
+) {
+	for _, table := range contents.Tables {
+		if table.ID == "" || table.PrimaryKeyID == "" {
+			continue
+		}
+		for _, key := range table.Keys {
+			if key.ID != table.PrimaryKeyID {
+				continue
+			}
+			decoration := decorations[table.ID]
+			if decoration.primary == nil {
+				decoration.primary = make(map[string]struct{})
+			}
+			for _, columnID := range key.ColumnIDs {
+				if columnID != "" && owners[columnID] == table.ID {
+					decoration.primary[columnID] = struct{}{}
+				}
+			}
+			decorations[table.ID] = decoration
+		}
+	}
+	for _, reference := range contents.References {
+		if reference.ChildTableID == "" {
+			continue
+		}
+		var childColumns []string
+		for _, join := range reference.Joins {
+			if join.ChildColumnID != "" && owners[join.ChildColumnID] == reference.ChildTableID {
+				childColumns = append(childColumns, join.ChildColumnID)
+			}
+		}
+		if len(childColumns) == 0 {
+			continue
+		}
+		decoration := decorations[reference.ChildTableID]
+		if decoration.foreign == nil {
+			decoration.foreign = make(map[string]struct{})
+		}
+		for _, columnID := range childColumns {
+			decoration.foreign[columnID] = struct{}{}
+		}
+		decorations[reference.ChildTableID] = decoration
+	}
+	for _, pkg := range contents.Packages {
+		collectDecorations(pkg.Contents, decorations, owners)
+	}
+}
+
+func tableFields(table pdm.Table, decoration tableDecoration) []Field {
 	fields := make([]Field, len(table.Columns))
 	for offset, column := range table.Columns {
-		fields[offset] = Field{Name: firstDisplayName(column.Name, column.Code, column.ID)}
+		_, primary := decoration.primary[column.ID]
+		_, foreign := decoration.foreign[column.ID]
+		fields[offset] = Field{
+			Name:       firstDisplayName(column.Name, column.Code, column.ID),
+			DataType:   column.DataType.Value,
+			PrimaryKey: primary,
+			ForeignKey: foreign,
+		}
 	}
 	return fields
 }

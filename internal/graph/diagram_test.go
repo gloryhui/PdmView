@@ -224,6 +224,140 @@ func TestMapDiagramCrossPackageLookupOwnerFallbackAndNilDiagram(t *testing.T) {
 	}
 }
 
+func TestMapDiagramPopulatesCodeTypesAndKeyMarkers(t *testing.T) {
+	parentTable := pdm.Table{
+		Metadata: pdm.Metadata{ID: "parent", Name: "Parent Table", Code: "PARENT_CODE"},
+		Columns: []pdm.Column{
+			{Metadata: pdm.Metadata{ID: "parent-id", Name: "Parent ID", Code: "PARENT_ID"},
+				DataType: pdm.OptionalText{Value: "INTEGER", Present: true}},
+			{Metadata: pdm.Metadata{ID: "parent-name", Name: "Parent Name", Code: "PARENT_NAME"},
+				DataType: pdm.OptionalText{Value: "VARCHAR(64)", Present: true}},
+		},
+		Keys: []pdm.Key{{
+			Metadata:  pdm.Metadata{ID: "parent-pk"},
+			ColumnIDs: []string{"parent-id"},
+		}},
+		PrimaryKeyID: "parent-pk",
+	}
+	childTable := pdm.Table{
+		Metadata: pdm.Metadata{ID: "child", Name: "Child Table", Code: "CHILD_CODE"},
+		Columns: []pdm.Column{
+			{Metadata: pdm.Metadata{ID: "child-id", Name: "Child ID", Code: "CHILD_ID"},
+				DataType: pdm.OptionalText{Value: "BIGINT", Present: true}},
+			{Metadata: pdm.Metadata{ID: "child-parent-id", Name: "Parent Ref", Code: "PARENT_REF"},
+				DataType: pdm.OptionalText{Value: "DECIMAL(10, 2)", Present: true}},
+		},
+		Keys: []pdm.Key{{
+			Metadata:  pdm.Metadata{ID: "child-pk"},
+			ColumnIDs: []string{"child-id"},
+		}},
+		PrimaryKeyID: "child-pk",
+	}
+	model := &pdm.Model{
+		Metadata: pdm.Metadata{ID: "model"},
+		Contents: pdm.Contents{
+			Packages: []pdm.Package{
+				{Metadata: pdm.Metadata{ID: "package-parent"}, Contents: pdm.Contents{Tables: []pdm.Table{parentTable}}},
+				{Metadata: pdm.Metadata{ID: "package-child"}, Contents: pdm.Contents{Tables: []pdm.Table{childTable}}},
+			},
+			References: []pdm.Reference{{
+				Metadata:      pdm.Metadata{ID: "fk-child-parent"},
+				OwnerID:       "missing-owner",
+				ParentTableID: "parent",
+				ChildTableID:  "child",
+				Joins: []pdm.ReferenceJoin{{
+					Metadata:       pdm.Metadata{ID: "join-one"},
+					ParentColumnID: "parent-id",
+					ChildColumnID:  "child-parent-id",
+				}},
+			}},
+		},
+	}
+	diagram := &pdm.Diagram{
+		Metadata: pdm.Metadata{ID: "marker-diagram"},
+		OwnerID:  "model",
+		TableSymbols: []pdm.TableSymbol{
+			{Metadata: pdm.Metadata{ID: "child-symbol"}, TableID: "child", Rect: mappingRect(0, 0, 100, 100)},
+			{Metadata: pdm.Metadata{ID: "parent-symbol"}, TableID: "parent", Rect: mappingRect(200, 0, 300, 100)},
+		},
+	}
+
+	result := MapDiagram(model, diagram)
+	child := result.Scene.Nodes[0]
+	parent := result.Scene.Nodes[1]
+	if child.Code != "CHILD_CODE" || parent.Code != "PARENT_CODE" {
+		t.Fatalf("node codes = %q/%q", child.Code, parent.Code)
+	}
+	if !reflect.DeepEqual(child.Fields, []Field{
+		{Name: "Child ID", DataType: "BIGINT", PrimaryKey: true},
+		{Name: "Parent Ref", DataType: "DECIMAL(10, 2)", ForeignKey: true},
+	}) {
+		t.Fatalf("child fields = %+v", child.Fields)
+	}
+	if !reflect.DeepEqual(parent.Fields, []Field{
+		{Name: "Parent ID", DataType: "INTEGER", PrimaryKey: true},
+		{Name: "Parent Name", DataType: "VARCHAR(64)"},
+	}) {
+		t.Fatalf("parent fields = %+v", parent.Fields)
+	}
+}
+
+func TestMapDiagramDoesNotMarkColumnsFromOtherTables(t *testing.T) {
+	tableA := pdm.Table{
+		Metadata: pdm.Metadata{ID: "table-a", Code: "TABLE_A"},
+		Columns: []pdm.Column{{
+			Metadata: pdm.Metadata{ID: "column-a", Name: "Column A"},
+			DataType: pdm.OptionalText{Value: "INTEGER", Present: true},
+		}},
+		Keys: []pdm.Key{{
+			Metadata:  pdm.Metadata{ID: "key-a"},
+			ColumnIDs: []string{"column-b"},
+		}},
+		PrimaryKeyID: "key-a",
+	}
+	tableB := pdm.Table{
+		Metadata: pdm.Metadata{ID: "table-b", Code: "TABLE_B"},
+		Columns: []pdm.Column{{
+			Metadata: pdm.Metadata{ID: "column-b", Name: "Column B"},
+			DataType: pdm.OptionalText{Value: "BIGINT", Present: true},
+		}},
+	}
+	model := &pdm.Model{
+		Metadata: pdm.Metadata{ID: "model"},
+		Contents: pdm.Contents{
+			Tables: []pdm.Table{tableA, tableB},
+			References: []pdm.Reference{{
+				Metadata:      pdm.Metadata{ID: "bad-owner"},
+				ChildTableID:  "table-a",
+				ParentTableID: "table-b",
+				Joins: []pdm.ReferenceJoin{{
+					Metadata:       pdm.Metadata{ID: "bad-join"},
+					ParentColumnID: "column-b",
+					ChildColumnID:  "column-b",
+				}},
+			}},
+		},
+	}
+	diagram := &pdm.Diagram{
+		Metadata: pdm.Metadata{ID: "ownership"},
+		OwnerID:  "model",
+		TableSymbols: []pdm.TableSymbol{{
+			Metadata: pdm.Metadata{ID: "a-symbol"},
+			TableID:  "table-a",
+			Rect:     mappingRect(0, 0, 10, 10),
+		}},
+	}
+
+	result := MapDiagram(model, diagram)
+	if len(result.Scene.Nodes) != 1 || len(result.Scene.Nodes[0].Fields) != 1 {
+		t.Fatalf("ownership nodes = %+v", result.Scene.Nodes)
+	}
+	field := result.Scene.Nodes[0].Fields[0]
+	if field.Name != "Column A" || field.PrimaryKey || field.ForeignKey {
+		t.Fatalf("foreign column markers leaked across tables: %+v", field)
+	}
+}
+
 func TestMapDiagramAutoLayoutDeterministicMixedAndFullFallback(t *testing.T) {
 	model := &pdm.Model{
 		Metadata: pdm.Metadata{ID: "model"},

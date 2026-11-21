@@ -2,7 +2,10 @@ package graph
 
 // Field is one displayable field of a node.
 type Field struct {
-	Name string
+	Name       string
+	DataType   string
+	PrimaryKey bool
+	ForeignKey bool
 }
 
 // Node is one table node. IDs are stable zero-based indexes in its Scene.
@@ -10,6 +13,7 @@ type Node struct {
 	ID     int
 	Bounds Rect
 	Name   string
+	Code   string
 	Fields []Field
 }
 
