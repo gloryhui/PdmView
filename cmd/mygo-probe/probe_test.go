@@ -22,6 +22,11 @@ func TestDefaultSceneAndHeadlessRender(t *testing.T) {
 	if probe.multiText == nil {
 		t.Fatal("multilingual TextLayout was not pre-shaped")
 	}
+	if !strings.Contains(preShapedMixedText, "表") ||
+		!strings.Contains(preShapedMixedText, "Table") ||
+		!strings.ContainsAny(preShapedMixedText, "0123456789") {
+		t.Fatalf("pre-shaped sample lacks CJK, English, or digits: %q", preShapedMixedText)
+	}
 	if w, h := probe.multiText.Size(); w <= 0 || h <= 0 {
 		t.Fatalf("multilingual TextLayout size = %vx%v", w, h)
 	}
@@ -48,6 +53,16 @@ func TestDefaultSceneAndHeadlessRender(t *testing.T) {
 		t.Fatalf("headless frame stats: frames=%d visible=%d/%d",
 			probe.frames.Load(), probe.visibleNodes.Load(), probe.visibleEdges.Load())
 	}
+	edge := probe.scene.edges[0]
+	if edge.path == nil {
+		t.Fatal("default relationship is not the dashed Bezier path")
+	}
+	if edge.points[0][1] == edge.points[1][1] || edge.bounds.H < defaultSecondNodeYOffset-1 {
+		t.Fatalf("default relationship degenerates to a straight line: points=%v bounds=%+v", edge.points, edge.bounds)
+	}
+	if probe.gridDraws != 1 {
+		t.Fatalf("grid Canvas draws = %d, want 1", probe.gridDraws)
+	}
 
 	img := tt.Image()
 	nonTransparent := false
@@ -59,6 +74,38 @@ func TestDefaultSceneAndHeadlessRender(t *testing.T) {
 	}
 	if !nonTransparent {
 		t.Fatal("headless render is completely transparent")
+	}
+}
+
+func TestViewportClippingHidesTablesAndReusesCanvas(t *testing.T) {
+	probe := newProbeState(probeConfig{nodes: 2}, nil, nil)
+	tt := ui.NewTester(probe.view, 1400, 900)
+	canvas, ok := tt.Find("Probe canvas")
+	if !ok {
+		t.Fatalf("canvas label not found; texts=%q", tt.Texts())
+	}
+	node := probe.scene.nodes[0]
+	oldX, oldY := nodeScreenPoint(canvas, probe, node.rect.X+24, node.rect.Y+node.rect.H-10)
+	assertNodeFill(t, tt.Image(), canvas, probe, node.rect.X+24, node.rect.Y+node.rect.H-10)
+	grid := probe.grid
+	if grid == nil || probe.gridDraws != 1 {
+		t.Fatalf("grid cache: canvas=%v draws=%d", grid, probe.gridDraws)
+	}
+
+	probe.cameraX, probe.cameraY = 10000, 10000
+	tt.Frame()
+	if probe.visibleNodes.Load() != 0 || probe.visibleEdges.Load() != 0 {
+		t.Fatalf("clipped frame still reports %d nodes and %d edges", probe.visibleNodes.Load(), probe.visibleEdges.Load())
+	}
+	if probe.grid != grid || probe.gridDraws != 1 {
+		t.Fatalf("grid Canvas was rebuilt: same=%t draws=%d", probe.grid == grid, probe.gridDraws)
+	}
+	c := tt.Image().RGBAAt(oldX, oldY)
+	if c.A < 200 {
+		t.Fatalf("clipped canvas pixel is transparent: %+v", c)
+	}
+	if c.R >= 220 && c.G >= 220 && c.B >= 220 {
+		t.Fatalf("clipped table pixels remain at %d,%d: %+v", oldX, oldY, c)
 	}
 }
 
@@ -127,12 +174,16 @@ func assertNodeFill(t *testing.T, img interface {
 	RGBAAt(x, y int) color.RGBA
 }, canvas ui.Rect, probe *probeState, worldX, worldY float32) {
 	t.Helper()
-	x := int(canvas.X + (worldX-probe.cameraX)*probe.zoom)
-	y := int(canvas.Y + (worldY-probe.cameraY)*probe.zoom)
+	x, y := nodeScreenPoint(canvas, probe, worldX, worldY)
 	c := img.RGBAAt(x, y)
 	if c.R < 220 || c.G < 220 || c.B < 220 || c.A < 250 {
 		t.Fatalf("table fill at world %.1f,%.1f lands on window %d,%d with color %+v", worldX, worldY, x, y, c)
 	}
+}
+
+func nodeScreenPoint(canvas ui.Rect, probe *probeState, worldX, worldY float32) (int, int) {
+	return int(canvas.X + (worldX-probe.cameraX)*probe.zoom),
+		int(canvas.Y + (worldY-probe.cameraY)*probe.zoom)
 }
 
 func TestActionsOnlyRunWhenClicked(t *testing.T) {

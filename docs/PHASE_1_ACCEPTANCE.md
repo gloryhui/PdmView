@@ -22,3 +22,18 @@ CGO_ENABLED=0 go vet ./cmd/pdmview
 - 用系统关闭按钮退出并重新启动。系统仍优先中文，程序读取 `PdmView/preferences.json` 中的 `language: en`，恢复英文和相应菜单标记。
 - 在同一隔离目录内验证损坏 JSON。启动使用系统默认语言并提示偏好无法读取。选择英文后界面立即切换，显示英文保存失败提示，损坏文件内容原样保留。
 - 实际截屏保存在 `.out/phase1/p1-04-en.png`。Windows 原生菜单和偏好行为列入 P10-02。
+
+## P1-02 Painter 与 Canvas
+
+```sh
+mkdir -p .out/phase1
+CGO_ENABLED=0 go build -o .out/phase1/painter ./cmd/mygo-probe
+MYGO_FRAME_STATS=all .out/phase1/painter -smoke -smoke-out .out/phase1/p1-02.png
+CGO_ENABLED=0 go test -count=1 ./cmd/mygo-probe
+CGO_ENABLED=0 go vet ./cmd/mygo-probe
+```
+
+- 复用 Phase 0 探针。错开两张模拟表验证实际可见的虚线贝塞尔曲线。确认 `Fill`、`Stroke`、`Line`、`StrokePath`、`Clip`、`Transform`、`TextLayout`，技术证据见 [MyGo API 核对](MYGO_API_VERIFICATION.md)。
+- 在 2× HiDPI 的 2800×1744 截图中观察到圆角节点、网格、曲线及中英数字混排。首帧日志确认硬件加速。用原生 automation 移动视口至 `(2500,2500)`，截图中节点和边消失，网格持续显示，再操作缩放至 118%。原图和裁剪图在 `.out/phase1/`。
+- 目标测试与 vet 通过。新增断言检查曲线端点高度、移出视口后的绘制像素与可见计数，以及连续帧复用同一个 Canvas。Phase 0 的大规模基准仍使用原有线段和几何。
+- `Draw` 随原生 UI 主线程的帧运行，同一帧可能重入绘制回调。`Canvas.Draw` 使用本帧的 Painter 将网格绘入纹理，后续绘制复用 `Bitmap()`。文本排版在回调之前完成，Painter 仅在当前绘制回调内使用。

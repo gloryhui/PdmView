@@ -13,13 +13,15 @@ import (
 )
 
 const (
-	nodeWidth  = 214
-	nodeHeight = 126
-	nodeStepX  = 260
-	nodeStepY  = 176
-	nodeOrigin = 80
-	nodeCols   = 12
-	gridTile   = 256
+	nodeWidth                = 214
+	nodeHeight               = 126
+	nodeStepX                = 260
+	nodeStepY                = 176
+	nodeOrigin               = 80
+	nodeCols                 = 12
+	gridTile                 = 256
+	defaultSecondNodeYOffset = 72
+	preShapedMixedText       = "表 Table 012345 · テーブル · Кириллица"
 )
 
 var (
@@ -86,6 +88,7 @@ type probeState struct {
 	clipboardProbe func() (string, error)
 
 	grid          *ui.Canvas
+	gridDraws     int
 	multiText     *ui.TextLayout
 	fieldLabels   [3]*ui.TextLayout
 	lastScale     float32
@@ -112,7 +115,7 @@ func newProbeState(cfg probeConfig, pickFiles func(*mygo.Window) ([]string, erro
 	s.scene = newProbeScene(cfg.nodes, cfg.bench)
 
 	textFont := ui.Font{Size: 12.5, Weight: 500}
-	s.multiText = ui.ShapeText("表 Table テーブル Таблица — pre-shaped outside Draw", textFont, 0)
+	s.multiText = ui.ShapeText(preShapedMixedText, textFont, 0)
 	fieldFont := ui.Font{Size: 10.5, Weight: 400}
 	for i, label := range []string{"id        BIGINT", "name      VARCHAR(120)", "amount    DECIMAL(18,2)"} {
 		s.fieldLabels[i] = ui.ShapeText(label, fieldFont, 0)
@@ -178,6 +181,9 @@ func newProbeScene(n int, benchmark bool) *probeScene {
 			Y: nodeOrigin + float32(row)*nodeStepY,
 			W: nodeWidth,
 			H: nodeHeight,
+		}
+		if !benchmark && n == 2 && i == 1 {
+			rect.Y += defaultSecondNodeYOffset
 		}
 		name := fmt.Sprintf("SYNTH_%03d", i+1)
 		if n == 2 {
@@ -326,6 +332,7 @@ func (s *probeState) ensureGrid(p *ui.Painter) {
 		return
 	}
 	s.grid = ui.NewCanvas(gridTile, gridTile)
+	s.gridDraws++
 	s.grid.Draw(p, func(cp *ui.Painter) {
 		cp.Fill(ui.Rect{W: gridTile, H: gridTile}, probeGridBase, 0)
 		for v := 0; v <= gridTile; v += 32 {
