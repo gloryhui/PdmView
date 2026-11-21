@@ -27,3 +27,19 @@
 - 首次启动根据系统首选界面语言选择简体中文或英文。已保存的显式语言选择优先，系统语言无法识别时使用英文。
 - Phase 1 在最小原生窗口建立内置语言资源、语言状态、设置入口和本地偏好，验证即时切换和重启恢复。后续阶段通过同一文案入口交付各自界面。
 - 语言选择作用于应用界面。PDM 原文、结构化复制文本及 SQL 保持稳定。产品规则见 [PROJECT_BRIEF.md](../PROJECT_BRIEF.md)，实现边界见 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+
+## ADR-004 冻结 PDM 领域模型和 Diagram 映射契约
+
+- 日期：2026-11-21
+- 状态：已采纳，P4-01
+- 冻结 `internal/pdm` 中 `Parse`、`Project` 和 `Document` 的结构与语义。文档内 XML `Id` 是定义及引用的键，`ObjectID` 保留为独立元数据。`Model` 和嵌套 `Package` 各自持有 `Contents`，`DefaultDiagramID` 在所属 `Contents` 内解析。字段、键成员、索引成员、外键 Join、图元及几何点均保留输入顺序。
+- `Name`、`Code` 各自保留。`OptionalText` 区分不存在和显式空文本，布尔指针保留未指定、明确为否和明确为是。类型、默认值和约束原始语义由消费者判断。缺失引用、未知结构及无效几何读取原有诊断，原始 XML 节点可追溯。外部 Shortcut 只保留引用，模型不补造表定义。
+- `Diagram` 下的 `TableSymbol`、`ReferenceSymbol` 各自保留 XML 图元 ID、逻辑对象引用及归属。矩形、`ListOfPoints` 和显式 `ControlPoints` 使用原始有符号整数。同一表的不同图元独立存在。依据见 [PDM 格式研究](PDM_FORMAT.md)，包括本地 16.5 样本及公开 12.5、15.1、16.5 导出。
+- 破坏性变更须先新增决策，记录样本依据、受影响消费者、迁移及测试，再修改契约。保持解析、映射和渲染的单向依赖。
+
+### P4-02 接口
+
+- `graph.MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph` 生成一份画板结果。`DiagramGraph` 提供 `DiagramID string`、`Scene Scene`、`NodeSources []DiagramNodeSource`、`EdgeSources []DiagramEdgeSource`、`AutoLayout bool`。调用者负责选择 `Diagram`。`nil` 画板时使用模型及其嵌套 Package 中的表。空输入产生空图。
+- `DiagramNodeSource` 包含 `SymbolID string`、`TableID string`、`Rect *pdm.Rect`；`DiagramEdgeSource` 包含 `SymbolID`、`ReferenceID`、`SourceSymbolID`、`DestinationSymbolID`（均为 `string`），以及 `Rect *pdm.Rect`、`Points` 和 `ControlPoints`（均为 `[]pdm.Point`）。来源数组与 `Scene` 节点、边按偏移一一对应。几何副本保留精确整数，互不共享可变数据。`Scene` 是浮点世界坐标，直接投影原始 X/Y，暂未标定与 DIP 的比例。`Scene.Bounds` 是节点及非空显示路径的并集。
+- 显式画板按图元原序生成节点。节点和边的整数 `ID` 为各自画板内的切片偏移。标题和字段使用已解析的模型名称及字段原序（名称为空时取编码）；外部或未解析图元保留来源及位置，显示可用引用 ID。关系的 `From`、`To` 只从本画板的图元 ID 解析，未解析端点用 `-1`。保存有序原始路径和独立的控制点，不连缀两者；缺少路径时保持空 `Edge.Points`，自动路由留待 P5-05。
+- 有表图元时只映射画板内的表图元。无表图元的显式画板回退至其归属 `Contents` 直接持有的表。缺失、反向或零尺寸矩形只对受影响的节点执行确定性网格布局。混合布局将自动放置的节点排在有效矩形联合范围右侧，使用同一坐标系，有效位置与尺寸原样保留。全回退采用独立的网格坐标。`AutoLayout` 在至少一个节点采用自动位置时为真，由后续正式画布呈现本地化的“自动布局”状态。

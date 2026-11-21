@@ -81,21 +81,11 @@ UI 只负责交互、状态展示和调用应用服务。不得直接解析 XML�
 - 偏好保存到 `os.UserConfigDir()` 返回目录下的 `PdmView/preferences.json`，字段 `language` 仅接受 `zh-CN` 或 `en`。更新时保留其他偏好项，写入失败时保留上一次已成功保存的偏好，并在当前语言下报告失败。
 - 解析器和 SQL 生成器向上提供诊断标识与格式化参数，界面负责生成用户提示。Graph、PDM 解析、诊断标识和 SQL 输出均独立于界面语言。
 
-## 3. 关键模型设计建议
+## 3. 领域模型契约
 
-最终结构必须根据真实 PDM XML 校正，以下只是设计起点：
+Phase 4 冻结 `internal/pdm` 中的领域模型。对象归属、缺失值语义、画板图元身份、原始几何及映射接口见 [ADR-004](docs/DECISIONS.md#adr-004-冻结-pdm-领域模型和-diagram-映射契约)。
 
-- Model：ID、Name、Code、Version、DBMS、Packages、Tables、Diagrams、Diagnostics。
-- Package：ID、Name、Code、ParentID、ChildPackages、TableIDs。
-- Table：ID、Name、Code、Comment、PackageID、Columns、PrimaryKey、Indexes、References。
-- Column：ID、Name、Code、DataType、Length、Precision、Scale、Nullable、Default、Comment、Identity、Position。
-- Index：ID、Name、Code、Unique、Columns。
-- Reference：ID、Name、Code、ParentTableID、ChildTableID、ColumnMappings。
-- Diagram：ID、Name、Symbols、RelationSymbols。
-- Symbol：ID、ObjectID、X、Y、Width、Height、显示属性。
-- RelationSymbol：ID、ReferenceID、路径点、端点/连接点信息。
-
-不要假设 PDM 的坐标单位就是屏幕像素。必须调查并定义转换规则。
+映射层保留原始坐标及单位，通过世界坐标交付给 Graph。原始单位到实际显示尺寸的标定以 PowerDesigner 应用对照为准。
 
 ## 4. 并发与 UI 线程
 
