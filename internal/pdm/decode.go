@@ -562,7 +562,7 @@ var knownProperties = strings.Fields(`
 	ManuallyResized ModelOptionsText ModificationDate Modifier Name ObjectID PackageOptionsText
 	PageMargins PageOrientation PaperSize PaperSource Precision Rect Scale ShadowColor SortOrder
 	SubObjects SymbolContent TargetClassID TargetID TargetModelClassID TargetModelID
-	TargetModelLastModificationDate TargetModelURL TargetStereotype Text TextStyle
+	TargetModelLastModificationDate TargetModelURL TargetStereotype Stereotype Text TextStyle
 	TotalSavingCurrency Unique UpdateConstraint
 `)
 

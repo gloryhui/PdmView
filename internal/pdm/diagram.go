@@ -25,6 +25,7 @@ type Rect struct {
 type Diagram struct {
 	Metadata
 	OwnerID          string
+	TableAppearance  TableAppearance
 	TableSymbols     []TableSymbol
 	ReferenceSymbols []ReferenceSymbol
 }
@@ -32,8 +33,9 @@ type Diagram struct {
 // TableSymbol represents one table or external shortcut on a diagram.
 type TableSymbol struct {
 	Metadata
-	TableID string
-	Rect    *Rect
+	TableID    string
+	Appearance TableAppearance
+	Rect       *Rect
 }
 
 // ReferenceSymbol represents a relationship line on one diagram.
@@ -88,9 +90,11 @@ func (p *projector) projectDiagrams(collection *Element, ownerID string, diagnos
 			continue
 		}
 		metadata := p.metadata(member, true, diagnostics)
+		appearance := diagramAppearance(member)
 		diagram := Diagram{
-			Metadata: metadata,
-			OwnerID:  ownerID,
+			Metadata:        metadata,
+			OwnerID:         ownerID,
+			TableAppearance: appearance,
 		}
 		externalTables := make(map[string]bool)
 
@@ -108,7 +112,7 @@ func (p *projector) projectDiagrams(collection *Element, ownerID string, diagnos
 					if !p.isDefinition(symbol) {
 						continue
 					}
-					tableSymbol, external := p.projectTableSymbol(symbol, diagnostics)
+					tableSymbol, external := p.projectTableSymbol(symbol, appearance, diagnostics)
 					diagram.TableSymbols = append(diagram.TableSymbols, tableSymbol)
 					if tableSymbol.ID != "" && external {
 						externalTables[tableSymbol.ID] = true
@@ -146,8 +150,11 @@ func (p *projector) projectDefaultDiagram(collection *Element, ownerID string, d
 	return id
 }
 
-func (p *projector) projectTableSymbol(symbol *Element, diagnostics *[]Diagnostic) (TableSymbol, bool) {
-	result := TableSymbol{Metadata: p.metadata(symbol, true, diagnostics)}
+func (p *projector) projectTableSymbol(symbol *Element, appearance TableAppearance, diagnostics *[]Diagnostic) (TableSymbol, bool) {
+	result := TableSymbol{
+		Metadata:   p.metadata(symbol, true, diagnostics),
+		Appearance: symbolAppearance(appearance, symbol),
+	}
 	objectCollection := symbol.Child(NamespaceCollection, "Object")
 	if objectCollection == nil {
 		p.requiredValue(symbol, diagnostics)
