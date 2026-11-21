@@ -2,14 +2,14 @@
 
 状态说明：`TODO` / `IN_PROGRESS` / `BLOCKED` / `REVIEW` / `DONE`
 
-Phase 0 已于 2026-11-21 通过 Gate 0。后续阶段等待下一轮指令。
+Phase 0 已于 2026-11-21 通过 Gate 0。Phase 1 正在按 P1-01 → P1-04 → P1-03 的依赖推进，P1-02 独立验收。
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
 | P0-01 | 仓库与环境勘察 | DONE | GPT | `23ea2fd`，`sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
 | P0-02 | Go/MyGo 版本与 API 调研 | DONE | GPT / DeepSeek | `0bccd7e`，`cmd/mygo-probe`，macOS Metal 实跑、2× HiDPI、画布输入、系统剪贴板、Gate 0 三档性能和 Windows x64 构建，见 `docs/MYGO_API_VERIFICATION.md` | 文件面板已验证显示和取消，成功选中文件待复核。Windows 桌面待实跑。 |
 | P0-03 | 项目骨架与规范文件 | DONE | GPT | `go.mod`、`go.sum`、`Makefile`、README 和架构文档，`make fmt`、`make check`、`go mod verify` 通过 | 正式应用与领域包按路线图落地 |
-| P1-01 | Native UI 最小窗口 | TODO | DeepSeek | | |
+| P1-01 | Native UI 最小窗口 | DONE | DeepSeek / GPT | `cmd/pdmview`，macOS 原生启动、尺寸限制、关闭会话与 Go 检查通过，见 `docs/PHASE_1_ACCEPTANCE.md` | |
 | P1-02 | Painter/Canvas API 验证 | TODO | DeepSeek | | |
 | P1-03 | 三栏布局原型 | TODO | DeepSeek | | 依赖 P1-04 |
 | P1-04 | 界面国际化基础与语言偏好 | TODO | DeepSeek | 设计见 `docs/DECISIONS.md` ADR-003 | 依赖 P1-01 |
