@@ -73,16 +73,24 @@ type tablePropertiesState struct {
 	copyToken         uint64
 }
 
-func (w *Workspace) openTableProperties(tableID string) {
-	if tableID == "" || w.detailIndex == nil {
+func (w *Workspace) requestTableProperties(tableID string) {
+	if w.tableOpen != nil {
+		w.tableOpen(tableID)
 		return
 	}
+	w.OpenTableProperties(tableID)
+}
+
+func (w *Workspace) OpenTableProperties(tableID string) bool {
+	if tableID == "" || w.detailIndex == nil {
+		return false
+	}
 	if w.tableProperties.open && w.tableProperties.tableID == tableID {
-		return
+		return true
 	}
 	detail, ok := w.detailIndex.resolve(tableID)
 	if !ok {
-		return
+		return false
 	}
 	if w.tableProperties.tableID != tableID {
 		w.tableProperties = tablePropertiesState{tableID: tableID}
@@ -91,28 +99,54 @@ func (w *Workspace) openTableProperties(tableID string) {
 	w.tableProperties.hasDetail = true
 	w.tableProperties.open = true
 	w.notifyChanged()
+	return true
 }
 
-func (w *Workspace) closeTableProperties() {
+func (w *Workspace) resetTableProperties() {
+	wasOpen := w.tableProperties.open
+	w.tableProperties = tablePropertiesState{}
+	if wasOpen && w.tableClose != nil {
+		w.tableClose()
+	}
+}
+
+func (w *Workspace) CloseTableProperties() {
 	if !w.tableProperties.open {
 		return
 	}
-	w.tableProperties.open = false
+	w.tableProperties = tablePropertiesState{}
+	if w.tableClose != nil {
+		w.tableClose()
+	}
 	w.notifyChanged()
 }
 
-func (w *Workspace) tablePropertiesView(
-	c *ui.Context,
-	state *app.State,
-	theme *ui.Theme,
-	lang string,
-) {
-	if !w.tableProperties.open || !w.tableProperties.hasDetail {
-		return
+func (w *Workspace) TablePropertiesOpen() bool {
+	return w.tableProperties.open
+}
+
+func (w *Workspace) TablePropertiesTitle(state *app.State) string {
+	title := state.Text(i18n.KeyTablePropertiesTitle, nil)
+	detail := w.tableProperties.detail
+	name := firstNonEmpty(detail.Name, detail.Code, detail.ID)
+	if name == "" || name == title {
+		return title
 	}
-	ui.Modal(c.Key(TablePropertiesRootKey), &w.tableProperties.open, func() {
-		w.renderTableProperties(c, state, theme, lang, w.tableProperties.detail)
-	})
+	return title + " — " + name
+}
+
+func (w *Workspace) TablePropertiesView(state *app.State) func(*ui.Context) {
+	return func(c *ui.Context) {
+		if !w.tableProperties.open || !w.tableProperties.hasDetail {
+			return
+		}
+		if c.Shortcut(0, ui.KeyEscape) {
+			w.CloseTableProperties()
+			return
+		}
+		t := c.Theme()
+		w.renderTableProperties(c, state, t, string(state.Locale()), w.tableProperties.detail)
+	}
 }
 
 func (w *Workspace) renderTableProperties(
@@ -123,52 +157,51 @@ func (w *Workspace) renderTableProperties(
 	detail TableDetail,
 ) {
 	title := firstNonEmpty(detail.Name, detail.Code, detail.ID, state.Text(i18n.KeyTablePropertiesTitle, nil))
-	width, height := c.Size()
-	contentWidth := min(float32(720), max(float32(1), width-2*theme.Space(10)))
-	contentHeight := min(float32(520), max(float32(1), height-2*theme.Space(10)))
-	ui.Column(c.Key(TablePropertiesContentKey)).Width(contentWidth).Height(contentHeight).Gap(8).Children(func() {
-		ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
-				TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
-			closeLabel := state.Text(i18n.KeyTablePropertiesClose, nil)
-			ui.Button(c, closeLabel).Key(TablePropertiesCloseKey).Label(closeLabel).
-				Lang(lang).OnClick(w.closeTableProperties)
-		})
-		labels := []string{
-			state.Text(i18n.KeyTablePropertiesGeneral, nil),
-			state.Text(i18n.KeyDetailColumns, nil),
-			state.Text(i18n.KeyDetailIndexes, nil),
-			state.Text(i18n.KeyDetailKeys, nil),
-			state.Text(i18n.KeyTablePropertiesPreview, nil),
-		}
-		tabs := ui.TabsBase(c.Key(TablePropertiesTabsKey), &w.tableProperties.tab, len(labels))
-		tabs.List.Gap(4).Children(func() {
-			for index, label := range labels {
-				c.Key(TablePropertiesTabKey(index))
-				tab := tabs.Tab(index).Padding(4, 8).Radius(4)
-				if index == w.tableProperties.tab {
-					tab.TextColor(theme.Text).Bold()
-				} else {
-					tab.TextColor(theme.TextMuted)
+	ui.Column(c.Key(TablePropertiesRootKey)).Fill().Children(func() {
+		ui.Column(c.Key(TablePropertiesContentKey)).Fill().Gap(8).Children(func() {
+			ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(8).Children(func() {
+				ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
+					TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
+				closeLabel := state.Text(i18n.KeyTablePropertiesClose, nil)
+				ui.Button(c, closeLabel).Key(TablePropertiesCloseKey).Label(closeLabel).
+					Lang(lang).OnClick(w.CloseTableProperties)
+			})
+			labels := []string{
+				state.Text(i18n.KeyTablePropertiesGeneral, nil),
+				state.Text(i18n.KeyDetailColumns, nil),
+				state.Text(i18n.KeyDetailIndexes, nil),
+				state.Text(i18n.KeyDetailKeys, nil),
+				state.Text(i18n.KeyTablePropertiesPreview, nil),
+			}
+			tabs := ui.TabsBase(c.Key(TablePropertiesTabsKey), &w.tableProperties.tab, len(labels))
+			tabs.List.Gap(4).Children(func() {
+				for index, label := range labels {
+					c.Key(TablePropertiesTabKey(index))
+					tab := tabs.Tab(index).Padding(4, 8).Radius(4)
+					if index == w.tableProperties.tab {
+						tab.TextColor(theme.Text).Bold()
+					} else {
+						tab.TextColor(theme.TextMuted)
+					}
+					tab.Children(func() {
+						ui.Text(c, label).SingleLine().Lang(lang)
+					})
 				}
-				tab.Children(func() {
-					ui.Text(c, label).SingleLine().Lang(lang)
-				})
-			}
-		})
-		ui.Column(c).Grow(1).FillWidth().Children(func() {
-			switch w.tableProperties.tab {
-			case 0:
-				w.tablePropertiesGeneral(c, state, theme, lang, detail)
-			case 1:
-				w.tablePropertiesColumns(c, state, theme, lang, detail)
-			case 2:
-				w.tablePropertiesIndexes(c, state, theme, lang, detail)
-			case 3:
-				w.tablePropertiesKeys(c, state, theme, lang, detail)
-			case 4:
-				w.tablePropertiesPreview(c, state, theme, lang, detail)
-			}
+			})
+			ui.Column(c).Grow(1).FillWidth().Children(func() {
+				switch w.tableProperties.tab {
+				case 0:
+					w.tablePropertiesGeneral(c, state, theme, lang, detail)
+				case 1:
+					w.tablePropertiesColumns(c, state, theme, lang, detail)
+				case 2:
+					w.tablePropertiesIndexes(c, state, theme, lang, detail)
+				case 3:
+					w.tablePropertiesKeys(c, state, theme, lang, detail)
+				case 4:
+					w.tablePropertiesPreview(c, state, theme, lang, detail)
+				}
+			})
 		})
 	})
 }

@@ -71,21 +71,21 @@ func TestTablePropertiesDoubleClickEvent(t *testing.T) {
 	}
 }
 
-func TestTablePropertiesModalTabsRowsPreviewAndLocale(t *testing.T) {
+func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 	state := newState(t, "en-US")
 	document := tablePropertiesDocument()
 	workspace := NewWorkspace()
 	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(document))
-	workspace.openTableProperties("orders")
+	workspace.OpenTableProperties("orders")
 	if !workspace.tableProperties.open {
 		t.Fatal("table properties did not open")
 	}
-	workspace.openTableProperties("missing")
+	workspace.OpenTableProperties("missing")
 	if !workspace.tableProperties.open || workspace.tableProperties.tableID != "orders" {
 		t.Fatal("unresolved table replaced the open modal")
 	}
 
-	tester := ui.NewTester(View(state, workspace), 800, 600)
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 800, 600)
 	tester.Frame()
 	for _, text := range []string{"General", "Columns", "Indexes", "Keys", "Preview", "Close", "Orders", "Order records", "Sales"} {
 		if !tester.HasText(text) {
@@ -95,6 +95,9 @@ func TestTablePropertiesModalTabsRowsPreviewAndLocale(t *testing.T) {
 	if workspace.tableProperties.tab != 0 || !workspace.tableProperties.hasDetail ||
 		workspace.tableProperties.detail.ID != "orders" {
 		t.Fatalf("initial modal state = %+v", workspace.tableProperties)
+	}
+	if got := workspace.TablePropertiesTitle(state); got != "Table properties — Orders" {
+		t.Fatalf("English title = %q", got)
 	}
 
 	if err := tester.Click("Columns"); err != nil {
@@ -172,8 +175,11 @@ func TestTablePropertiesModalTabsRowsPreviewAndLocale(t *testing.T) {
 		workspace.tableProperties.previewEditor.Buffer.String() != wantSQL {
 		t.Fatal("locale change regenerated the table SQL")
 	}
+	if got := workspace.TablePropertiesTitle(state); got != "表属性 — Orders" {
+		t.Fatalf("Chinese title = %q", got)
+	}
 
-	workspace.openTableProperties("other")
+	workspace.OpenTableProperties("other")
 	tester.Frame()
 	if workspace.tableProperties.tableID != "other" || workspace.tableProperties.tab != 0 ||
 		workspace.tableProperties.previewLoaded || !workspace.tableProperties.hasDetail {
@@ -190,8 +196,15 @@ func TestTablePropertiesModalTabsRowsPreviewAndLocale(t *testing.T) {
 	if workspace.tableProperties.open {
 		t.Fatal("close button left the modal open")
 	}
-	workspace.openTableProperties("orders")
+	if workspace.tableProperties.tableID != "" || workspace.tableProperties.tab != 0 ||
+		workspace.tableProperties.previewLoaded || workspace.tableProperties.hasDetail {
+		t.Fatalf("close did not clear table properties: %+v", workspace.tableProperties)
+	}
+	workspace.OpenTableProperties("orders")
 	tester.Frame()
+	if workspace.tableProperties.tab != 0 {
+		t.Fatalf("reopened table did not start on General: %+v", workspace.tableProperties)
+	}
 	tester.Key(0, ui.KeyEscape)
 	tester.Frame()
 	if workspace.tableProperties.open {
@@ -203,8 +216,8 @@ func TestTablePropertiesFitsMinimumContentHeight(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
 	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(tablePropertiesDocument()))
-	workspace.openTableProperties("orders")
-	tester := ui.NewTester(View(state, workspace), 800, 572)
+	workspace.OpenTableProperties("orders")
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 800, 572)
 	tester.Frame()
 	closeBounds, ok := tester.Find("Close")
 	if !ok || closeBounds.X < 0 || closeBounds.Y < 0 ||
@@ -226,8 +239,8 @@ func TestTablePropertiesClearsForNewDocument(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
 	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(tablePropertiesDocument()))
-	workspace.openTableProperties("orders")
-	tester := ui.NewTester(View(state, workspace), 800, 600)
+	workspace.OpenTableProperties("orders")
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 800, 600)
 	tester.Frame()
 	if err := tester.Click("Preview"); err != nil {
 		t.Fatal(err)
@@ -246,7 +259,7 @@ func TestTablePropertiesClearsForNewDocument(t *testing.T) {
 	if workspace.tableProperties.open || workspace.tableProperties.previewLoaded {
 		t.Fatalf("new document retained table properties: %+v", workspace.tableProperties)
 	}
-	workspace.openTableProperties("orders")
+	workspace.OpenTableProperties("orders")
 	if !workspace.tableProperties.open || workspace.tableProperties.tab != 0 ||
 		workspace.tableProperties.previewLoaded {
 		t.Fatalf("same table ID reused old preview: %+v", workspace.tableProperties)

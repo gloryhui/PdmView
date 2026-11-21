@@ -68,11 +68,16 @@ func showMainWindow() {
 	})
 
 	var win *mygo.Window
+	var properties *mygo.Window
 	var refresh func()
 	refresh = func() {
 		mygo.App.SetMenu(state.Menu(refresh))
 		if win != nil {
 			win.Invalidate()
+		}
+		if properties != nil && !properties.IsDestroyed() {
+			properties.SetTitle(workspace.TablePropertiesTitle(state))
+			properties.Invalidate()
 		}
 	}
 	refresh()
@@ -80,6 +85,17 @@ func showMainWindow() {
 	workspace.SetOnChanged(func() {
 		if win != nil && !win.IsDestroyed() {
 			win.Invalidate()
+		}
+		if properties != nil && !properties.IsDestroyed() {
+			properties.Invalidate()
+		}
+	})
+	workspace.SetTablePropertiesOpener(func(tableID string) {
+		openTablePropertiesWindow(win, &properties, workspace, state, tableID)
+	})
+	workspace.SetTablePropertiesCloser(func() {
+		if properties != nil && !properties.IsDestroyed() {
+			properties.Close()
 		}
 	})
 	workspace.SetOpenHandler(func() {
@@ -97,9 +113,66 @@ func showMainWindow() {
 	workspace.SetSQLExportStarter(func(request appui.SQLExportRequest) {
 		startSQLExport(win, workspace, request)
 	})
+	win.OnClosed(func() {
+		if properties != nil && !properties.IsDestroyed() {
+			properties.Close()
+		}
+	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
 		startBoardLoad(win, workspace, path)
 	}
+}
+
+func openTablePropertiesWindow(
+	parent *mygo.Window,
+	properties **mygo.Window,
+	workspace *appui.Workspace,
+	state *app.State,
+	tableID string,
+) {
+	if parent == nil || parent.IsDestroyed() || workspace == nil || properties == nil {
+		return
+	}
+	if *properties != nil && (*properties).IsDestroyed() {
+		*properties = nil
+	}
+	if *properties != nil && workspace.TablePropertiesOpen() {
+		if workspace.OpenTableProperties(tableID) {
+			(*properties).SetTitle(workspace.TablePropertiesTitle(state))
+			(*properties).Invalidate()
+			(*properties).Focus()
+		}
+		return
+	}
+	if *properties != nil {
+		stale := *properties
+		*properties = nil
+		if !stale.IsDestroyed() {
+			stale.Close()
+		}
+	}
+	if !workspace.OpenTableProperties(tableID) {
+		return
+	}
+	window := mygo.NewWindow(mygo.WindowOptions{
+		Title:          workspace.TablePropertiesTitle(state),
+		Parent:         parent,
+		Width:          720,
+		Height:         520,
+		UseContentSize: true,
+		MinWidth:       640,
+		MinHeight:      480,
+		Content:        ui.View(workspace.TablePropertiesView(state)),
+	})
+	*properties = window
+	window.OnClosed(func() {
+		if *properties != window {
+			return
+		}
+		*properties = nil
+		workspace.CloseTableProperties()
+	})
+	window.Focus()
 }
 
 func optionalPDMPath(args []string) (string, bool) {

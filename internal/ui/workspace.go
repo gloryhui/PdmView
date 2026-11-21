@@ -35,35 +35,39 @@ func DiagramButtonKey(index int) string {
 }
 
 type Workspace struct {
-	NavigationPercent    float32
-	CanvasPercent        float32
-	canvas               *canvasView
-	document             *pdm.Document
-	boards               []DiagramBoard
-	activeBoard          int
-	loadToken            uint64
-	boardToken           uint64
-	hasModel             bool
-	loading              bool
-	switching            bool
-	loadFailed           bool
-	activeFallback       bool
-	activeAutoLayout     bool
-	pendingBoard         int
-	catalog              *modelCatalog
-	outline              ui.OutlineState[string]
-	navChosen            ui.Selection[string]
-	navSelected          int
-	selectedNavKey       string
-	rowClickedKey        string
-	openBefore           map[string]struct{}
-	selectedTableID      string
-	selectedTableName    string
-	detailIndex          *tableDetailIndex
-	detailsScroll        ui.ScrollState
-	tableDetail          TableDetail
-	hasTableDetail       bool
-	tableProperties      tablePropertiesState
+	NavigationPercent float32
+	CanvasPercent     float32
+	canvas            *canvasView
+	document          *pdm.Document
+	boards            []DiagramBoard
+	activeBoard       int
+	loadToken         uint64
+	boardToken        uint64
+	hasModel          bool
+	loading           bool
+	switching         bool
+	loadFailed        bool
+	activeFallback    bool
+	activeAutoLayout  bool
+	pendingBoard      int
+	catalog           *modelCatalog
+	outline           ui.OutlineState[string]
+	navChosen         ui.Selection[string]
+	navSelected       int
+	selectedNavKey    string
+	rowClickedKey     string
+	openBefore        map[string]struct{}
+	selectedTableID   string
+	selectedTableName string
+	detailIndex       *tableDetailIndex
+	detailsScroll     ui.ScrollState
+	tableDetail       TableDetail
+	hasTableDetail    bool
+	tableProperties   tablePropertiesState
+
+	tableOpen  func(string)
+	tableClose func()
+
 	unplacedTable        bool
 	requestedTableID     string
 	pendingTableID       string
@@ -104,7 +108,7 @@ func NewWorkspace() *Workspace {
 	workspace.outline.List.Selected = &workspace.navSelected
 	workspace.outline.List.Selection = &workspace.navChosen
 	workspace.canvas.onTableSelection = workspace.syncCanvasTableSelection
-	workspace.canvas.onTableOpen = workspace.openTableProperties
+	workspace.canvas.onTableOpen = workspace.requestTableProperties
 	return workspace
 }
 
@@ -118,6 +122,18 @@ func (w *Workspace) SetOnChanged(changed func()) {
 	w.onChanged = changed
 }
 
+// SetTablePropertiesOpener installs the main window bridge that shows the
+// single table-properties window.
+func (w *Workspace) SetTablePropertiesOpener(opener func(string)) {
+	w.tableOpen = opener
+}
+
+// SetTablePropertiesCloser installs the main window bridge that closes the
+// table-properties window.
+func (w *Workspace) SetTablePropertiesCloser(closer func()) {
+	w.tableClose = closer
+}
+
 // SetBoardSelector installs the off-UI board preparation action.
 func (w *Workspace) SetBoardSelector(selector func(int)) {
 	w.boardSelector = selector
@@ -127,7 +143,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
 	w.cancelPendingSwitch()
-	w.tableProperties = tablePropertiesState{}
+	w.resetTableProperties()
 	w.invalidateDatabasePreview()
 	w.resetSearch()
 	w.clearCopyFeedback()
@@ -174,7 +190,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.selectedTableName = ""
 	w.tableDetail = TableDetail{}
 	w.hasTableDetail = false
-	w.tableProperties = tablePropertiesState{}
+	w.resetTableProperties()
 	w.unplacedTable = false
 	w.requestedTableID = ""
 	w.pendingTableID = ""
@@ -225,6 +241,7 @@ func (w *Workspace) ActivateBoard(index int) {
 		return
 	}
 	w.cancelPendingSwitch()
+	w.resetTableProperties()
 	w.clearTableSelection()
 	if w.boardSelector != nil {
 		w.boardSelector(index)
@@ -281,7 +298,7 @@ func (w *Workspace) PublishPreparedBoard(token uint64, prepared PreparedBoard) b
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
 	w.pendingSmoothTable = false
-	w.tableProperties = tablePropertiesState{}
+	w.resetTableProperties()
 	w.canvas.activatePrepared(prepared)
 	if locateTableID != "" {
 		if offset, ok := w.canvas.tableNodeOffset(locateTableID); ok {
@@ -640,7 +657,6 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 			ui.Box(c).FillWidth().Height(1).Background(t.Border)
 			statusBar(c, state, t, lang)
 		})
-		workspace.tablePropertiesView(c, state, t, lang)
 	}
 }
 
