@@ -10,24 +10,24 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func TestPDMCopyCollectsOnlySupportedEdits(t *testing.T) {
+func TestPDMSaveCollectsOnlySupportedEdits(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
 	set := BuildBoardSet(tablePropertiesDocument())
 	set.SourcePath = "/workspace/orders.pdm"
 	workspace.PublishBoards(workspace.BeginOpen(), set)
 	workspace.OpenTableProperties("orders")
-	var request *PDMCopyRequest
-	workspace.SetPDMCopyStarter(func(next *PDMCopyRequest) { request = next })
+	var request *PDMSaveRequest
+	workspace.SetPDMSaveStarter(func(next *PDMSaveRequest) { request = next })
 	tester := ui.NewTester(workspace.TablePropertiesView(state), 640, 480)
 	tester.Frame()
-	if err := tester.Click("Save PDM Copy…"); err != nil {
+	if err := tester.Click("Save"); err != nil {
 		t.Fatal(err)
 	}
-	if !workspace.PDMCopyCurrent(request) || len(request.edits) != 0 {
+	if !workspace.PDMSaveCurrent(request) || len(request.edits) != 0 {
 		t.Fatal("opening the table produced edits")
 	}
-	workspace.PublishPDMCopyResult(request, "", nil)
+	workspace.PublishPDMSaveResult(request, "", nil)
 
 	draft := &workspace.tableProperties.draft
 	draft.General.Name = "Renamed table"
@@ -39,7 +39,7 @@ func TestPDMCopyCollectsOnlySupportedEdits(t *testing.T) {
 	draft.Indexes[0].Name = "Edited index"
 	draft.Keys[0].Code = "EDITED_KEY"
 	tester.Frame()
-	if err := tester.Click("Save PDM Copy…"); err != nil {
+	if err := tester.Click("Save"); err != nil {
 		t.Fatal(err)
 	}
 	expected := []pdm.TextEdit{
@@ -47,21 +47,21 @@ func TestPDMCopyCollectsOnlySupportedEdits(t *testing.T) {
 		{ObjectID: draft.Columns[0].ID, Property: pdm.TextCode, Value: "NEW_CODE"},
 		{ObjectID: draft.Columns[0].ID, Property: pdm.TextComment, Value: "New comment"},
 	}
-	if !workspace.PDMCopyCurrent(request) || !reflect.DeepEqual(request.edits, expected) {
+	if !workspace.PDMSaveCurrent(request) || !reflect.DeepEqual(request.edits, expected) {
 		t.Fatalf("unexpected copy edits: %#v", request.edits)
 	}
-	workspace.PublishPDMCopyResult(request, i18n.KeyPDMCopySaved, nil)
+	workspace.PublishPDMSaveResult(request, i18n.KeyPDMSaved, nil)
 	tester.Frame()
-	if !tester.HasText("PDM copy saved") {
+	if !tester.HasText("PDM saved") {
 		t.Fatal("missing save confirmation")
 	}
 	workspace.CloseTableProperties()
-	if workspace.PDMCopyCurrent(request) {
+	if workspace.PDMSaveCurrent(request) {
 		t.Fatal("closed properties accepted a stale result")
 	}
 }
 
-func TestPDMCopyAdoptsSavedModelForFurtherEdits(t *testing.T) {
+func TestPDMSaveAdoptsSavedModelForFurtherEdits(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
 	data := []byte(`<Model xmlns:a="attribute" xmlns:o="object" xmlns:c="collection">
@@ -69,37 +69,36 @@ func TestPDMCopyAdoptsSavedModelForFurtherEdits(t *testing.T) {
 <o:Table Id="one"><a:Name>First</a:Name></o:Table>
 <o:Table Id="two"><a:Name>Second</a:Name></o:Table>
 </c:Tables></o:Model></c:Children></o:RootObject></Model>`)
-	setup := &PDMCopyRequest{}
-	original, err := setup.Prepare("/workspace/original.pdm", data)
+	setup := &PDMSaveRequest{sourcePath: "/workspace/original.pdm"}
+	original, err := setup.Prepare(data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	original.WritableCopy = false
 	workspace.PublishBoards(workspace.BeginOpen(), original)
 	workspace.OpenTableProperties("one")
 	workspace.LocateTable("one")
 	camera := workspace.canvas.camera
 
-	var request *PDMCopyRequest
-	workspace.SetPDMCopyStarter(func(next *PDMCopyRequest) { request = next })
+	var request *PDMSaveRequest
+	workspace.SetPDMSaveStarter(func(next *PDMSaveRequest) { request = next })
 	tester := ui.NewTester(workspace.TablePropertiesView(state), 640, 480)
 	tester.Frame()
 	workspace.tableProperties.draft.General.Name = "First saved"
-	if err := tester.Click("Save PDM Copy…"); err != nil {
+	if err := tester.Click("Save"); err != nil {
 		t.Fatal(err)
 	}
-	if request.WritableCopy() {
-		t.Fatal("original is writable")
+	if request.SourcePath() != original.SourcePath {
+		t.Fatal("first edit did not target the open file")
 	}
 	updated, err := request.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved, err := request.Prepare("/workspace/copy.pdm", updated)
+	saved, err := request.Prepare(updated)
 	if err != nil {
 		t.Fatal(err)
 	}
-	workspace.PublishPDMCopyResult(request, i18n.KeyPDMCopySaved, &saved)
+	workspace.PublishPDMSaveResult(request, i18n.KeyPDMSaved, &saved)
 	if workspace.tableDetail.Name != "First saved" || workspace.canvas.camera != camera {
 		t.Fatal("saved model did not refresh while preserving the camera")
 	}
@@ -109,18 +108,18 @@ func TestPDMCopyAdoptsSavedModelForFurtherEdits(t *testing.T) {
 	if err := tester.Click("Save"); err != nil {
 		t.Fatal(err)
 	}
-	if !request.WritableCopy() || request.SourcePath() != saved.SourcePath {
-		t.Fatal("second edit does not target the existing copy")
+	if request.SourcePath() != original.SourcePath {
+		t.Fatal("second edit did not target the open file")
 	}
 	updated, err = request.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved, err = request.Prepare(request.SourcePath(), updated)
+	saved, err = request.Prepare(updated)
 	if err != nil {
 		t.Fatal(err)
 	}
-	workspace.PublishPDMCopyResult(request, i18n.KeyPDMCopySaved, &saved)
+	workspace.PublishPDMSaveResult(request, i18n.KeyPDMSaved, &saved)
 	for id, expected := range map[string]string{"one": "First saved", "two": "Second saved"} {
 		if value, _ := workspace.document.Raw.ByID[id].Property("Name"); value != expected {
 			t.Fatalf("cumulative save lost table %s", id)

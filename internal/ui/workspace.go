@@ -41,7 +41,6 @@ type Workspace struct {
 	document          *pdm.Document
 	sourcePath        string
 	sourceXML         []byte
-	writableCopy      bool
 	boards            []DiagramBoard
 	activeBoard       int
 	loadToken         uint64
@@ -70,8 +69,8 @@ type Workspace struct {
 
 	tableOpen      func(string)
 	tableClose     func()
-	pdmCopyStarter func(*PDMCopyRequest)
-	pdmCopyRequest *PDMCopyRequest
+	pdmSaveStarter func(*PDMSaveRequest)
+	pdmSaveRequest *PDMSaveRequest
 
 	unplacedTable        bool
 	requestedTableID     string
@@ -147,7 +146,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 // BeginOpen starts a load and returns its stale-result token.
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
-	w.pdmCopyRequest = nil
+	w.pdmSaveRequest = nil
 	w.cancelPendingSwitch()
 	w.resetTableProperties()
 	w.invalidateDatabasePreview()
@@ -172,7 +171,6 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.boards = append([]DiagramBoard(nil), set.Boards...)
 	w.document = set.Document
 	w.sourcePath, w.sourceXML = set.SourcePath, set.SourceXML
-	w.writableCopy = set.WritableCopy
 	w.boardToken++
 	w.hasModel = true
 	w.loading = false
@@ -232,7 +230,7 @@ func (w *Workspace) ReportOpenError() {
 
 // ActivateBoard switches by zero-based catalog index.
 func (w *Workspace) ActivateBoard(index int) {
-	if !w.hasModel || w.pdmCopyRequest != nil {
+	if !w.hasModel || w.pdmSaveRequest != nil {
 		return
 	}
 	if index < 0 || index >= len(w.boards) {
@@ -266,7 +264,7 @@ func (w *Workspace) BoardDescriptor(index int) (DiagramBoard, bool) {
 
 // BeginBoardSwitch marks a board preparation request and returns its token.
 func (w *Workspace) BeginBoardSwitch(index int) (uint64, bool) {
-	if !w.hasModel || w.pdmCopyRequest != nil || index < 0 || index >= len(w.boards) || index == w.activeBoard {
+	if !w.hasModel || w.pdmSaveRequest != nil || index < 0 || index >= len(w.boards) || index == w.activeBoard {
 		return 0, false
 	}
 	w.boardToken++
@@ -350,7 +348,7 @@ func (w *Workspace) LocateSearchResult(tableID string) bool {
 }
 
 func (w *Workspace) locateTable(tableID string, smooth bool) bool {
-	if tableID == "" || !w.hasModel || w.pdmCopyRequest != nil {
+	if tableID == "" || !w.hasModel || w.pdmSaveRequest != nil {
 		return false
 	}
 	w.cancelPendingSwitch()
@@ -670,7 +668,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 
 func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
 	ui.Button(c, state.Text(i18n.KeyOpenPDM, nil)).Key(OpenPDMKey).
-		FillWidth().Disabled(w.loading || w.pdmCopyRequest != nil).OnClick(w.openHandler)
+		FillWidth().Disabled(w.loading || w.pdmSaveRequest != nil).OnClick(w.openHandler)
 	ui.Button(c, state.Text(i18n.KeyDatabaseSQL, nil)).Key(DatabasePreviewOpenKey).
 		FillWidth().Disabled(!w.hasModel || w.document == nil || w.loading).
 		OnClick(w.openDatabasePreview)

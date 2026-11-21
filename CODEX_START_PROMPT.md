@@ -17,7 +17,7 @@
 
 # 项目目标
 
-开发 Go + MyGo Native UI 的 PowerDesigner `.pdm` 查看器，以只读方式打开源文件。
+开发 Go + MyGo Native UI 的 PowerDesigner `.pdm` 查看器，支持保存表和字段的基本文字信息。
 
 第一版必须实现：
 1. 打开 PDM。
@@ -30,9 +30,9 @@
 8. 生成全库初始化 SQL：CREATE DATABASE、USE、所有表、字段注释、表注释、主键、索引、外键。
 9. SQL 预览、复制和导出 `.sql`。
 10. 简体中文与英文界面切换，从 Phase 1 建立文案资源、原生设置入口和本地语言偏好。默认语言和覆盖范围以 `PROJECT_BRIEF.md` 为准。
-11. 在原生表属性窗口将现有表和字段的名称、编码与注释另存为 PDM 副本，随后直接保存到该副本。
+11. 在原生表属性窗口将现有表和字段的名称、编码与注释直接保存到打开的 PDM。
 
-明确不做：覆盖 PDM 源文件、表结构编辑、数据库连接、执行 SQL、数据库同步、AI 助手、WebView、Electron、Tauri、网页前端。
+明确不做：表结构编辑、数据库连接、执行 SQL、数据库同步、AI 助手、WebView、Electron、Tauri、网页前端。
 
 # 技术路线
 

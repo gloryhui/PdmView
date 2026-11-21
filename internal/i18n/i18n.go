@@ -85,17 +85,13 @@ const (
 	KeyTablePropertiesName      Key = "table_properties.name"
 	KeyTablePropertiesMandatory Key = "table_properties.mandatory"
 
-	KeyPDMCopySave           Key = "pdm_copy.save"
-	KeyPDMCopyScope          Key = "pdm_copy.scope"
-	KeyPDMCopySaving         Key = "pdm_copy.saving"
-	KeyPDMCopySaved          Key = "pdm_copy.saved"
-	KeyPDMCopyInvalidEdit    Key = "pdm_copy.invalid_edit"
-	KeyPDMCopyExists         Key = "pdm_copy.exists"
-	KeyPDMCopyFailed         Key = "pdm_copy.failed"
-	KeyPDMSave               Key = "pdm_copy.save_current"
-	KeyPDMCopySaveFailed     Key = "pdm_copy.save_failed"
-	KeyPDMCopyChanged        Key = "pdm_copy.changed"
-	KeyPDMCopyRememberFailed Key = "pdm_copy.remember_failed"
+	KeyPDMSave        Key = "pdm_save.save"
+	KeyPDMSaveScope   Key = "pdm_save.scope"
+	KeyPDMSaving      Key = "pdm_save.saving"
+	KeyPDMSaved       Key = "pdm_save.saved"
+	KeyPDMInvalidEdit Key = "pdm_save.invalid_edit"
+	KeyPDMSaveFailed  Key = "pdm_save.failed"
+	KeyPDMChanged     Key = "pdm_save.changed"
 
 	KeyDatabaseSQL              Key = "database.sql"
 	KeyPreviewBack              Key = "preview.back"
@@ -208,17 +204,13 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesPreview:   {text: "Preview"},
 		KeyTablePropertiesClose:     {text: "Close"},
 		KeyTablePropertiesName:      {text: "Name"},
-		KeyPDMCopySave:              {text: "Save PDM Copy…"},
-		KeyPDMCopyScope:             {text: "The copy saves table and column names, codes, and comments."},
-		KeyPDMCopySaving:            {text: "Saving PDM copy…"},
-		KeyPDMCopySaved:             {text: "PDM copy saved"},
-		KeyPDMCopyInvalidEdit:       {text: "Cannot save these edits. Check names, codes, and comments."},
-		KeyPDMCopyExists:            {text: "This file already exists. Choose a new filename."},
-		KeyPDMCopyFailed:            {text: "Could not save the PDM copy. Choose another location."},
 		KeyPDMSave:                  {text: "Save"},
-		KeyPDMCopySaveFailed:        {text: "Could not update the PDM copy. Check file permissions."},
-		KeyPDMCopyChanged:           {text: "The copy changed on disk. Reopen it to see the latest version."},
-		KeyPDMCopyRememberFailed:    {text: "Saved. Could not remember this copy for the next session."},
+		KeyPDMSaveScope:             {text: "Saves table and column names, codes, and comments."},
+		KeyPDMSaving:                {text: "Saving…"},
+		KeyPDMSaved:                 {text: "PDM saved"},
+		KeyPDMInvalidEdit:           {text: "Cannot save these edits. Check names, codes, and comments."},
+		KeyPDMSaveFailed:            {text: "Could not save the PDM. Check the file path and permissions."},
+		KeyPDMChanged:               {text: "The PDM changed on disk. Reopen to load the latest version."},
 		KeyTablePropertiesMandatory: {text: "Mandatory"},
 
 		KeyDatabaseSQL:              {text: "Database SQL"},
@@ -325,17 +317,13 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesPreview:   {text: "预览"},
 		KeyTablePropertiesClose:     {text: "关闭"},
 		KeyTablePropertiesName:      {text: "名称"},
-		KeyPDMCopySave:              {text: "另存 PDM 副本…"},
-		KeyPDMCopyScope:             {text: "副本只保存表和字段的名称、编码、注释。"},
-		KeyPDMCopySaving:            {text: "正在保存 PDM 副本…"},
-		KeyPDMCopySaved:             {text: "PDM 副本已保存"},
-		KeyPDMCopyInvalidEdit:       {text: "无法保存这些修改，请检查名称、编码和注释。"},
-		KeyPDMCopyExists:            {text: "文件已存在，请使用新文件名。"},
-		KeyPDMCopyFailed:            {text: "无法保存 PDM 副本，请选择其他位置。"},
 		KeyPDMSave:                  {text: "保存"},
-		KeyPDMCopySaveFailed:        {text: "无法更新 PDM 副本，请检查文件权限。"},
-		KeyPDMCopyChanged:           {text: "磁盘上的副本已发生变化，请重新打开以查看最新版本。"},
-		KeyPDMCopyRememberFailed:    {text: "已保存，但无法记录此副本供下次打开时识别。"},
+		KeyPDMSaveScope:             {text: "仅保存表和字段的名称、编码、注释。"},
+		KeyPDMSaving:                {text: "正在保存…"},
+		KeyPDMSaved:                 {text: "PDM 已保存"},
+		KeyPDMInvalidEdit:           {text: "无法保存这些修改，请检查名称、编码和注释。"},
+		KeyPDMSaveFailed:            {text: "无法保存 PDM，请检查文件路径和权限。"},
+		KeyPDMChanged:               {text: "磁盘上的 PDM 已发生变化，请重新打开以加载最新版本。"},
 		KeyTablePropertiesMandatory: {text: "必填"},
 
 		KeyDatabaseSQL:              {text: "数据库 SQL"},

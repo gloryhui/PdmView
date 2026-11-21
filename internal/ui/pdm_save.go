@@ -7,60 +7,55 @@ import (
 	"pdmview/internal/pdm"
 )
 
-type PDMCopyRequest struct {
-	sourcePath   string
-	sourceXML    []byte
-	tableID      string
-	edits        []pdm.TextEdit
-	activeBoard  int
-	writableCopy bool
+type PDMSaveRequest struct {
+	sourcePath  string
+	sourceXML   []byte
+	tableID     string
+	edits       []pdm.TextEdit
+	activeBoard int
 }
 
-func (r *PDMCopyRequest) SourcePath() string {
+func (r *PDMSaveRequest) SourcePath() string {
 	return r.sourcePath
 }
 
-func (r *PDMCopyRequest) SourceXML() []byte {
+func (r *PDMSaveRequest) SourceXML() []byte {
 	return r.sourceXML
 }
 
-func (r *PDMCopyRequest) WritableCopy() bool {
-	return r.writableCopy
-}
-
-func (r *PDMCopyRequest) Run() ([]byte, error) {
+func (r *PDMSaveRequest) Run() ([]byte, error) {
 	return pdm.PatchTableText(r.sourceXML, r.tableID, r.edits)
 }
 
-func (r *PDMCopyRequest) Prepare(path string, data []byte) (BoardSet, error) {
+func (r *PDMSaveRequest) Prepare(data []byte) (BoardSet, error) {
 	document, err := pdm.Parse(bytes.NewReader(data))
 	if err != nil {
 		return BoardSet{}, err
 	}
 	set := buildBoardSet(document, r.activeBoard)
-	set.SourcePath, set.SourceXML, set.WritableCopy = path, data, true
+	set.SourcePath, set.SourceXML = r.sourcePath, data
 	return set, nil
 }
 
-func (w *Workspace) SetPDMCopyStarter(starter func(*PDMCopyRequest)) {
-	w.pdmCopyStarter = starter
+func (w *Workspace) SetPDMSaveStarter(starter func(*PDMSaveRequest)) {
+	w.pdmSaveStarter = starter
 }
 
-func (w *Workspace) PDMCopyCurrent(request *PDMCopyRequest) bool {
-	return request != nil && w.pdmCopyRequest == request
+func (w *Workspace) PDMSaveCurrent(request *PDMSaveRequest) bool {
+	return request != nil && w.pdmSaveRequest == request
 }
 
-func (w *Workspace) PublishPDMCopyResult(request *PDMCopyRequest, status i18n.Key, saved *BoardSet) {
-	if !w.PDMCopyCurrent(request) {
+func (w *Workspace) PublishPDMSaveResult(request *PDMSaveRequest, status i18n.Key, saved *BoardSet) {
+	if !w.PDMSaveCurrent(request) {
 		return
 	}
-	w.pdmCopyRequest = nil
+	w.pdmSaveRequest = nil
 	properties := &w.tableProperties
 	if properties.tableID == request.tableID {
-		properties.copyStatus = status
+		properties.saveStatus = status
 	}
 	if saved != nil {
-		w.sourcePath, w.sourceXML, w.writableCopy = saved.SourcePath, saved.SourceXML, true
+		w.sourceXML = saved.SourceXML
 		w.document, w.boards = saved.Document, saved.Boards
 		w.catalog, w.detailIndex, w.searchIndex = saved.Catalog, saved.Details, saved.Search
 		prepared := saved.Prepared
@@ -84,17 +79,16 @@ func (w *Workspace) PublishPDMCopyResult(request *PDMCopyRequest, status i18n.Ke
 	w.notifyChanged()
 }
 
-func (w *Workspace) savePDMCopy() {
+func (w *Workspace) savePDM() {
 	properties := &w.tableProperties
-	if !properties.open || w.pdmCopyStarter == nil || w.pdmCopyRequest != nil || w.sourcePath == "" || w.loading || w.switching {
+	if !properties.open || w.pdmSaveStarter == nil || w.pdmSaveRequest != nil || w.sourcePath == "" || w.loading || w.switching {
 		return
 	}
-	request := &PDMCopyRequest{
-		sourcePath:   w.sourcePath,
-		sourceXML:    w.sourceXML,
-		tableID:      properties.tableID,
-		activeBoard:  w.activeBoard,
-		writableCopy: w.writableCopy,
+	request := &PDMSaveRequest{
+		sourcePath:  w.sourcePath,
+		sourceXML:   w.sourceXML,
+		tableID:     properties.tableID,
+		activeBoard: w.activeBoard,
 	}
 	collect := func(original pdm.Metadata, name, code, comment string) {
 		if name != original.Name {
@@ -112,8 +106,8 @@ func (w *Workspace) savePDMCopy() {
 	for index, column := range draft.Columns {
 		collect(detail.Columns[index].Metadata, column.Name, column.Code, column.Comment)
 	}
-	w.pdmCopyRequest = request
-	properties.copyStatus = i18n.KeyPDMCopySaving
+	w.pdmSaveRequest = request
+	properties.saveStatus = i18n.KeyPDMSaving
 	w.notifyChanged()
-	w.pdmCopyStarter(request)
+	w.pdmSaveStarter(request)
 }

@@ -27,7 +27,7 @@ const (
 	TablePropertiesCopyStatusKey  = "pdmview.table-properties.preview.status"
 	TablePropertiesDiagnosticsKey = "pdmview.table-properties.preview.diagnostics"
 	TablePropertiesCloseKey       = "pdmview.table-properties.close"
-	TablePropertiesSaveCopyKey    = "pdmview.table-properties.save-copy"
+	TablePropertiesSaveKey        = "pdmview.table-properties.save"
 	tablePropertiesPadding        = 12
 )
 
@@ -76,7 +76,7 @@ func TablePropertiesKeyMemberFieldKey(id string, ordinal int, field string) stri
 }
 
 type tablePropertiesState struct {
-	copyStatus        i18n.Key
+	saveStatus        i18n.Key
 	open              bool
 	tableID           string
 	detail            TableDetail
@@ -235,7 +235,7 @@ func (w *Workspace) OpenTableProperties(tableID string) bool {
 	if w.tableProperties.open && w.tableProperties.tableID == tableID {
 		return true
 	}
-	if w.pdmCopyRequest != nil {
+	if w.pdmSaveRequest != nil {
 		return false
 	}
 	detail, ok := w.detailIndex.resolve(tableID)
@@ -313,15 +313,11 @@ func (w *Workspace) renderTableProperties(
 			ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
 					TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
-				if w.pdmCopyStarter != nil && w.sourcePath != "" {
-					saveKey := i18n.KeyPDMCopySave
-					if w.writableCopy {
-						saveKey = i18n.KeyPDMSave
-					}
-					saveLabel := state.Text(saveKey, nil)
-					ui.Button(c, saveLabel).Key(TablePropertiesSaveCopyKey).Label(saveLabel).
-						Lang(lang).Disabled(w.pdmCopyRequest != nil).
-						OnClick(w.savePDMCopy)
+				if w.pdmSaveStarter != nil && w.sourcePath != "" {
+					saveLabel := state.Text(i18n.KeyPDMSave, nil)
+					ui.Button(c, saveLabel).Key(TablePropertiesSaveKey).Label(saveLabel).
+						Lang(lang).Disabled(w.pdmSaveRequest != nil).
+						OnClick(w.savePDM)
 				}
 				closeLabel := state.Text(i18n.KeyTablePropertiesClose, nil)
 				ui.Button(c, closeLabel).Key(TablePropertiesCloseKey).Label(closeLabel).
@@ -363,17 +359,16 @@ func (w *Workspace) renderTableProperties(
 					w.tablePropertiesPreview(c, state, theme, lang, detail)
 				}
 			})
-			if status := w.tableProperties.copyStatus; status != "" {
+			if status := w.tableProperties.saveStatus; status != "" {
 				color, role := theme.TextMuted, ui.RoleStatus
 				switch status {
-				case i18n.KeyPDMCopyInvalidEdit, i18n.KeyPDMCopyExists, i18n.KeyPDMCopyFailed,
-					i18n.KeyPDMCopySaveFailed, i18n.KeyPDMCopyChanged, i18n.KeyPDMCopyRememberFailed:
+				case i18n.KeyPDMInvalidEdit, i18n.KeyPDMSaveFailed, i18n.KeyPDMChanged:
 					color, role = theme.Danger, ui.RoleAlert
 				}
 				ui.Text(c, state.Text(status, nil)).FillWidth().FontSize(12).
 					TextColor(color).Lang(lang).Role(role)
-			} else if w.pdmCopyStarter != nil && w.sourcePath != "" {
-				ui.Text(c, state.Text(i18n.KeyPDMCopyScope, nil)).FillWidth().FontSize(12).
+			} else if w.pdmSaveStarter != nil && w.sourcePath != "" {
+				ui.Text(c, state.Text(i18n.KeyPDMSaveScope, nil)).FillWidth().FontSize(12).
 					TextColor(theme.TextMuted).Lang(lang)
 			}
 		})

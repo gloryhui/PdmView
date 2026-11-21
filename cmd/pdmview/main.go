@@ -64,7 +64,6 @@ func showMainWindow() {
 		fmt.Fprintln(os.Stderr, "pdmview: preferences:", err)
 	}
 	state := app.New(app.NewStore(path), systemTag)
-	copyStore := newPDMCopyStore(path)
 	workspace := appui.NewWorkspace()
 	workspace.SetClipboardWriter(func(text string) error {
 		return mygo.Clipboard.Write(transfer.TextData(text))
@@ -102,11 +101,11 @@ func showMainWindow() {
 			properties.Close()
 		}
 	})
-	workspace.SetPDMCopyStarter(func(request *appui.PDMCopyRequest) {
-		startPDMCopy(properties, workspace, state, copyStore, request)
+	workspace.SetPDMSaveStarter(func(request *appui.PDMSaveRequest) {
+		startPDMSave(win, workspace, request)
 	})
 	workspace.SetOpenHandler(func() {
-		openPDMDialog(win, workspace, state, copyStore)
+		openPDMDialog(win, workspace, state)
 	})
 	workspace.SetBoardSelector(func(index int) {
 		startBoardSwitch(win, workspace, index)
@@ -126,7 +125,7 @@ func showMainWindow() {
 		}
 	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
-		startBoardLoad(win, workspace, copyStore, path)
+		startBoardLoad(win, workspace, path)
 	}
 }
 
@@ -189,7 +188,7 @@ func optionalPDMPath(args []string) (string, bool) {
 	return args[0], true
 }
 
-func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.State, copyStore pdmCopyStore) {
+func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.State) {
 	if win == nil || win.IsDestroyed() {
 		return
 	}
@@ -223,18 +222,18 @@ func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.Stat
 			if win.IsDestroyed() {
 				return
 			}
-			startBoardLoad(win, workspace, copyStore, paths[0])
+			startBoardLoad(win, workspace, paths[0])
 		})
 	}()
 }
 
-func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, copyStore pdmCopyStore, path string) {
+func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, path string) {
 	if win == nil || win.IsDestroyed() || workspace == nil {
 		return
 	}
 	token := workspace.BeginOpen()
 	go func() {
-		set, err := loadPDMSource(path, copyStore)
+		set, err := loadBoardSet(path)
 		mygo.RunOnMain(func() {
 			applyBoardResult(win, workspace, token, set, err)
 		})
@@ -246,6 +245,11 @@ func loadBoardSet(path string) (appui.BoardSet, error) {
 	if err != nil {
 		return appui.BoardSet{}, err
 	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return appui.BoardSet{}, err
+	}
+	path = filepath.Join(parent, filepath.Base(path))
 	info, err := os.Stat(path)
 	if err != nil {
 		return appui.BoardSet{}, err

@@ -18,12 +18,13 @@ Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出�
 
 Phase 10 的 macOS 验收与打包已完成，鼠标滚轮双向缩放和指针锚点验证通过。Windows 桌面验收延期，由 Windows 本机执行。详见 [Phase 10 验收](../docs/PHASE_10_ACCEPTANCE.md)。
 
-## 首版副本保存
+## PDM 保存
 
 | 任务 | 状态 | 执行 | 验收结果 | 待验证 |
 |---|---|---|---|---|
-| 原生表属性另存 PDM 副本 | DONE | 主 Agent | 双语原生面板实际另存通过。`yian.pdm` 无编辑副本 132,997 字节完全一致。六项文本修改重开读回，1 张画板与 8 个图元几何和样式一致，源文件 SHA-256 一致。详见 [PDM 副本保存](../docs/PDM_FORMAT.md#pdm-副本保存) | PowerDesigner 往返及 Windows 本机验证 |
+| 原生表属性另存 PDM 副本 | DONE | 主 Agent | 0.1.1 双语原生面板实际另存通过。`yian.pdm` 无编辑副本 132,997 字节完全一致。六项文本修改重开读回，1 张画板与 8 个图元几何和样式一致，源文件 SHA-256 一致。 | PowerDesigner 往返及 Windows 本机验证 |
 | 原生 PDM 副本连续保存 | DONE | 主 Agent | 0.1.2 从 `yian.pdm` 另存一次，连续保存两张表至同一文件，重启后继续保存。原生面板实测、`make check` 和原文件 SHA-256 校验通过。 | PowerDesigner 往返及 Windows 本机验证 |
+| 原生 PDM 直接保存 | DONE | 主 Agent | 0.1.3 双语原生窗口直接写回同一打开路径。无编辑时文件未重写，编辑后画板和样式一致，外部改动保护实测通过。详见 [PDM 直接保存](../docs/PDM_FORMAT.md#pdm-直接保存)。 | PowerDesigner 往返及 Windows 本机验证 |
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|

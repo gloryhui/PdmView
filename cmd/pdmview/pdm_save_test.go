@@ -11,62 +11,57 @@ import (
 	"pdmview/internal/pdm"
 )
 
-func TestWriteNewPDMCopyRefusesExistingDestinations(t *testing.T) {
-	dir := t.TempDir()
-	source := filepath.Join(dir, "source.pdm")
-	copyPath := filepath.Join(dir, "copy.pdm")
-	alias := filepath.Join(dir, "alias.pdm")
-	if err := os.WriteFile(source, []byte("original"), 0600); err != nil {
+func TestUpdatePDMFileWithNoEditsLeavesFileUntouched(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opened.pdm")
+	data := []byte("original")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(source, alias); err != nil {
+	before, err := os.Stat(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	data := []byte("new")
-	if err := writeNewPDMCopy(copyPath, source, data); err != nil {
+	if err := updatePDMFile(path, data, data); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{source, alias, copyPath} {
-		if err := writeNewPDMCopy(path, source, []byte("overwrite")); !errors.Is(err, os.ErrExist) {
-			t.Fatalf("expected refusal for %s, got %v", filepath.Base(path), err)
-		}
+	after, err := os.Stat(path)
+	if err != nil || !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("unchanged file was rewritten")
 	}
-	if got, err := os.ReadFile(source); err != nil || string(got) != "original" {
-		t.Fatal("source changed")
-	}
-	if got, err := os.ReadFile(copyPath); err != nil || !bytes.Equal(got, data) {
-		t.Fatal("copy changed")
-	}
-	if files, err := os.ReadDir(dir); err != nil || len(files) != 3 {
+	if files, err := os.ReadDir(filepath.Dir(path)); err != nil || len(files) != 1 {
 		t.Fatal("unexpected staging file")
 	}
 }
 
-func TestUpdatePDMCopyProtectsChangedFilesAndSymlinks(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "copy.pdm")
+func TestUpdatePDMFileProtectsChangedFilesAndSymlinks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "opened.pdm")
 	original := []byte("old content")
 	updated := []byte("new content")
 	if err := os.WriteFile(path, original, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := updatePDMCopy(path, original, updated); err != nil {
+	if err := updatePDMFile(path, original, updated); err != nil {
 		t.Fatal(err)
 	}
-	if err := updatePDMCopy(path, original, []byte("stale edit")); !errors.Is(err, errPDMCopyChanged) {
+	if err := updatePDMFile(path, original, []byte("stale edit")); !errors.Is(err, errPDMChanged) {
 		t.Fatalf("expected stale data refusal, got %v", err)
 	}
 	alias := filepath.Join(filepath.Dir(path), "alias.pdm")
 	if err := os.Symlink(path, alias); err == nil {
-		if err := updatePDMCopy(alias, updated, nil); !errors.Is(err, errPDMCopyChanged) {
+		if err := updatePDMFile(alias, updated, nil); err == nil {
 			t.Fatalf("expected symlink refusal, got %v", err)
 		}
 	}
 	if data, err := os.ReadFile(path); err != nil || !bytes.Equal(data, updated) {
 		t.Fatal("blocked write changed contents")
 	}
+	missing := filepath.Join(filepath.Dir(path), "missing.pdm")
+	if err := updatePDMFile(missing, original, updated); !errors.Is(err, errPDMChanged) {
+		t.Fatalf("expected missing file refusal, got %v", err)
+	}
 }
 
-func TestPDMCopyLocalSample(t *testing.T) {
+func TestPDMSaveLocalSample(t *testing.T) {
 	source := os.Getenv("PDM_LAYOUT_SAMPLE")
 	if source == "" {
 		t.Skip("set PDM_LAYOUT_SAMPLE to a local XML export")
@@ -76,8 +71,8 @@ func TestPDMCopyLocalSample(t *testing.T) {
 		t.Fatal("could not open local sample")
 	}
 	before := original.Prepared.Graph
-	if len(before.NodeSources) == 0 {
-		t.Fatal("sample is missing saved table symbols")
+	if len(before.NodeSources) < 2 {
+		t.Fatal("sample needs at least two saved table symbols")
 	}
 	tableID := before.NodeSources[0].TableID
 	table := original.Document.Raw.ByID[tableID]
@@ -95,42 +90,35 @@ func TestPDMCopyLocalSample(t *testing.T) {
 		{ObjectID: columnID, Property: pdm.TextComment, Value: "字段注释 & <本地验证>"},
 	}
 
-	dir := t.TempDir()
-	unchanged, err := pdm.PatchTableText(original.SourceXML, tableID, nil)
+	workingPath := filepath.Join(t.TempDir(), "working.pdm")
+	if err := os.WriteFile(workingPath, original.SourceXML, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	working, err := loadBoardSet(workingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	unchangedPath := filepath.Join(dir, "unchanged.pdm")
-	if err := writeNewPDMCopy(unchangedPath, original.SourcePath, unchanged); err != nil {
+	unchanged, err := pdm.PatchTableText(working.SourceXML, tableID, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if data, err := os.ReadFile(unchangedPath); err != nil || !bytes.Equal(data, original.SourceXML) {
-		t.Fatal("unedited copy differs from source bytes")
+	if err := updatePDMFile(working.SourcePath, working.SourceXML, unchanged); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(workingPath); err != nil || !bytes.Equal(data, original.SourceXML) {
+		t.Fatal("unedited save differs from source bytes")
 	}
 
-	changed, err := pdm.PatchTableText(original.SourceXML, tableID, edits)
+	changed, err := pdm.PatchTableText(working.SourceXML, tableID, edits)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedPath := filepath.Join(dir, "changed.pdm")
-	if err := writeNewPDMCopy(changedPath, original.SourcePath, changed); err != nil {
+	if err := updatePDMFile(working.SourcePath, working.SourceXML, changed); err != nil {
 		t.Fatal(err)
 	}
-	changedPath, err = canonicalCopyPath(changedPath)
+	reopened, err := loadBoardSet(workingPath)
 	if err != nil {
-		t.Fatal(err)
-	}
-	store := newPDMCopyStore(filepath.Join(dir, "config", "preferences.json"))
-	if err := store.remember(changedPath, changed); err != nil {
-		t.Fatal(err)
-	}
-	originalAgain, err := loadPDMSource(source, store)
-	if err != nil || originalAgain.WritableCopy {
-		t.Fatal("original file unexpectedly became writable")
-	}
-	reopened, err := loadPDMSource(changedPath, store)
-	if err != nil || !reopened.WritableCopy {
-		t.Fatal("saved copy did not reopen for editing")
+		t.Fatal("overwritten PDM did not reopen")
 	}
 	secondTableID := before.NodeSources[1].TableID
 	secondEdit := pdm.TextEdit{ObjectID: secondTableID, Property: pdm.TextComment, Value: "另一张表 & <继续保存>"}
@@ -138,19 +126,12 @@ func TestPDMCopyLocalSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := updatePDMCopy(changedPath, reopened.SourceXML, secondData); err != nil {
+	if err := updatePDMFile(reopened.SourcePath, reopened.SourceXML, secondData); err != nil {
 		t.Fatal(err)
 	}
-	external, err := loadPDMSource(changedPath, store)
-	if err != nil || external.WritableCopy {
-		t.Fatal("unrecorded on-disk contents unexpectedly became writable")
-	}
-	if err := store.remember(changedPath, secondData); err != nil {
-		t.Fatal(err)
-	}
-	reopened, err = loadPDMSource(changedPath, store)
-	if err != nil || !reopened.WritableCopy {
-		t.Fatal("updated copy did not reopen for editing")
+	reopened, err = loadBoardSet(workingPath)
+	if err != nil {
+		t.Fatal("overwritten PDM did not reopen")
 	}
 	edits = append(edits, secondEdit)
 	for _, edit := range edits {
@@ -184,6 +165,9 @@ func TestPDMCopyLocalSample(t *testing.T) {
 	if data, err := os.ReadFile(source); err != nil || !bytes.Equal(data, original.SourceXML) {
 		t.Fatal("local source changed")
 	}
-	t.Logf("byte-identical unedited copy (%d bytes), %d edits across two tables reopened from one updated copy, %d boards and %d table symbols preserved",
+	if entries, err := os.ReadDir(filepath.Dir(workingPath)); err != nil || len(entries) != 1 {
+		t.Fatal("save left another file beside the opened PDM")
+	}
+	t.Logf("unedited save is byte-identical (%d bytes), %d edits across two tables reopened from one overwritten PDM, %d boards and %d table symbols preserved",
 		len(original.SourceXML), len(edits), len(reopened.Boards), len(after.Scene.Nodes))
 }
