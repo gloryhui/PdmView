@@ -32,9 +32,9 @@ Phase 4 的领域模型冻结、映射及 XML 对照已完成。P4-03 的 PowerD
 | P4-03 | 原始布局核对 | BLOCKED | GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。本地样本 8/8 图元的 X/Y、宽高和 90/90 字段顺序一致。三份公开 XML 的 23 条关系和 56 个路径点逐项一致。`make check`、实样本对照及 SHA-256 复核通过 | 缺可用的本地 PowerDesigner Windows 客户端，应用内对照与单位标定待验收。状态标志 `AutoLayout` 已交付，界面显示待接入正式画布 |
 | P5-01 | Graph Node/Edge | DONE | DeepSeek / GPT | `bef71cf`，ADR-005。正式场景与合成数据分离，节点和边可按偏移追溯 Diagram、图元、模型对象和原始几何。Graph/PDM 定向测试及 vet 通过 | |
 | P5-02 | World/View/Screen 变换 | DONE | DeepSeek / GPT | `46f42bb`，Graph 定向测试、vet 通过。在 1024 × 768 DIP 视口和 24 DIP 边距下，本地样本完整适应，8/8 图元中心往返通过，原型相机下限会截断全图 | PDM 物理单位标定随 P4-03 保留 |
-| P5-03 | R-Tree/空间查询 | DONE | DeepSeek / GPT | BVH 支持原子替换场景和点查询，定向测试、并发 race 验证及本地样本线性对照通过。500 节点点查询 298.1 → 33.56 ns，局部视口 8.034 → 1.650 µs，500 节点与 1,000 边索引重建 2.11 ms | 重建在交互查询路径外执行 |
-| P5-04 | 命中测试 | IN_PROGRESS | DeepSeek / GPT | 复用 indexed hit，返回画板和 PDM 对象身份 | |
-| P5-05 | 关系线几何与 fallback | TODO | DeepSeek | | |
+| P5-03 | R-Tree/空间查询 | DONE | DeepSeek / GPT | `96f6415`，BVH 支持原子替换场景和点查询，定向测试、并发 race 验证及本地样本线性对照通过。500 节点点查询 298.1 → 33.56 ns，局部视口 8.034 → 1.650 µs，500 节点与 1,000 边索引重建 2.11 ms | 重建在交互查询路径外执行 |
+| P5-04 | 命中测试 | DONE | DeepSeek / GPT | Graph 定向测试和 vet 通过，覆盖窗口偏移、节点优先及边的 DIP 容差。本地样本 8 图元在 0.5×、1×、2× 共 24/24 次命中，返回表和图元 ID | 调用方使用与画板同代的 BVH |
+| P5-05 | 关系线几何与 fallback | IN_PROGRESS | DeepSeek / GPT | 接入正式图构建，保留原始路径并验证缺失路径的避障路由 | |
 | P6-01 | 表节点绘制 | TODO | DeepSeek | | |
 | P6-02 | 关系线绘制 | TODO | DeepSeek | | |
 | P6-03 | LOD/缓存/裁剪 | TODO | DeepSeek | | |

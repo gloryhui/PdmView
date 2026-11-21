@@ -16,6 +16,60 @@ type Hit struct {
 	Index int
 }
 
+// DiagramHit adds the traced diagram, table, symbol, and relationship IDs to a
+// low-level scene hit.
+type DiagramHit struct {
+	Hit
+	DiagramID   string
+	SymbolID    string
+	TableID     string
+	ReferenceID string
+}
+
+// HitTest hit-tests a window-relative DIP point against this diagram. It
+// requires the caller's matching BVH and never falls back to a linear scan.
+func (d DiagramGraph) HitTest(index *SpatialIndex, camera *Camera, screen Point, edgeToleranceDIP float64) DiagramHit {
+	miss := DiagramHit{
+		Hit:       Hit{Kind: HitNone, Index: -1},
+		DiagramID: d.DiagramID,
+	}
+	if index == nil || camera == nil || !finite(screen.X) || !finite(screen.Y) {
+		return miss
+	}
+	viewport := camera.ViewportBounds()
+	if viewport.Width() <= 0 || viewport.Height() <= 0 || !pointInRect(screen, viewport) {
+		return miss
+	}
+
+	hit := HitTest(d.Scene, index, camera, camera.ScreenToViewport(screen), edgeToleranceDIP)
+	switch hit.Kind {
+	case HitNode:
+		source, ok := d.NodeSource(hit.Index)
+		if !ok {
+			return miss
+		}
+		return DiagramHit{
+			Hit:       hit,
+			DiagramID: d.DiagramID,
+			SymbolID:  source.SymbolID,
+			TableID:   source.TableID,
+		}
+	case HitEdge:
+		source, ok := d.EdgeSource(hit.Index)
+		if !ok {
+			return miss
+		}
+		return DiagramHit{
+			Hit:         hit,
+			DiagramID:   d.DiagramID,
+			SymbolID:    source.SymbolID,
+			ReferenceID: source.ReferenceID,
+		}
+	default:
+		return miss
+	}
+}
+
 // HitTest hit-tests a viewport-local DIP point. Nodes win first, scanning their
 // scene offsets in reverse draw order. Otherwise the nearest actual edge
 // segment within edgeToleranceDIP wins; equal edge distances choose the later

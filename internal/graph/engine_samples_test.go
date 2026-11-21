@@ -89,6 +89,47 @@ func TestPhase5SampleIndex(t *testing.T) {
 	t.Logf("BVH matched linear oracle: point_queries=%d viewport_queries=%d deletion_snapshots=%d", pointQueries, viewQueries, replacements)
 }
 
+func TestPhase5SampleHit(t *testing.T) {
+	model := openEngineSample(t)
+	viewport := Rect{Min: Point{X: 37, Y: 51}, Max: Point{X: 1061, Y: 819}}
+	var checked int
+	for _, diagram := range sampleDiagrams(&model.Contents) {
+		if len(diagram.TableSymbols) == 0 {
+			continue
+		}
+		mapped := MapDiagram(model, diagram)
+		index := NewSpatialIndex(mapped.Scene)
+		camera := NewDiagramCamera(viewport)
+		for offset, node := range mapped.Scene.Nodes {
+			center := rectMiddle(node.Bounds)
+			winner := offset
+			for next := offset + 1; next < len(mapped.Scene.Nodes); next++ {
+				other := mapped.Scene.Nodes[next].Bounds
+				if center.X >= other.Min.X && center.X <= other.Max.X &&
+					center.Y >= other.Min.Y && center.Y <= other.Max.Y {
+					winner = next
+				}
+			}
+			for _, factor := range []float64{0.5, 1, 2} {
+				camera.FitBounds(mapped.Scene.Bounds, 24)
+				screen := camera.WorldToScreen(center)
+				camera.ZoomAt(camera.ScreenToViewport(screen), factor)
+				hit := mapped.HitTest(index, camera, screen, 5)
+				want := diagram.TableSymbols[winner]
+				if hit.Kind != HitNode || hit.Index != winner || hit.DiagramID != diagram.ID ||
+					hit.TableID != want.TableID || hit.SymbolID != want.ID {
+					t.Fatalf("node %d failed indexed screen hit at %.1fx fit scale", offset, factor)
+				}
+				checked++
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("sample has no populated diagram")
+	}
+	t.Logf("node hits checked at 0.5x, 1x and 2x fitted zoom: %d", checked)
+}
+
 func openEngineSample(t *testing.T) *pdm.Model {
 	t.Helper()
 	path := os.Getenv("PDM_LAYOUT_SAMPLE")

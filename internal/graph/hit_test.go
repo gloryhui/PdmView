@@ -93,3 +93,121 @@ func TestHitTestToleranceUsesViewportDIPAcrossZoom(t *testing.T) {
 		t.Fatalf("NaN tolerance hit %+v", hit)
 	}
 }
+
+func TestDiagramHitTestWindowOffsetZoomAndTraceability(t *testing.T) {
+	diagram, index, camera := diagramHitFixture()
+
+	nodeScreen := camera.WorldToScreen(Point{X: 75, Y: 50})
+	nodeHit := diagram.HitTest(index, camera, nodeScreen, 5)
+	if nodeHit.Hit != (Hit{Kind: HitNode, Index: 1}) ||
+		nodeHit.DiagramID != "diagram-hit" ||
+		nodeHit.SymbolID != "node-symbol-b" ||
+		nodeHit.TableID != "table-b" {
+		t.Fatalf("top node hit = %+v", nodeHit)
+	}
+
+	boundaryScreen := camera.WorldToScreen(Point{X: 0, Y: 0})
+	boundaryHit := diagram.HitTest(index, camera, boundaryScreen, 5)
+	if boundaryHit.Hit != (Hit{Kind: HitNode, Index: 0}) ||
+		boundaryHit.SymbolID != "node-symbol-a" ||
+		boundaryHit.TableID != "table-a" {
+		t.Fatalf("inclusive node boundary = %+v", boundaryHit)
+	}
+
+	edgeScreen := camera.WorldToScreen(Point{X: 250, Y: 50})
+	edgeHit := diagram.HitTest(index, camera, edgeScreen, 2)
+	if edgeHit.Hit != (Hit{Kind: HitEdge, Index: 1}) ||
+		edgeHit.DiagramID != "diagram-hit" ||
+		edgeHit.SymbolID != "edge-symbol-visible" ||
+		edgeHit.ReferenceID != "reference-visible" {
+		t.Fatalf("edge hit = %+v", edgeHit)
+	}
+
+	nearEdge := camera.WorldToScreen(Point{X: 250, Y: 50.5})
+	if hit := diagram.HitTest(index, camera, nearEdge, 0.8); hit.Kind != HitNone {
+		t.Fatalf("sub-DIP edge tolerance unexpectedly hit: %+v", hit)
+	}
+	if hit := diagram.HitTest(index, camera, nearEdge, 1.2); hit.Kind != HitEdge ||
+		hit.Index != 1 || hit.ReferenceID != "reference-visible" {
+		t.Fatalf("DIP edge tolerance miss: %+v", hit)
+	}
+}
+
+func TestDiagramHitTestRejectsInvalidCanvasBVHAndSources(t *testing.T) {
+	diagram, index, camera := diagramHitFixture()
+	nodeScreen := camera.WorldToScreen(Point{X: 75, Y: 50})
+	edgeScreen := camera.WorldToScreen(Point{X: 250, Y: 50})
+
+	if hit := diagram.HitTest(nil, camera, nodeScreen, 5); hit.Hit != (Hit{Kind: HitNone, Index: -1}) ||
+		hit.DiagramID != "diagram-hit" {
+		t.Fatalf("nil index hit = %+v", hit)
+	}
+	if hit := diagram.HitTest(nil, camera, edgeScreen, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("nil index edge fallback = %+v", hit)
+	}
+	if hit := diagram.HitTest(index, nil, nodeScreen, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("nil camera hit = %+v", hit)
+	}
+	if hit := diagram.HitTest(index, NewCamera(Rect{}), Point{}, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("empty viewport hit = %+v", hit)
+	}
+	if hit := diagram.HitTest(index, camera, Point{X: 99, Y: 50}, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("outside canvas hit = %+v", hit)
+	}
+	for _, point := range []Point{
+		{X: math.NaN(), Y: 50},
+		{X: 50, Y: math.Inf(1)},
+	} {
+		if hit := diagram.HitTest(index, camera, point, 5); hit.Kind != HitNone || hit.Index != -1 {
+			t.Fatalf("non-finite screen %+v hit %+v", point, hit)
+		}
+	}
+	if hit := diagram.HitTest(index, camera, Point{X: 600, Y: 400}, 5); hit.Kind != HitNone ||
+		hit.Index != -1 || hit.DiagramID != "diagram-hit" {
+		t.Fatalf("no-result hit = %+v", hit)
+	}
+
+	emptyIndex := NewSpatialIndex(Scene{})
+	if hit := diagram.HitTest(emptyIndex, camera, nodeScreen, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("non-matching empty BVH fell back to scene: %+v", hit)
+	}
+
+	missingNodeSource := diagram
+	missingNodeSource.NodeSources = nil
+	if hit := missingNodeSource.HitTest(index, camera, nodeScreen, 5); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("unaligned node source hit = %+v", hit)
+	}
+	missingEdgeSource := diagram
+	missingEdgeSource.EdgeSources = nil
+	if hit := missingEdgeSource.HitTest(index, camera, edgeScreen, 2); hit.Kind != HitNone || hit.Index != -1 {
+		t.Fatalf("unaligned edge source hit = %+v", hit)
+	}
+}
+
+func diagramHitFixture() (DiagramGraph, *SpatialIndex, *Camera) {
+	scene := Scene{
+		Nodes: []Node{
+			{ID: 0, Bounds: Rect{Min: Point{X: 0, Y: 0}, Max: Point{X: 100, Y: 100}}},
+			{ID: 1, Bounds: Rect{Min: Point{X: 50, Y: 0}, Max: Point{X: 150, Y: 100}}},
+		},
+		Edges: []Edge{
+			{ID: 0, From: 0, To: 1, Points: []Point{{X: 75, Y: 0}, {X: 75, Y: 100}}},
+			{ID: 1, Points: []Point{{X: 200, Y: 50}, {X: 300, Y: 50}}},
+		},
+	}
+	diagram := DiagramGraph{
+		DiagramID: "diagram-hit",
+		Scene:     scene,
+		NodeSources: []DiagramNodeSource{
+			{SymbolID: "node-symbol-a", TableID: "table-a"},
+			{SymbolID: "node-symbol-b", TableID: "table-b"},
+		},
+		EdgeSources: []DiagramEdgeSource{
+			{SymbolID: "edge-symbol-behind", ReferenceID: "reference-behind"},
+			{SymbolID: "edge-symbol-visible", ReferenceID: "reference-visible"},
+		},
+	}
+	camera := NewCamera(Rect{Min: Point{X: 100, Y: 50}, Max: Point{X: 1100, Y: 850}})
+	camera.ZoomAt(Point{X: 0, Y: 0}, 2)
+	return diagram, NewSpatialIndex(scene), camera
+}
