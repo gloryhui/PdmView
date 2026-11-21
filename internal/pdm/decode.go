@@ -128,6 +128,18 @@ func Decode(r io.Reader) (*RawDocument, error) {
 }
 
 func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, error) {
+	return decodeWithSpans(r, maxBytes, maxDepth, nil)
+}
+
+type sourceSpan struct {
+	parent    *Element
+	start     int
+	bodyStart int
+	bodyEnd   int
+	hasMarkup bool
+}
+
+func decodeWithSpans(r io.Reader, maxBytes int64, maxDepth int, spans map[*Element]sourceSpan) (*RawDocument, error) {
 	if r == nil {
 		return nil, ErrReadFailure
 	}
@@ -152,8 +164,10 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 		Format: Format{XMLVersion: "1.0", Encoding: "UTF-8"},
 		ByID:   make(map[string]*Element),
 	}
+	var bomSize int64
 	if hadBOM {
 		doc.Format.Encoding = "UTF-8"
+		bomSize = 3
 	}
 
 	type openElement struct {
@@ -208,6 +222,12 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 				Line: line,
 				Path: elementPath(parent, value.Name),
 			}
+			if spans != nil {
+				spans[element] = sourceSpan{
+					parent: parent, start: int(offset + bomSize),
+					bodyStart: int(decoder.InputOffset() + bomSize),
+				}
+			}
 			if parent == nil {
 				doc.Root = element
 			} else {
@@ -229,6 +249,11 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 			last := len(stack) - 1
 			frame := &stack[last]
 			frame.node.Text = string(frame.text)
+			if spans != nil {
+				span := spans[frame.node]
+				span.bodyEnd = int(offset + bomSize)
+				spans[frame.node] = span
+			}
 			*frame = openElement{}
 			stack = stack[:last]
 
@@ -241,13 +266,24 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 			}
 
 		case xml.Comment:
-			// Comments are not part of the text or object model.
+			if spans != nil && len(stack) != 0 {
+				element := stack[len(stack)-1].node
+				span := spans[element]
+				span.hasMarkup = true
+				spans[element] = span
+			}
 
 		case xml.ProcInst:
 			if value.Target == "xml" && offset != 0 {
 				return nil, malformedError(line)
 			}
 			if len(stack) != 0 {
+				if spans != nil {
+					element := stack[len(stack)-1].node
+					span := spans[element]
+					span.hasMarkup = true
+					spans[element] = span
+				}
 				continue
 			}
 			switch value.Target {
