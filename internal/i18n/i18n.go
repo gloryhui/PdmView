@@ -27,7 +27,9 @@ const (
 	KeyDetailsHeading    Key = "workspace.details"
 	KeyOpenPDM           Key = "workspace.open_pdm"
 	KeyDiagramsHeading   Key = "workspace.diagrams"
+	KeyModelRoot         Key = "workspace.model_root"
 	KeyDiagramFallback   Key = "workspace.diagram_fallback"
+	KeyNotOnDiagram      Key = "workspace.not_on_diagram"
 	KeyLoadingPDM        Key = "workspace.loading_pdm"
 	KeyPreparingDiagram  Key = "workspace.preparing_diagram"
 	KeyLoadPDMFailed     Key = "workspace.load_pdm_failed"
@@ -66,7 +68,9 @@ var resources = map[Locale]map[Key]message{
 		KeyDetailsHeading:    {text: "Details"},
 		KeyOpenPDM:           {text: "Open PDM…"},
 		KeyDiagramsHeading:   {text: "Diagrams"},
+		KeyModelRoot:         {text: "Model"},
 		KeyDiagramFallback:   {text: "Diagram {index}", params: []string{"index"}},
+		KeyNotOnDiagram:      {text: "Not on a diagram"},
 		KeyLoadingPDM:        {text: "Loading PDM…"},
 		KeyPreparingDiagram:  {text: "Preparing diagram…"},
 		KeyLoadPDMFailed:     {text: "Could not open PDM file"},
@@ -98,7 +102,9 @@ var resources = map[Locale]map[Key]message{
 		KeyDetailsHeading:    {text: "详情"},
 		KeyOpenPDM:           {text: "打开 PDM…"},
 		KeyDiagramsHeading:   {text: "画板"},
+		KeyModelRoot:         {text: "模型"},
 		KeyDiagramFallback:   {text: "画板 {index}", params: []string{"index"}},
+		KeyNotOnDiagram:      {text: "不在任何画板上"},
 		KeyLoadingPDM:        {text: "正在加载 PDM…"},
 		KeyPreparingDiagram:  {text: "正在准备画板…"},
 		KeyLoadPDMFailed:     {text: "无法打开 PDM 文件"},

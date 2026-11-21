@@ -13,6 +13,7 @@ type DiagramBoard struct {
 	Model    *pdm.Model
 	Diagram  *pdm.Diagram
 	Fallback bool
+	TableIDs []string
 }
 
 // PreparedBoard is the graph, BVH, and renderer for one active board.
@@ -28,6 +29,7 @@ type BoardSet struct {
 	Boards   []DiagramBoard
 	Default  int
 	Prepared PreparedBoard
+	Catalog  *modelCatalog
 }
 
 // BuildBoardSet enumerates diagram descriptors and prepares only the selected
@@ -47,6 +49,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 			Boards:   []DiagramBoard{board},
 			Default:  0,
 			Prepared: PrepareBoard(board),
+			Catalog:  buildModelCatalog(model, ""),
 		}
 	}
 
@@ -63,6 +66,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 		}
 	}
 	set.Prepared = PrepareBoard(set.Boards[set.Default])
+	set.Catalog = buildModelCatalog(model, "")
 	return set
 }
 
@@ -81,7 +85,71 @@ func makeDiagramBoard(model *pdm.Model, diagram *pdm.Diagram, fallback bool) Dia
 		board.ID = diagram.ID
 		board.Name = firstNonEmpty(diagram.Name, diagram.Code, diagram.ID)
 	}
+	board.TableIDs = boardTableIDs(board)
 	return board
+}
+
+func boardTableIDs(board DiagramBoard) []string {
+	if board.Model == nil {
+		return nil
+	}
+	if board.Diagram == nil {
+		var tables []string
+		collectModelTableIDs(board.Model.Contents, &tables)
+		return tables
+	}
+	if len(board.Diagram.TableSymbols) > 0 {
+		var tables []string
+		seen := make(map[string]bool)
+		for _, symbol := range board.Diagram.TableSymbols {
+			if symbol.TableID != "" && !seen[symbol.TableID] {
+				seen[symbol.TableID] = true
+				tables = append(tables, symbol.TableID)
+			}
+		}
+		return tables
+	}
+	contents, ok := modelContentsByOwner(*board.Model, board.Diagram.OwnerID)
+	if !ok {
+		return nil
+	}
+	tables := make([]string, 0, len(contents.Tables))
+	for _, table := range contents.Tables {
+		if table.ID != "" {
+			tables = append(tables, table.ID)
+		}
+	}
+	return tables
+}
+
+func collectModelTableIDs(contents pdm.Contents, tables *[]string) {
+	for _, table := range contents.Tables {
+		if table.ID != "" {
+			*tables = append(*tables, table.ID)
+		}
+	}
+	for _, pkg := range contents.Packages {
+		collectModelTableIDs(pkg.Contents, tables)
+	}
+}
+
+func modelContentsByOwner(model pdm.Model, ownerID string) (pdm.Contents, bool) {
+	if model.ID == ownerID {
+		return model.Contents, true
+	}
+	return packageContentsByOwner(model.Contents.Packages, ownerID)
+}
+
+func packageContentsByOwner(packages []pdm.Package, ownerID string) (pdm.Contents, bool) {
+	for _, pkg := range packages {
+		if pkg.ID == ownerID {
+			return pkg.Contents, true
+		}
+		if found, ok := packageContentsByOwner(pkg.Contents.Packages, ownerID); ok {
+			return found, true
+		}
+	}
+	return pdm.Contents{}, false
 }
 
 // PrepareBoard builds one descriptor off the UI thread.

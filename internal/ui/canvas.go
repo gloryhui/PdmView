@@ -21,20 +21,21 @@ const (
 )
 
 type canvasView struct {
-	scene           graph.Scene
-	index           *graph.SpatialIndex
-	diagram         graph.DiagramGraph
-	camera          *graph.Camera
-	renderer        *renderer.Canvas
-	selection       graph.Hit
-	hovered         graph.Hit
-	viewport        graph.Rect
-	pointerDown     bool
-	dragging        bool
-	lastPointer     graph.Point
-	demo            bool
-	initialFit      bool
-	prepareAfterFit bool
+	scene            graph.Scene
+	index            *graph.SpatialIndex
+	diagram          graph.DiagramGraph
+	camera           *graph.Camera
+	renderer         *renderer.Canvas
+	selection        graph.Hit
+	hovered          graph.Hit
+	viewport         graph.Rect
+	pointerDown      bool
+	dragging         bool
+	lastPointer      graph.Point
+	demo             bool
+	initialFit       bool
+	prepareAfterFit  bool
+	onTableSelection func(string)
 }
 
 func newCanvasView() *canvasView {
@@ -135,6 +136,34 @@ func (view *canvasView) selectedNode() *graph.Node {
 	return nil
 }
 
+func (view *canvasView) tableNodeOffset(tableID string) (int, bool) {
+	if tableID == "" || view.demo {
+		return 0, false
+	}
+	for offset := range view.scene.Nodes {
+		source, ok := view.diagram.NodeSource(offset)
+		if ok && source.TableID == tableID {
+			return offset, true
+		}
+	}
+	return 0, false
+}
+
+func (view *canvasView) selectTableNode(offset int) {
+	if offset < 0 || offset >= len(view.scene.Nodes) {
+		return
+	}
+	view.selection = graph.Hit{Kind: graph.HitNode, Index: offset}
+	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
+	view.camera.FitBounds(view.scene.Nodes[offset].Bounds, canvasPadding)
+	view.prepareVisible()
+}
+
+func (view *canvasView) clearSelection() {
+	view.selection = graph.Hit{Kind: graph.HitNone, Index: -1}
+	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
+}
+
 func (view *canvasView) zoomCentered(factor float64) {
 	view.camera.ZoomAt(graph.Point{X: view.viewport.Width() / 2, Y: view.viewport.Height() / 2}, factor)
 	view.prepareVisible()
@@ -157,12 +186,14 @@ func (view *canvasView) showAll() {
 
 func (view *canvasView) resetView() {
 	view.camera.FitBounds(view.scene.Bounds, canvasPadding)
-	view.selection = graph.Hit{Kind: graph.HitNone, Index: -1}
-	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
+	view.clearSelection()
 	view.pointerDown = false
 	view.dragging = false
 	view.lastPointer = graph.Point{}
 	view.prepareVisible()
+	if view.onTableSelection != nil {
+		view.onTableSelection("")
+	}
 }
 
 func (view *canvasView) prepareVisible() {
@@ -199,6 +230,7 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 			view.selection = view.hitTest(pointer)
 			view.hovered = view.selection
 			view.prepareVisible()
+			view.reportTableSelection()
 		}
 		view.pointerDown, view.dragging = false, false
 		if wasDragging {
@@ -221,6 +253,19 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		return false
 	}
 	return true
+}
+
+func (view *canvasView) reportTableSelection() {
+	if view.onTableSelection == nil {
+		return
+	}
+	tableID := ""
+	if view.selection.Kind == graph.HitNode && !view.demo {
+		if source, ok := view.diagram.NodeSource(view.selection.Index); ok {
+			tableID = source.TableID
+		}
+	}
+	view.onTableSelection(tableID)
 }
 
 func (view *canvasView) hitTest(pointer graph.Point) graph.Hit {

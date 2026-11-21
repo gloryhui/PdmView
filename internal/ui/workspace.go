@@ -13,12 +13,13 @@ const (
 	RootKey            = "pdmview.app.root"
 	StatusKey          = "pdmview.app.status"
 	CanvasKey          = "pdmview.workspace.canvas"
+	ModelTreeKey       = "pdmview.workspace.model-tree"
+	DiagramListKey     = "pdmview.workspace.diagram-list"
 	SelectedNodeKey    = "pdmview.workspace.canvas-selection"
 	OpenPDMKey         = "pdmview.workspace.open-pdm"
 	LoadStatusKey      = "pdmview.workspace.load-status"
 	NavigationSplitKey = "pdmview.workspace.navigation-split"
 	DetailsSplitKey    = "pdmview.workspace.details-split"
-	NavigationBodyKey  = "pdmview.workspace.navigation-body"
 	DetailsBodyKey     = "pdmview.workspace.details-body"
 	navigationMinWidth = 200
 	navigationMaxWidth = 360
@@ -47,18 +48,37 @@ type Workspace struct {
 	activeFallback    bool
 	activeAutoLayout  bool
 	pendingBoard      int
+	catalog           *modelCatalog
+	outline           ui.OutlineState[string]
+	navChosen         ui.Selection[string]
+	navSelected       int
+	selectedNavKey    string
+	rowClickedKey     string
+	openBefore        map[string]struct{}
+	selectedTableID   string
+	selectedTableName string
+	unplacedTable     bool
+	requestedTableID  string
+	pendingTableID    string
+	pendingTableToken uint64
 	openHandler       func()
 	boardSelector     func(int)
 	onChanged         func()
 }
 
 func NewWorkspace() *Workspace {
-	return &Workspace{
+	workspace := &Workspace{
 		NavigationPercent: 25,
 		CanvasPercent:     60,
 		canvas:            newCanvasView(),
 		pendingBoard:      -1,
+		navSelected:       -1,
+		openBefore:        make(map[string]struct{}),
 	}
+	workspace.outline.List.Selected = &workspace.navSelected
+	workspace.outline.List.Selection = &workspace.navChosen
+	workspace.canvas.onTableSelection = workspace.syncCanvasTableSelection
+	return workspace
 }
 
 // SetOpenHandler installs the native local-file action shown by Open PDM.
@@ -79,7 +99,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 // BeginOpen starts a load and returns its stale-result token.
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
-	w.boardToken++
+	w.cancelPendingSwitch()
 	w.loading = true
 	w.switching = false
 	w.loadFailed = false
@@ -106,6 +126,20 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.activeFallback = set.Boards[set.Default].Fallback
 	w.activeAutoLayout = set.Prepared.Graph.AutoLayout
 	w.pendingBoard = -1
+	w.catalog = set.Catalog
+	w.outline = ui.OutlineState[string]{}
+	w.outline.Open.Add(ModelRootKey)
+	w.outline.List.Selected = &w.navSelected
+	w.outline.List.Selection = &w.navChosen
+	w.navChosen.Clear()
+	w.navSelected = -1
+	w.selectedNavKey = ""
+	w.selectedTableID = ""
+	w.selectedTableName = ""
+	w.unplacedTable = false
+	w.requestedTableID = ""
+	w.pendingTableID = ""
+	w.pendingTableToken = 0
 	w.canvas.activatePrepared(set.Prepared)
 	w.notifyChanged()
 	return true
@@ -141,13 +175,16 @@ func (w *Workspace) ActivateBoard(index int) {
 	}
 	if index == w.activeBoard {
 		if w.switching {
-			w.boardToken++
-			w.switching = false
-			w.pendingBoard = -1
+			if w.pendingTableID != "" {
+				w.clearTableSelection()
+			}
+			w.cancelPendingSwitch()
 			w.notifyChanged()
 		}
 		return
 	}
+	w.cancelPendingSwitch()
+	w.clearTableSelection()
 	if w.boardSelector != nil {
 		w.boardSelector(index)
 	}
@@ -169,6 +206,13 @@ func (w *Workspace) BeginBoardSwitch(index int) (uint64, bool) {
 	w.boardToken++
 	w.switching = true
 	w.pendingBoard = index
+	w.pendingTableID = ""
+	w.pendingTableToken = 0
+	if w.requestedTableID != "" {
+		w.pendingTableID = w.requestedTableID
+		w.pendingTableToken = w.boardToken
+	}
+	w.requestedTableID = ""
 	w.notifyChanged()
 	return w.boardToken, true
 }
@@ -185,7 +229,22 @@ func (w *Workspace) PublishPreparedBoard(token uint64, prepared PreparedBoard) b
 	w.activeAutoLayout = prepared.Graph.AutoLayout
 	w.switching = false
 	w.pendingBoard = -1
+	locateTableID := ""
+	if w.pendingTableToken == token {
+		locateTableID = w.pendingTableID
+	}
+	w.pendingTableID = ""
+	w.pendingTableToken = 0
 	w.canvas.activatePrepared(prepared)
+	if locateTableID != "" {
+		if offset, ok := w.canvas.tableNodeOffset(locateTableID); ok {
+			w.canvas.selectTableNode(offset)
+			w.unplacedTable = false
+		} else {
+			w.canvas.clearSelection()
+			w.unplacedTable = true
+		}
+	}
 	w.notifyChanged()
 	return true
 }
@@ -199,6 +258,222 @@ func (w *Workspace) BoardCount() int {
 		return 1
 	}
 	return len(w.boards)
+}
+
+// LocateTable selects tableID in the current board or the first source board
+// whose actual prepared graph contains it. Cross-board navigation uses the
+// existing tokenized switch path.
+func (w *Workspace) LocateTable(tableID string) bool {
+	if tableID == "" || !w.hasModel {
+		return false
+	}
+	w.cancelPendingSwitch()
+	w.selectedTableID = tableID
+	w.selectedTableName = tableID
+	if w.catalog != nil {
+		w.selectedTableName = w.catalog.tableName(tableID)
+	}
+	w.unplacedTable = false
+	w.revealTable(tableID)
+
+	if offset, ok := w.canvas.tableNodeOffset(tableID); ok {
+		w.canvas.selectTableNode(offset)
+		w.notifyChanged()
+		return true
+	}
+	for index, board := range w.boards {
+		if index == w.activeBoard || !containsTableID(board.TableIDs, tableID) {
+			continue
+		}
+		w.canvas.clearSelection()
+		w.requestedTableID = tableID
+		if w.boardSelector != nil {
+			w.boardSelector(index)
+			w.requestedTableID = ""
+			return true
+		}
+		token, ok := w.BeginBoardSwitch(index)
+		w.requestedTableID = ""
+		if !ok {
+			return false
+		}
+		w.PublishPreparedBoard(token, PrepareBoard(board))
+		return true
+	}
+	w.canvas.clearSelection()
+	w.unplacedTable = true
+	w.notifyChanged()
+	return false
+}
+
+func (w *Workspace) syncCanvasTableSelection(tableID string) {
+	w.cancelPendingSwitch()
+	if tableID == "" {
+		w.clearTableSelection()
+		w.notifyChanged()
+		return
+	}
+	w.selectedTableID = tableID
+	w.selectedTableName = tableID
+	if w.catalog != nil {
+		w.selectedTableName = w.catalog.tableName(tableID)
+	}
+	w.unplacedTable = false
+	w.revealTable(tableID)
+	w.notifyChanged()
+}
+
+func (w *Workspace) revealTable(tableID string) {
+	if w.catalog == nil {
+		return
+	}
+	key := TableNavKey(tableID)
+	if _, ok := w.catalog.nodes[key]; !ok {
+		return
+	}
+	for parent := w.catalog.parent[key]; parent != "" && parent != ModelRootKey; parent = w.catalog.parent[parent] {
+		w.outline.Open.Add(parent)
+	}
+	w.navChosen.Clear()
+	w.navChosen.Add(key)
+	w.selectedNavKey = key
+}
+
+func (w *Workspace) clearTableSelection() {
+	w.selectedTableID = ""
+	w.selectedTableName = ""
+	w.unplacedTable = false
+	w.navSelected = -1
+	w.selectedNavKey = ""
+	w.navChosen.Clear()
+}
+
+func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
+	if w.outline.List.Selection == nil {
+		return
+	}
+	key := ""
+	extra := false
+	for chosen := range w.navChosen.All() {
+		if key == "" {
+			key = chosen
+		} else {
+			extra = true
+		}
+	}
+	if extra {
+		if w.navSelected >= 0 && w.navSelected < w.outline.Rows() {
+			key = w.outline.Item(w.navSelected)
+		}
+		w.navChosen.Clear()
+		if key != "" {
+			w.navChosen.Add(key)
+		}
+	}
+	clicked := w.rowClickedKey
+	w.rowClickedKey = ""
+	if clicked != "" {
+		key = clicked
+	} else if w.selectedNavKey != "" && !w.navChosen.Has(w.selectedNavKey) &&
+		openChanged && key != "" && w.navIsAncestor(key, w.selectedNavKey) {
+		w.navChosen.Clear()
+		w.navChosen.Add(w.selectedNavKey)
+		return
+	}
+	if key == w.selectedNavKey {
+		return
+	}
+	if key == "" {
+		w.selectedNavKey = ""
+		w.cancelPendingSwitch()
+		w.canvas.clearSelection()
+		w.selectedTableID = ""
+		w.selectedTableName = ""
+		w.unplacedTable = false
+		w.notifyChanged()
+		return
+	}
+	if w.catalog == nil {
+		return
+	}
+	w.selectedNavKey = key
+	w.navChosen.Clear()
+	w.navChosen.Add(key)
+	node, ok := w.catalog.nodes[key]
+	if !ok {
+		return
+	}
+	if node.tableID != "" {
+		w.LocateTable(node.tableID)
+		return
+	}
+	w.cancelPendingSwitch()
+	w.canvas.clearSelection()
+	w.selectedTableID = ""
+	w.selectedTableName = ""
+	w.unplacedTable = false
+	w.notifyChanged()
+}
+
+func (w *Workspace) captureOpen() {
+	clear(w.openBefore)
+	for key := range w.outline.Open.All() {
+		w.openBefore[key] = struct{}{}
+	}
+}
+
+func (w *Workspace) openChanged() bool {
+	previous := len(w.openBefore)
+	count := 0
+	for key := range w.outline.Open.All() {
+		count++
+		delete(w.openBefore, key)
+	}
+	return count != previous || len(w.openBefore) != 0
+}
+
+func (w *Workspace) navIsAncestor(parent, child string) bool {
+	if w.catalog == nil {
+		return false
+	}
+	for key := w.catalog.parent[child]; key != ""; key = w.catalog.parent[key] {
+		if key == parent {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Workspace) cancelPendingSwitch() {
+	w.boardToken++
+	w.switching = false
+	w.pendingBoard = -1
+	w.pendingTableID = ""
+	w.pendingTableToken = 0
+	w.requestedTableID = ""
+}
+
+func (w *Workspace) finishPendingOutlineSelection() {
+	key := w.selectedNavKey
+	if key == "" {
+		w.navSelected = -1
+		return
+	}
+	for offset := 0; offset < w.outline.Rows(); offset++ {
+		if w.outline.Item(offset) == key {
+			w.navSelected = offset
+			return
+		}
+	}
+}
+
+func containsTableID(tables []string, tableID string) bool {
+	for _, id := range tables {
+		if id == tableID {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Workspace) notifyChanged() {
@@ -246,7 +521,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 		ui.Column(c.Key(RootKey)).Fill().Background(t.Background).Children(func() {
 			ui.SplitPercent(c.Key(NavigationSplitKey), &workspace.NavigationPercent,
 				func() {
-					sidePane(c, state, i18n.KeyNavigationHeading, t, lang, NavigationBodyKey, navigationMinWidth, navigationMaxWidth, func() {
+					sidePane(c, state, i18n.KeyNavigationHeading, t, lang, navigationMinWidth, navigationMaxWidth, func() {
 						workspace.diagramNavigation(c, state, t, lang)
 					})
 				},
@@ -254,11 +529,12 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 					ui.SplitPercent(c.Key(DetailsSplitKey), &workspace.CanvasPercent,
 						func() { workspace.canvas.view(c, state, t, lang) },
 						func() {
-							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, DetailsBodyKey, detailsMinWidth, detailsMaxWidth, func() {
-								if node := workspace.canvas.selectedNode(); node != nil {
-									ui.Text(c, node.Name).Key(SelectedNodeKey).
-										FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
-								}
+							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, detailsMinWidth, detailsMaxWidth, func() {
+								ui.Scroll(c.Key(DetailsBodyKey)).Grow(1).FillWidth().Children(func() {
+									ui.Column(c).FillWidth().Gap(6).Children(func() {
+										workspace.selectedDetails(c, state, t, lang)
+									})
+								})
 							})
 						},
 					).Fill()
@@ -274,32 +550,66 @@ func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.The
 	ui.Button(c, state.Text(i18n.KeyOpenPDM, nil)).Key(OpenPDMKey).
 		FillWidth().Disabled(w.loading).OnClick(w.openHandler)
 	paneHeading(c, state.Text(i18n.KeyDiagramsHeading, nil), t, lang)
-	ui.Column(c).FillWidth().Gap(4).Role(ui.RoleTabList).Children(func() {
-		for index := 0; index < w.BoardCount(); index++ {
-			label := state.Text(i18n.KeySampleDiagram, nil)
-			if w.hasModel {
-				board := w.boards[index]
-				label = board.Name
-				if label == "" {
-					label = state.Text(i18n.KeyDiagramFallback, map[string]string{
-						"index": fmt.Sprintf("%d", index),
-					})
+	ui.Scroll(c.Key(DiagramListKey)).FillWidth().Height(96).KeepScrollbars(true).Children(func() {
+		ui.Column(c).Role(ui.RoleTabList).Gap(4).Children(func() {
+			for index := 0; index < w.BoardCount(); index++ {
+				label := state.Text(i18n.KeySampleDiagram, nil)
+				if w.hasModel {
+					board := w.boards[index]
+					label = board.Name
+					if label == "" {
+						label = state.Text(i18n.KeyDiagramFallback, map[string]string{
+							"index": fmt.Sprintf("%d", index),
+						})
+					}
+				}
+				index := index
+				button := ui.Button(c, label).Key(DiagramButtonKey(index)).
+					FillWidth().Role(ui.RoleTab).
+					AccessSelected(index == w.activeBoard).
+					OnClick(func() { w.ActivateBoard(index) })
+				if index == w.activeBoard {
+					button.Background(t.Accent).TextColor(t.AccentText).Bold()
 				}
 			}
-			index := index
-			button := ui.Button(c, label).Key(DiagramButtonKey(index)).
-				FillWidth().Role(ui.RoleTab).
-				AccessSelected(index == w.activeBoard).
-				OnClick(func() { w.ActivateBoard(index) })
-			if index == w.activeBoard {
-				button.Background(t.Accent).TextColor(t.AccentText).Bold()
-			}
-		}
+		})
 	})
+	if w.catalog != nil {
+		w.captureOpen()
+		ui.Outline(c.Key(ModelTreeKey), &w.outline, []string{ModelRootKey}, w.catalog.children,
+			func(key string) {
+				node := w.catalog.nodes[key]
+				label := node.label
+				if key == ModelRootKey && label == "" {
+					label = state.Text(i18n.KeyModelRoot, nil)
+				}
+				if ui.Text(c, label).SingleLine().Ellipsis("…").Lang(lang).RowClicked() {
+					w.rowClickedKey = key
+				}
+			}).Grow(1).FillWidth()
+		w.reconcileOutlineSelection(w.openChanged())
+		w.finishPendingOutlineSelection()
+	}
 	if status := w.statusText(state); status != "" {
 		ui.Text(c, status).Key(LoadStatusKey).
 			FillWidth().Wrap().MaxLines(3).Ellipsis("…").
 			FontSize(11).TextColor(t.TextMuted).Lang(lang)
+	}
+}
+
+func (w *Workspace) selectedDetails(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
+	if w.selectedTableID != "" {
+		ui.Text(c, w.selectedTableName).Key(SelectedNodeKey).
+			FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
+		if w.unplacedTable {
+			ui.Text(c, state.Text(i18n.KeyNotOnDiagram, nil)).
+				FillWidth().Wrap().FontSize(11).TextColor(t.TextMuted).Lang(lang)
+		}
+		return
+	}
+	if node := w.canvas.selectedNode(); node != nil {
+		ui.Text(c, node.Name).Key(SelectedNodeKey).
+			FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
 	}
 }
 
@@ -325,16 +635,14 @@ func sidePane(
 	state *app.State,
 	key i18n.Key,
 	t *ui.Theme,
-	lang, bodyKey string,
+	lang string,
 	minWidth, maxWidth float32,
 	content func(),
 ) {
 	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).
 		MinWidth(minWidth).MaxWidth(maxWidth).Clip().Children(func() {
 		paneHeading(c, state.Text(key, nil), t, lang)
-		ui.Scroll(c.Key(bodyKey)).Grow(1).FillWidth().Children(func() {
-			ui.Column(c).FillWidth().Gap(8).Children(content)
-		})
+		content()
 	})
 }
 
