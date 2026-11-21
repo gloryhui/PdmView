@@ -29,6 +29,7 @@
 7. 一键复制单表 MySQL CREATE TABLE SQL。
 8. 生成全库初始化 SQL：CREATE DATABASE、USE、所有表、字段注释、表注释、主键、索引、外键。
 9. SQL 预览、复制和导出 `.sql`。
+10. 简体中文与英文界面切换，从 Phase 1 建立文案资源、原生设置入口和本地语言偏好。默认语言和覆盖范围以 `PROJECT_BRIEF.md` 为准。
 
 明确不做：编辑 PDM、回写 PDM、数据库连接、执行 SQL、数据库同步、AI 助手、WebView、Electron、Tauri、网页前端。
 

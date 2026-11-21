@@ -11,7 +11,8 @@ Phase 0 已于 2026-11-21 通过 Gate 0。后续阶段等待下一轮指令。
 | P0-03 | 项目骨架与规范文件 | DONE | GPT | `go.mod`、`go.sum`、`Makefile`、README 和架构文档，`make fmt`、`make check`、`go mod verify` 通过 | 正式应用与领域包按路线图落地 |
 | P1-01 | Native UI 最小窗口 | TODO | DeepSeek | | |
 | P1-02 | Painter/Canvas API 验证 | TODO | DeepSeek | | |
-| P1-03 | 三栏布局原型 | TODO | DeepSeek | | |
+| P1-03 | 三栏布局原型 | TODO | DeepSeek | | 依赖 P1-04 |
+| P1-04 | 界面国际化基础与语言偏好 | TODO | DeepSeek | 设计见 `docs/DECISIONS.md` ADR-003 | 依赖 P1-01 |
 | P2-01 | 模拟图数据生成器 | TODO | DeepSeek | | |
 | P2-02 | 坐标变换与缩放平移 | TODO | DeepSeek | | |
 | P2-03 | HitTest 与空间索引 | TODO | DeepSeek | | |
