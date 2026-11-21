@@ -3,6 +3,7 @@ package renderer
 
 import (
 	"math"
+	"unicode/utf16"
 
 	"pdmview/internal/graph"
 
@@ -29,6 +30,7 @@ const (
 	selectedLineWidth = 2.5
 	fieldRowHeight    = 18.0
 	maxFieldRows      = 5
+	labelInset        = 8
 )
 
 // FrameStats describes one Draw call. CacheHits and CacheMisses count only
@@ -90,15 +92,18 @@ func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 	}
 	titleFont := ui.Font{Size: 11.5, Weight: 650}
 	fieldFont := ui.Font{Size: 9.5, Weight: 400}
+	titleEllipsis := ui.ShapeText("…", titleFont, 0)
+	fieldEllipsis := ui.ShapeText("…", fieldFont, 0)
 	for i, node := range scene.Nodes {
-		title := ui.ShapeText(node.Name, titleFont, 0)
+		labelWidth := float32(node.Bounds.Width()) - 2*labelInset
+		title := shapeLabel(node.Name, titleFont, labelWidth, titleEllipsis)
 		fields := node.Fields
 		if len(fields) > maxFieldRows {
 			fields = fields[:maxFieldRows]
 		}
 		layouts := make([]*ui.TextLayout, len(fields))
 		for j, field := range fields {
-			layouts[j] = ui.ShapeText(field.Name, fieldFont, 0)
+			layouts[j] = shapeLabel(field.Name, fieldFont, labelWidth, fieldEllipsis)
 		}
 		canvas.nodes[i] = nodeVisual{title: title, fields: layouts}
 	}
@@ -110,6 +115,32 @@ func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 		canvas.edges[i] = edgeVisual{points: points}
 	}
 	return canvas
+}
+
+func shapeLabel(text string, font ui.Font, width float32, ellipsis *ui.TextLayout) *ui.TextLayout {
+	layout := ui.ShapeText(text, font, 0)
+	if measured, _ := layout.Size(); measured <= width {
+		return layout
+	}
+	ellipsisWidth, _ := ellipsis.Size()
+	if ellipsisWidth > width {
+		return nil
+	}
+	units := utf16.Encode([]rune(text))
+	caret := layout.PositionAt(ui.Point{X: width - ellipsisWidth})
+	for caret.Index > 0 {
+		prefix := string(utf16.Decode(units[:caret.Index]))
+		short := ui.ShapeText(prefix+"…", font, 0)
+		if measured, _ := short.Size(); measured <= width {
+			return short
+		}
+		previous := layout.MoveCaret(caret, -1)
+		if previous.Index >= caret.Index {
+			break
+		}
+		caret = previous
+	}
+	return ellipsis
 }
 
 // Draw paints the visible scene inside area. camera's viewport is expected to
@@ -256,12 +287,10 @@ func (c *Canvas) drawNode(p *ui.Painter, offset int, selected graph.Hit, t *ui.T
 	if lod == Medium {
 		rows = min(rows, 2)
 	}
-	p.Clip(rect, 5, func() {
-		p.TextLayout(c.nodes[offset].title, rect.X+8, rect.Y+8, t.Text)
-		for i := 0; i < rows; i++ {
-			p.TextLayout(c.nodes[offset].fields[i], rect.X+8, rect.Y+28+float32(i)*fieldRowHeight, t.TextMuted)
-		}
-	})
+	p.TextLayout(c.nodes[offset].title, rect.X+labelInset, rect.Y+8, t.Text)
+	for i := 0; i < rows; i++ {
+		p.TextLayout(c.nodes[offset].fields[i], rect.X+labelInset, rect.Y+28+float32(i)*fieldRowHeight, t.TextMuted)
+	}
 	return rows
 }
 

@@ -1,0 +1,139 @@
+package main
+
+import (
+	"io"
+	"math"
+	"testing"
+	"time"
+
+	"pdmview/internal/graph"
+
+	"github.com/egoist/mygo/ui"
+)
+
+func TestParseConfigDefaultsAndValidation(t *testing.T) {
+	cfg, err := ParseConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := DefaultConfig()
+	if cfg != want {
+		t.Fatalf("defaults = %+v, want %+v", cfg, want)
+	}
+	if cfg.Seed != 20261121 || cfg.Nodes != 500 || cfg.Density != graph.DensityDense {
+		t.Fatalf("unexpected defaults: %+v", cfg)
+	}
+
+	cfg, err = ParseConfig([]string{
+		"-nodes", "50", "-density", "sparse", "-seed", "7",
+		"-width", "800", "-height", "600",
+		"-warmup", "500ms", "-sample", "3s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Nodes != 50 || cfg.Density != graph.DensitySparse || cfg.Seed != 7 ||
+		cfg.Width != 800 || cfg.Height != 600 ||
+		cfg.Warmup != 500*time.Millisecond || cfg.Sample != 3*time.Second {
+		t.Fatalf("parsed config = %+v", cfg)
+	}
+
+	for _, args := range [][]string{
+		{"-nodes", "100"},
+		{"-density", "mixed"},
+		{"-width", "100"},
+		{"-warmup", "-1s"},
+		{"-sample", "0s"},
+		{"unexpected"},
+	} {
+		if _, err := ParseConfig(args); err == nil {
+			t.Fatalf("ParseConfig(%v) succeeded", args)
+		}
+	}
+}
+
+func TestMotionCycleFitAndTargetScales(t *testing.T) {
+	scene, err := graph.GenerateDefault(50, graph.DensityDense)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewport := simpleRect(1200, 800)
+	camera := graph.NewCamera(viewport)
+	fitCamera := graph.NewCamera(viewport)
+	fitCamera.Fit(scene.Bounds, fitPaddingDIP)
+	fitScale := fitCamera.Scale()
+
+	if got := MotionAt(0, fitScale); !got.Fit || got.Scale != fitScale {
+		t.Fatalf("cycle start = %+v, want fit at %v", got, fitScale)
+	}
+	if got := MotionAt(5*time.Second, fitScale); !got.Fit {
+		t.Fatalf("cycle end = %+v, want fit", got)
+	}
+	if got := MotionAt(10*time.Second, fitScale); !got.Fit {
+		t.Fatalf("next cycle start = %+v, want fit", got)
+	}
+	if got := MotionAt(450*time.Millisecond, fitScale); got.Fit || got.Scale != 1.05 {
+		t.Fatalf("near key = %+v", got)
+	}
+	if got := MotionAt(1850*time.Millisecond, fitScale); got.Scale != 0.55 {
+		t.Fatalf("medium key = %+v", got)
+	}
+	if got := MotionAt(2550*time.Millisecond, fitScale); got.Scale != 0.22 {
+		t.Fatalf("far key = %+v", got)
+	}
+	if a, b := MotionAt(5450*time.Millisecond, fitScale), MotionAt(450*time.Millisecond, fitScale); a != b {
+		t.Fatalf("cycle replay drifted: %+v != %+v", a, b)
+	}
+
+	applyMotion(camera, scene, ui.Rect{W: 1200, H: 800}, 0)
+	if camera.Scale() != fitScale {
+		t.Fatalf("fit application scale = %v, want %v", camera.Scale(), fitScale)
+	}
+	applyMotion(camera, scene, ui.Rect{W: 1200, H: 800}, 450*time.Millisecond)
+	if !near(camera.Scale(), 1.05) {
+		t.Fatalf("near application scale = %v, want 1.05", camera.Scale())
+	}
+	applyMotion(camera, scene, ui.Rect{W: 1200, H: 800}, 1850*time.Millisecond)
+	if !near(camera.Scale(), 0.55) {
+		t.Fatalf("medium application scale = %v, want 0.55", camera.Scale())
+	}
+	applyMotion(camera, scene, ui.Rect{W: 1200, H: 800}, 2550*time.Millisecond)
+	if !near(camera.Scale(), 0.22) {
+		t.Fatalf("far application scale = %v, want 0.22", camera.Scale())
+	}
+}
+
+func TestPercentileDuration(t *testing.T) {
+	values := make([]time.Duration, 100)
+	for i := range values {
+		values[i] = time.Duration(i+1) * time.Millisecond
+	}
+	if got := percentileDuration(values, 0.95); got != 95*time.Millisecond {
+		t.Fatalf("p95 = %v, want 95ms", got)
+	}
+	if got := percentileDuration(values, 0.50); got != 50*time.Millisecond {
+		t.Fatalf("p50 = %v, want 50ms", got)
+	}
+	if got := percentileDuration(nil, 0.95); got != 0 {
+		t.Fatalf("empty percentile = %v", got)
+	}
+}
+
+func TestResultRequiresSufficientFrames(t *testing.T) {
+	scene, err := graph.GenerateDefault(50, graph.DensityDense)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bench := NewBench(DefaultConfig(), scene, graph.NewSpatialIndex(scene), io.Discard, true, true)
+	if _, err := bench.Result(); err == nil {
+		t.Fatal("empty benchmark returned a result without frame samples")
+	}
+}
+
+func simpleRect(w, h float64) graph.Rect {
+	return graph.Rect{Min: graph.Point{}, Max: graph.Point{X: w, Y: h}}
+}
+
+func near(a, b float64) bool {
+	return math.Abs(a-b) < 1e-9
+}

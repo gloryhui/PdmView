@@ -163,6 +163,22 @@ func TestRendererRetainsTextLayoutsAndSelection(t *testing.T) {
 	}
 }
 
+func TestCanvasLabelFitsCardBeforePainting(t *testing.T) {
+	font := ui.Font{Size: 11.5}
+	ellipsis := ui.ShapeText("…", font, 0)
+	ellipsisWidth, _ := ellipsis.Size()
+	const name = "客户订单明细与履约记录 / Customer Order Fulfillment Detail 001"
+	const cardWidth = 160
+	layout := shapeLabel(name, font, cardWidth, ellipsis)
+	width, _ := layout.Size()
+	if width <= ellipsisWidth || width > cardWidth {
+		t.Fatalf("fitted label width = %v, want between ellipsis and card width", width)
+	}
+	if got := shapeLabel(name, font, ellipsisWidth/2, ellipsis); got != nil {
+		t.Fatal("a card narrower than the ellipsis should omit its label")
+	}
+}
+
 func host(canvas *Canvas, camera *graph.Camera, selected graph.Hit, width, height int, stats *FrameStats) *ui.Tester {
 	return ui.NewTester(func(c *ui.Context) {
 		ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {

@@ -2,7 +2,7 @@
 
 状态说明：`TODO` / `IN_PROGRESS` / `BLOCKED` / `REVIEW` / `DONE`
 
-Phase 0 与 Phase 1 已于 2026-11-21 验收完成。Phase 2 按 P2-01 → P2-02 → P2-03 → P2-04 → P2-05 推进。
+Phase 0 与 Phase 1 已于 2026-11-21 验收完成。Phase 2 的画布实现已通过测试，P2-05 长测因 macOS 控制台锁屏而中断，性能门禁待签核。
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
@@ -16,8 +16,8 @@ Phase 0 与 Phase 1 已于 2026-11-21 验收完成。Phase 2 按 P2-01 → P2-02
 | P2-01 | 模拟图数据生成器 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/graph`、`go vet ./internal/graph`、格式检查通过。固定 seed `20261121`，覆盖 50/150/300/500 节点、双密度、双语长名、交叉关系和端口 | |
 | P2-02 | 坐标变换与缩放平移 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/graph`、`go vet ./internal/graph`、格式检查通过。覆盖非零视口原点、反向变换、DIP 平移、缩放限位锚点、适应与 500 节点显示全部 | |
 | P2-03 | HitTest 与空间索引 | DONE | DeepSeek / GPT | 单测、vet、格式检查通过。四种规模和每档 71 个查询区域与线性扫描一致。500 节点局部查询 7.90 → 1.47 µs，全图查询 5.68 → 0.60 µs | |
-| P2-04 | Viewport Culling 与 LOD | DONE | DeepSeek / GPT | `make check`、e2e 标签测试通过。覆盖穿越关系、视口外跳过字段、0/2/5 行及双阈值回滞。macOS Metal 2× 原生窗口验证命中、拖动、滚轮锚点、适应选中和全图 | 长文字按卡片宽度裁切 |
-| P2-05 | 性能基准与报告 | IN_PROGRESS | DeepSeek / GPT | 使用相同原生渲染器和固定平移缩放轨迹实测 | |
+| P2-04 | Viewport Culling 与 LOD | DONE | DeepSeek / GPT | `make check`、e2e 标签测试通过。覆盖穿越关系、视口外跳过字段、0/2/5 行及双阈值回滞。macOS Metal 2× 原生窗口验证命中、拖动、滚轮锚点、适应选中和全图 | 长文字按卡片可用宽度预排版省略号 |
+| P2-05 | 性能基准与报告 | BLOCKED | DeepSeek / GPT | [验收记录](../docs/CANVAS_BENCHMARK.md)。密集 50/150/300 节点 10 秒长测为 60.81/60.19/60.80 FPS。500 节点 2 秒短测为 60.48 FPS。`make check` 及原生基准构建通过 | macOS 控制台锁屏，待 500 节点密集图及四种规模稀疏图长测 |
 | P3-01 | 真实 PDM 样本盘点 | TODO | GPT | | |
 | P3-02 | XML 结构与版本研究 | TODO | GPT | | |
 | P3-03 | 原始 XML 表示 | TODO | DeepSeek | | |
