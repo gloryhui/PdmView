@@ -1,6 +1,6 @@
 # 任务状态
 
-状态说明：`TODO` / `IN_PROGRESS` / `BLOCKED` / `REVIEW` / `DONE`
+状态说明：`TODO` / `IN_PROGRESS` / `BLOCKED` / `REVIEW` / `DEFERRED`（按安排延期） / `DONE`
 
 Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 的解析器、诊断和 XML 对照已完成。Gate 1 的 PowerDesigner 应用内对照待验收。
 
@@ -15,6 +15,8 @@ Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验�
 Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../docs/PHASE_8_ACCEPTANCE.md#phase-8-集成验收)。
 
 Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出和 MySQL 验收](../docs/PHASE_9_ACCEPTANCE.md)通过，Gate 4 以隔离的 MySQL 8.0.46 执行结果验收。
+
+Phase 10 的 Windows 桌面验收按用户安排延期，由后续 Windows 环境自行执行。macOS 已通过核心界面与原生文件面板检查，Gate 5 仍有待验证项，见 [Phase 10 验收](../docs/PHASE_10_ACCEPTANCE.md)。
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
@@ -64,6 +66,6 @@ Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出�
 | P9-02 | SQL 复制与文件导出 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-02-sql-复制与文件导出)。双语剪贴板与两次保存的全库 1,445 字节一致，单表 944 字节一致，取消无文件，建议名只有一个 `.sql` 后缀 | Windows 原生保存随 P10 |
 | P9-03 | Golden Tests | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-03-golden-tests)。一份 1,317 字节全库脚本与三份单表 SQL，静态逐字节断言、循环、自引用、默认值、转义和索引测试通过 | |
 | P9-04 | MySQL 8.0 集成测试 | DONE | GPT | [实测](../docs/PHASE_9_ACCEPTANCE.md#p9-04-mysql-80-实际执行)。隔离的 MySQL 8.0.46 执行 Golden、原生导出和本地样本，13 表、149 字段、13 主键、68 注释与 XML 一致，另核对索引、默认值、循环外键与动作 | |
-| P10-01 | macOS 验收与打包 | IN_PROGRESS | DeepSeek / GPT | [验收记录](../docs/PHASE_10_ACCEPTANCE.md#p10-01-macos-apple-silicon)。arm64 `.app` 和 ZIP 构建、清单、最低系统版本与 ad hoc 签名校验通过 | 原生流程实测进行中。MyGo 启动加载系统 WebKit，首次 180 秒画布长测未完成 |
-| P10-02 | Windows x64 验收 | TODO | GPT | | |
-| P10-03 | 文档与发布检查 | TODO | GPT | | |
+| P10-01 | macOS 验收与打包 | BLOCKED | DeepSeek / GPT | `3ca9b67`，[验收记录](../docs/PHASE_10_ACCEPTANCE.md#p10-01-macos-apple-silicon)。arm64 打包、原生启动退出、中英文切换及偏好恢复、2× 显示、原生打开和保存通过。同源 e2e 系统剪贴板双语字节一致，恢复原内容 | MyGo 启动加载系统 WebKit，两次 180 秒画布测试均 watchdog 超时，物理触控板未测 |
+| P10-02 | Windows x64 验收 | DEFERRED | DeepSeek / GPT | `d3874d7`，[本地交叉构建](../docs/PHASE_10_ACCEPTANCE.md#p10-02-windows-x64)通过。已核对 PE32+ AMD64、GUI 子系统、WebView2 标记及归档完整性 | 按用户安排由 Windows 环境后续自行验收 |
+| P10-03 | 文档与发布检查 | DONE | DeepSeek / GPT | [发布记录](../RELEASE.md)与[检查结果](../docs/PHASE_10_ACCEPTANCE.md#p10-03-文档与发布检查)。文档链接、许可证原文、归档清单及 SHA-256 校验通过，最终 Mac 包启动及退出通过 | Gate 5 待 P10-01、P10-02 |

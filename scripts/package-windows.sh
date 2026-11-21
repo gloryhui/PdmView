@@ -20,7 +20,7 @@ esac
 printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
 	die "VERSION must be a numeric version in x.y.z form (got: $VERSION)"
 
-[ "$(uname -s)" = Darwin ] || die "macOS is required for ditto packaging"
+[ "$(uname -s)" = Darwin ] || die "macOS is required for ZIP/PE verification"
 command -v "$GO" >/dev/null 2>&1 || die "Go command not found: $GO"
 
 VERSION_DIR="$OUT/$VERSION"
@@ -104,29 +104,57 @@ do
 done
 printf 'WebView2 markers: none\n' >"$AUDIT/webview2.txt"
 
-/usr/bin/ditto -c -k --norsrc "$STAGE/$APP_NAME.exe" "$STAGE/$ZIP_NAME"
+NOTICES="$STAGE/ThirdPartyNotices"
+mkdir "$NOTICES"
+sh "$ROOT/scripts/package-notices.sh" windows "$NOTICES" "$STAGE/$APP_NAME.exe" "$AUDIT"
+
+EXE_SHA=$(shasum -a 256 "$STAGE/$APP_NAME.exe" | awk '{ print $1 }')
+(
+	cd "$STAGE"
+	/usr/bin/zip -X -q -r "$ZIP_NAME" "$APP_NAME.exe" ThirdPartyNotices
+)
 unzip -t "$STAGE/$ZIP_NAME" >"$AUDIT/unzip-test.txt" ||
 	die "zip integrity check failed"
 unzip -Z1 "$STAGE/$ZIP_NAME" >"$AUDIT/zip-entries.txt"
-[ "$(wc -l <"$AUDIT/zip-entries.txt" | tr -d ' ')" -eq 1 ] ||
-	die "zip must contain exactly one entry"
-[ "$(sed -n '1p' "$AUDIT/zip-entries.txt")" = "$APP_NAME.exe" ] ||
-	die "zip entry must be $APP_NAME.exe"
 zipinfo -l "$STAGE/$ZIP_NAME" |
 	awk '$1 ~ /^[-dl][rwxStTs-]{9}$/ { print substr($1,1,1) "\t" $NF }' >"$AUDIT/zip-types.txt"
-[ "$(wc -l <"$AUDIT/zip-types.txt" | tr -d ' ')" -eq 1 ] ||
-	die "zip metadata must contain exactly one entry"
-awk -F '\t' 'NR != 1 || $1 != "-" || $2 != "PdmView.exe" { exit 1 }' "$AUDIT/zip-types.txt" ||
-	die "zip entry is not a regular PdmView.exe"
+if awk -F '\t' '$1 != "-" && $1 != "d" { found = 1 } END { exit found ? 0 : 1 }' "$AUDIT/zip-types.txt"; then
+	die "zip contains symlinks or special files"
+fi
+{
+	printf '%s\n' "$APP_NAME.exe"
+	while IFS= read -r name; do
+		printf 'ThirdPartyNotices/%s\n' "$name"
+	done <"$AUDIT/notices-files.txt"
+} >"$AUDIT/zip-expected.txt"
+LC_ALL=C sort "$AUDIT/zip-expected.txt" >"$AUDIT/zip-expected.sorted.txt"
+awk -F '\t' '$1 == "-" { print $2 }' "$AUDIT/zip-types.txt" |
+	LC_ALL=C sort >"$AUDIT/zip-regular.txt"
+cmp -s "$AUDIT/zip-expected.sorted.txt" "$AUDIT/zip-regular.txt" ||
+	die "zip regular files do not match the exact whitelist"
+printf 'ThirdPartyNotices/\n' >"$AUDIT/zip-expected-dirs.txt"
+awk -F '\t' '$1 == "d" { print $2 }' "$AUDIT/zip-types.txt" |
+	LC_ALL=C sort >"$AUDIT/zip-dirs.txt"
+LC_ALL=C sort "$AUDIT/zip-expected-dirs.txt" >"$AUDIT/zip-expected-dirs.sorted.txt"
+cmp -s "$AUDIT/zip-expected-dirs.sorted.txt" "$AUDIT/zip-dirs.txt" ||
+	die "zip directory entries do not match the packaging manifest"
 
-EXE_SHA=$(shasum -a 256 "$STAGE/$APP_NAME.exe" | awk '{ print $1 }')
 ZIP_EXE_SHA=$(unzip -p "$STAGE/$ZIP_NAME" "$APP_NAME.exe" | shasum -a 256 | awk '{ print $1 }')
 [ "$EXE_SHA" = "$ZIP_EXE_SHA" ] || die "zip payload hash does not match the executable"
+while IFS= read -r name; do
+	zip_notice_sha=$(unzip -p "$STAGE/$ZIP_NAME" "ThirdPartyNotices/$name" |
+		shasum -a 256 | awk '{ print $1 }')
+	source_notice_sha=$(shasum -a 256 "$NOTICES/$name" | awk '{ print $1 }')
+	[ "$zip_notice_sha" = "$source_notice_sha" ] ||
+		die "zip notice hash does not match: $name"
+done <"$AUDIT/notices-files.txt"
 ZIP_SHA=$(shasum -a 256 "$STAGE/$ZIP_NAME" | awk '{ print $1 }')
+NOTICE_COUNT=$(wc -l <"$AUDIT/notices-files.txt" | tr -d ' ')
 {
 	printf 'file: %s\n' "$FILE_INFO"
 	printf 'exe-sha256: %s\n' "$EXE_SHA"
 	printf 'zip-sha256: %s\n' "$ZIP_SHA"
+	printf 'notices: %s files\n' "$NOTICE_COUNT"
 	printf 'webview2-markers: none\n'
 	printf 'vcs-info: none\n'
 	printf 'symbols: stripped\n'

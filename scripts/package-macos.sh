@@ -56,7 +56,9 @@ mkdir "$AUDIT"
 CONTENTS="$STAGE/$APP_NAME.app/Contents"
 MACOS="$CONTENTS/MacOS"
 BINARY="$MACOS/$APP_NAME"
-mkdir -p "$MACOS"
+RESOURCES="$CONTENTS/Resources"
+NOTICES="$RESOURCES/ThirdPartyNotices"
+mkdir -p "$MACOS" "$NOTICES"
 
 printf 'Building %s %s darwin/arm64\n' "$APP_NAME" "$VERSION"
 (
@@ -67,6 +69,8 @@ printf 'Building %s %s darwin/arm64\n' "$APP_NAME" "$VERSION"
 		-o "$BINARY" ./cmd/pdmview
 )
 chmod 755 "$BINARY"
+
+sh "$ROOT/scripts/package-notices.sh" macos "$NOTICES" "$BINARY" "$AUDIT"
 
 cat >"$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -117,11 +121,16 @@ plutil -lint "$CONTENTS/Info.plist" >/dev/null
 [ "$(plutil -extract CFBundleShortVersionString raw -o - "$CONTENTS/Info.plist")" = "$VERSION" ] ||
 	die "unexpected bundle version"
 
-cat >"$AUDIT/manifest.txt" <<'EOF'
+{
+	cat <<'EOF'
 Contents/Info.plist
 Contents/MacOS/PdmView
 Contents/PkgInfo
 EOF
+	while IFS= read -r name; do
+		printf 'Contents/Resources/ThirdPartyNotices/%s\n' "$name"
+	done <"$AUDIT/notices-files.txt"
+} >"$AUDIT/manifest.txt"
 (
 	cd "$STAGE/$APP_NAME.app"
 	find . -type f | sed 's#^\./##' | LC_ALL=C sort >"$AUDIT/actual.txt"
@@ -164,12 +173,17 @@ if awk -F '\t' '$1 != "-" && $1 != "d" { found = 1 } END { exit found ? 0 : 1 }'
 fi
 awk -F '\t' '$1 == "-" { print $2 }' "$AUDIT/zip-types.txt" |
 	LC_ALL=C sort >"$AUDIT/zip-regular.txt"
-cat >"$AUDIT/zip-expected.txt" <<'EOF'
+{
+	cat <<'EOF'
 PdmView.app/Contents/Info.plist
 PdmView.app/Contents/MacOS/PdmView
 PdmView.app/Contents/PkgInfo
 PdmView.app/Contents/_CodeSignature/CodeResources
 EOF
+	while IFS= read -r name; do
+		printf 'PdmView.app/Contents/Resources/ThirdPartyNotices/%s\n' "$name"
+	done <"$AUDIT/notices-files.txt"
+} >"$AUDIT/zip-expected.txt"
 LC_ALL=C sort "$AUDIT/zip-expected.txt" >"$AUDIT/zip-expected.sorted.txt"
 cmp -s "$AUDIT/zip-expected.sorted.txt" "$AUDIT/zip-regular.txt" ||
 	die "zip regular files do not match the exact whitelist"
@@ -177,6 +191,8 @@ cat >"$AUDIT/zip-expected-dirs.txt" <<'EOF'
 PdmView.app/
 PdmView.app/Contents/
 PdmView.app/Contents/MacOS/
+PdmView.app/Contents/Resources/
+PdmView.app/Contents/Resources/ThirdPartyNotices/
 PdmView.app/Contents/_CodeSignature/
 EOF
 awk -F '\t' '$1 == "d" { print $2 }' "$AUDIT/zip-types.txt" |

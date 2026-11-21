@@ -1,9 +1,12 @@
 # PdmView
 
-**项目目标：** Go + MyGo Native UI 的 PowerDesigner `.pdm` 只读查看器。  
-**首版功能：** 读取 PDM、还原原始画板布局、查看表及字段、复制完整表信息、复制单表 MySQL SQL、生成全库初始化 SQL（含表注释、字段注释、索引、主外键）。
+PdmView 是使用 Go 与 MyGo Native UI 的 PowerDesigner `.pdm` 只读查看器。
 
-首版还包含简体中文与英文界面切换。默认按系统语言选择，可从原生菜单切换并在重启后恢复选择。详见 [产品范围](PROJECT_BRIEF.md#首版界面语言)。
+- 查看原始画板、关系线、Package、表和字段。支持缩放、平移、搜索和定位。
+- 复制完整表信息或单表建表 SQL。预览、复制和导出 MySQL 8.0 全库初始化脚本。
+- 在「设置 → 语言」/「Settings → Language」切换简体中文和英文。首次启动使用系统首选界面语言，之后恢复已保存的选择。
+
+![PdmView 原生工作区，显示合成模型](docs/screenshots/workspace-zh.png)
 
 ## 开发与验证
 
@@ -22,20 +25,16 @@ CGO_ENABLED=0 go run ./cmd/pdmview /path/to/model.pdm  # 直接打开本地模�
 
 应用启动时展示模拟图。使用导航栏的「打开 PDM…」/「Open PDM…」选择本地模型，或在命令行直接传入文件路径。选择画板后可拖动画布或滚轮平移，用 Ctrl 加滚轮或触控板捏合按指针位置缩放。工具栏提供缩放、适应选中、显示全部和重置视图。
 
-通过原生菜单「设置 → 语言」/「Settings → Language」即时切换简体中文与英文，选择保存在本机。画板和视口的验收见 [Phase 6 验收记录](docs/PHASE_6_ACCEPTANCE.md)，语言和三栏布局的验收见 [Phase 1 验收](docs/PHASE_1_ACCEPTANCE.md)。
+画板、语言和系统服务的跨平台验收见 [Phase 10 验收](docs/PHASE_10_ACCEPTANCE.md)。
 
 真实样本放在 `.local/fixtures/`。本地日志、运行截图和二进制放在 `.out/`。
 
-本机 Phase 0 验收使用 macOS arm64 和 `CGO_ENABLED=0`。`make fmt`、`make check` 和 `go mod verify` 均通过。原生探针可以运行，Windows x64 已交叉构建。
+## 平台与兼容范围
 
-## 使用方法
-
-1. 将本压缩包解压到项目仓库根目录，或将其中内容复制到现有仓库。
-2. 准备 2～3 份真实 PDM 样本，放入本地测试目录。**不要将真实业务 PDM 提交到公开仓库。**
-3. 在 Codex 中选择项目目录，使用根目录的 `CODEX_START_PROMPT.md` 作为启动 Prompt。
-4. 主 Agent 使用 GPT-6.2-Sol-High；执行 Agent 使用 DeepSeek-V4.1-Flash-1017。
-5. 按 `tasks/00_ROADMAP.md` 顺序推进，不允许跳过 Phase 0 技术验证。
-6. 每个任务完成后更新 `tasks/TASK_STATUS.md`，记录提交、测试结果、风险和遗留问题。
+- macOS Apple Silicon 候选的最低系统版本为 13.0，桌面验收使用 macOS 15.8.1。Windows x64 的构建和桌面验收进度分别记录在 [发布记录](RELEASE.md)。
+- 输入为 UTF-8 XML `.pdm`。本地真实样本为 PowerDesigner `16.5.0.3982`，另对照 `12.5.0.2169`、`15.1.0.2850`、`16.5.0.3982` 的公开 XML 导出。P4-03 的 PowerDesigner 应用内坐标与路径对照待完成。具体结构和样本边界见 [PDM 格式验证](docs/PDM_FORMAT.md)。
+- SQL 以 MySQL 8.0 为目标，已在隔离的 MySQL 8.0.46 实测。未知类型或有冲突的类型参数会阻止生成。完整白名单和限制见 [类型映射](docs/MYSQL_TYPE_MAPPING.md)。
+- PdmView 以只读方式打开 PDM。导出的 SQL 由用户在目标数据库环境中执行。
 
 ## 文档索引
 
@@ -44,9 +43,11 @@ CGO_ENABLED=0 go run ./cmd/pdmview /path/to/model.pdm  # 直接打开本地模�
 - `ARCHITECTURE.md`：模块边界、数据流、关键设计约束。
 - `AGENT_WORKFLOW.md`：双模型分工、交接和冲突处理。
 - `QUALITY_GATES.md`：阶段门禁、测试及性能验收。
+- `DEVELOPMENT.md`：开发环境、构建入口和测试。
+- `RELEASE.md`：候选产物、校验和、签名及平台验收。
 - `tasks/00_ROADMAP.md`：阶段顺序与依赖。
 - `tasks/TASK_STATUS.md`：任务状态登记表。
-- `tasks/PHASE_0...PHASE_6.md`：逐项施工任务及验收标准。
+- `tasks/PHASE_*.md`：各阶段任务卡。
 - `templates/AGENT_HANDOFF.md`：执行 Agent 交接模板。
 - `templates/BUG_REPORT.md`：问题报告模板。
 - `templates/DECISION_RECORD.md`：技术决策记录模板。
