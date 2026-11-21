@@ -1,7 +1,24 @@
-# PdmView：Codex 施工任务包
+# PdmView
 
 **项目目标：** Go + MyGo Native UI 的 PowerDesigner `.pdm` 只读查看器。  
 **首版功能：** 读取 PDM、还原原始画板布局、查看表及字段、复制完整表信息、复制单表 MySQL SQL、生成全库初始化 SQL（含表注释、字段注释、索引、主外键）。
+
+## 开发与验证
+
+在本目录运行命令。项目要求 Go 1.27.3，已用 Go 1.27.4 和 MyGo `v0.10.0` 验证。默认准备 macOS Apple Silicon 开发环境。
+
+```sh
+make env    # 复查机器、构建工具和本地样本元信息
+make fmt    # 格式化 Go 源码
+make check  # 验证格式，运行 go test ./... 和 go vet ./...
+make probe  # 启动 Phase 0 独立原生探针
+```
+
+`cmd/mygo-probe/` 是技术验证入口，显示两张模拟表。正式应用的目录边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，验证步骤见 [MyGo API 验证](docs/MYGO_API_VERIFICATION.md)，任务进展见 [任务状态](tasks/TASK_STATUS.md)。
+
+真实样本放在 `.local/fixtures/`。本地日志、运行截图和二进制放在 `.out/`。
+
+本机 Phase 0 验收使用 macOS arm64 和 `CGO_ENABLED=0`。`make fmt`、`make check` 和 `go mod verify` 均通过。原生探针可以运行，Windows x64 已交叉构建。
 
 ## 使用方法
 
