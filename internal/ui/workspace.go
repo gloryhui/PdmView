@@ -78,6 +78,10 @@ type Workspace struct {
 	searchCancel         func()
 	searchSelected       int
 	searchList           ui.ListState
+	clipboardWriter      func(string) error
+	copyFeedback         copyFeedback
+	copyFeedbackTable    string
+	copyToken            uint64
 	onChanged            func()
 }
 
@@ -116,6 +120,7 @@ func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
 	w.cancelPendingSwitch()
 	w.resetSearch()
+	w.clearCopyFeedback()
 	w.loading = true
 	w.switching = false
 	w.loadFailed = false
@@ -146,6 +151,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.detailIndex = set.Details
 	w.searchIndex = set.Search
 	w.resetSearch()
+	w.clearCopyFeedback()
 	w.outline = ui.OutlineState[string]{}
 	w.outline.Open.Add(ModelRootKey)
 	w.outline.List.Selected = &w.navSelected
@@ -309,6 +315,7 @@ func (w *Workspace) locateTable(tableID string, smooth bool) bool {
 		return false
 	}
 	w.cancelPendingSwitch()
+	w.clearCopyFeedbackUnless(tableID)
 	w.selectedTableID = tableID
 	w.selectedTableName = tableID
 	if w.catalog != nil {
@@ -363,6 +370,7 @@ func (w *Workspace) syncCanvasTableSelection(tableID string) {
 		w.notifyChanged()
 		return
 	}
+	w.clearCopyFeedbackUnless(tableID)
 	w.selectedTableID = tableID
 	w.selectedTableName = tableID
 	if w.catalog != nil {
@@ -392,6 +400,7 @@ func (w *Workspace) revealTable(tableID string) {
 }
 
 func (w *Workspace) clearTableSelection() {
+	w.clearCopyFeedback()
 	w.selectedTableID = ""
 	w.selectedTableName = ""
 	w.searchSelected = -1
@@ -442,6 +451,7 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 		w.selectedNavKey = ""
 		w.cancelPendingSwitch()
 		w.canvas.clearSelection()
+		w.clearCopyFeedback()
 		w.selectedTableID = ""
 		w.selectedTableName = ""
 		w.searchSelected = -1
@@ -467,6 +477,7 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 	}
 	w.cancelPendingSwitch()
 	w.canvas.clearSelection()
+	w.clearCopyFeedback()
 	w.selectedTableID = ""
 	w.selectedTableName = ""
 	w.searchSelected = -1
@@ -603,13 +614,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 					ui.SplitPercent(c.Key(DetailsSplitKey), &workspace.CanvasPercent,
 						func() { workspace.canvas.view(c, state, t, lang) },
 						func() {
-							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, detailsMinWidth, detailsMaxWidth, func() {
-								ui.Scroll(c.Key(DetailsBodyKey)).TrackScroll(&workspace.detailsScroll).Grow(1).FillWidth().Children(func() {
-									ui.Column(c).FillWidth().Gap(6).Children(func() {
-										workspace.selectedDetails(c, state, t, lang)
-									})
-								})
-							})
+							detailsPane(c, state, workspace, t, lang)
 						},
 					).Fill()
 				},
@@ -763,8 +768,51 @@ func sidePane(
 	})
 }
 
-func paneHeading(c *ui.Context, text string, t *ui.Theme, lang string) {
-	ui.Text(c, text).FontSize(13).Bold().TextColor(t.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
+func detailsPane(
+	c *ui.Context,
+	state *app.State,
+	workspace *Workspace,
+	t *ui.Theme,
+	lang string,
+) {
+	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).
+		MinWidth(detailsMinWidth).MaxWidth(detailsMaxWidth).Clip().Children(func() {
+		ui.Column(c).FillWidth().Gap(4).Children(func() {
+			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+				paneHeading(c, state.Text(i18n.KeyDetailsHeading, nil), t, lang).Grow(1)
+				workspace.detailsCopyButton(c, state, lang)
+			})
+			if status, failed := workspace.copyFeedbackText(state); status != "" {
+				color, role := t.Success, ui.RoleStatus
+				if failed {
+					color, role = t.Danger, ui.RoleAlert
+				}
+				ui.Row(c).FillWidth().Justify(ui.End).Children(func() {
+					ui.Text(c, status).Key(CopyStatusKey).Wrap().
+						FontSize(11).TextColor(color).Lang(lang).Role(role)
+				})
+			}
+		})
+		ui.Scroll(c.Key(DetailsBodyKey)).TrackScroll(&workspace.detailsScroll).Grow(1).FillWidth().Children(func() {
+			ui.Column(c).FillWidth().Gap(6).Children(func() {
+				workspace.selectedDetails(c, state, t, lang)
+			})
+		})
+	})
+}
+
+func (w *Workspace) detailsCopyButton(c *ui.Context, state *app.State, lang string) {
+	if w.selectedTableID == "" || !w.hasTableDetail ||
+		w.tableDetail.ID != w.selectedTableID {
+		return
+	}
+	label := state.Text(i18n.KeyCopyTable, nil)
+	ui.Button(c, label).Key(CopyTableKey).Label(label).
+		Lang(lang).OnClick(w.copySelectedTable)
+}
+
+func paneHeading(c *ui.Context, text string, t *ui.Theme, lang string) ui.Element {
+	return ui.Text(c, text).FontSize(13).Bold().TextColor(t.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
 }
 
 func statusBar(c *ui.Context, state *app.State, t *ui.Theme, lang string) {

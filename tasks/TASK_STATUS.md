@@ -10,6 +10,8 @@ Phase 5 五项任务已于 2026-11-21 完成并通过 [图引擎验收](../docs/
 
 Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/PHASE_6_ACCEPTANCE.md)。P4-03 仍待 PowerDesigner 应用内对照。
 
+Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验收](../docs/PHASE_7_ACCEPTANCE.md#phase-7-集成验收)。Gate 3 的 SQL 一致性随 Phase 8 和 Phase 9 验收。
+
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
 | P0-01 | 仓库与环境勘察 | DONE | GPT | `23ea2fd`，`sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
@@ -48,7 +50,7 @@ Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/
 | P7-02 | 模型树与 Package | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-02-模型树与-package)。两级 Package、折叠保留选择、跨画板和本地样本 13 表逐项通过。定向测试、vet 与格式检查通过 | |
 | P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致，合成复合键与外键顺序、双语及独立滚动通过。定向测试、vet 与格式检查通过 | |
 | P7-04 | 搜索与定位 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-04-搜索与定位)。六种查询、同画板回中、跨画板及双语无结果通过。千表模型宽泛查询首屏构建 23 行，连续编辑至最新结果中位数 34.1 ms | |
-| P7-05 | 完整信息复制 | IN_PROGRESS | DeepSeek / GPT | | |
+| P7-05 | 完整信息复制 | DONE | DeepSeek / GPT | [剪贴板验收](../docs/PHASE_7_ACCEPTANCE.md#p7-05-完整信息复制)。详情滚动后仍可操作，双语 3,058 字节一致，原剪贴板恢复并逐项核对通过。注入失败、全量检查、e2e 标签测试和 macOS 构建通过 | 单表 SQL 随 Phase 8/9 验收 |
 | P8-01 | MySQL 类型映射 | TODO | GPT | | |
 | P8-02 | 单表 DDL | TODO | DeepSeek | | |
 | P8-03 | 索引/主键/约束 | TODO | DeepSeek | | |

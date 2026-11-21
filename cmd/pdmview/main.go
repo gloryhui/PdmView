@@ -11,6 +11,7 @@ import (
 	appui "pdmview/internal/ui"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -58,6 +59,9 @@ func showMainWindow() {
 	}
 	state := app.New(app.NewStore(path), systemTag)
 	workspace := appui.NewWorkspace()
+	workspace.SetClipboardWriter(func(text string) error {
+		return mygo.Clipboard.Write(transfer.TextData(text))
+	})
 
 	var win *mygo.Window
 	var refresh func()

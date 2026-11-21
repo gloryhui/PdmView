@@ -74,6 +74,9 @@ const (
 	KeyDetailYes         Key = "details.yes"
 	KeyDetailNo          Key = "details.no"
 	KeyDetailUnresolved  Key = "details.unresolved"
+	KeyCopyTable         Key = "copy.table"
+	KeyCopySucceeded     Key = "copy.succeeded"
+	KeyCopyFailed        Key = "copy.failed"
 )
 
 type message struct {
@@ -145,6 +148,9 @@ var resources = map[Locale]map[Key]message{
 		KeyDetailYes:         {text: "Yes"},
 		KeyDetailNo:          {text: "No"},
 		KeyDetailUnresolved:  {text: "unresolved"},
+		KeyCopyTable:         {text: "Copy table info"},
+		KeyCopySucceeded:     {text: "Copied"},
+		KeyCopyFailed:        {text: "Copy failed"},
 	},
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
@@ -209,6 +215,9 @@ var resources = map[Locale]map[Key]message{
 		KeyDetailYes:         {text: "是"},
 		KeyDetailNo:          {text: "否"},
 		KeyDetailUnresolved:  {text: "未解析"},
+		KeyCopyTable:         {text: "复制表信息"},
+		KeyCopySucceeded:     {text: "已复制"},
+		KeyCopyFailed:        {text: "复制失败"},
 	},
 }
 
