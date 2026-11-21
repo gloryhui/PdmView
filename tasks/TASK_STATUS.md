@@ -51,8 +51,8 @@ Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验�
 | P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致，合成复合键与外键顺序、双语及独立滚动通过。定向测试、vet 与格式检查通过 | |
 | P7-04 | 搜索与定位 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-04-搜索与定位)。六种查询、同画板回中、跨画板及双语无结果通过。千表模型宽泛查询首屏构建 23 行，连续编辑至最新结果中位数 34.1 ms | |
 | P7-05 | 完整信息复制 | DONE | DeepSeek / GPT | [剪贴板验收](../docs/PHASE_7_ACCEPTANCE.md#p7-05-完整信息复制)。详情滚动后仍可操作，双语 3,058 字节一致，原剪贴板恢复并逐项核对通过。注入失败、全量检查、e2e 标签测试和 macOS 构建通过 | 单表 SQL 随 Phase 8/9 验收 |
-| P8-01 | MySQL 类型映射 | TODO | GPT | | |
-| P8-02 | 单表 DDL | TODO | DeepSeek | | |
+| P8-01 | MySQL 类型映射 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-01-类型映射和未知类型诊断)。本地 149/149 字段一致，18 种源写法归一为 17 种输出。未知类型阻断、参数冲突测试与 vet 通过 | |
+| P8-02 | 单表 DDL | IN_PROGRESS | DeepSeek / GPT | | |
 | P8-03 | 索引/主键/约束 | TODO | DeepSeek | | |
 | P8-04 | 全库依赖与外键策略 | TODO | GPT | | |
 | P8-05 | 全库初始化 SQL | TODO | DeepSeek | | |
