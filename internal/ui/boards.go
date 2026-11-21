@@ -26,6 +26,7 @@ type PreparedBoard struct {
 
 // BoardSet is the ordered source catalog and its prepared default.
 type BoardSet struct {
+	Document *pdm.Document
 	Boards   []DiagramBoard
 	Default  int
 	Prepared PreparedBoard
@@ -48,6 +49,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 	if len(sources) == 0 {
 		board := makeDiagramBoard(model, nil, true)
 		return BoardSet{
+			Document: document,
 			Boards:   []DiagramBoard{board},
 			Default:  0,
 			Prepared: PrepareBoard(board),
@@ -58,6 +60,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 	}
 
 	set := BoardSet{Boards: make([]DiagramBoard, len(sources))}
+	set.Document = document
 	for offset, diagram := range sources {
 		set.Boards[offset] = makeDiagramBoard(model, diagram, false)
 	}

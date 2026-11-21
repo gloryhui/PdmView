@@ -77,6 +77,27 @@ const (
 	KeyCopyTable         Key = "copy.table"
 	KeyCopySucceeded     Key = "copy.succeeded"
 	KeyCopyFailed        Key = "copy.failed"
+
+	KeyDatabaseSQL              Key = "database.sql"
+	KeyPreviewBack              Key = "preview.back"
+	KeyPreviewLoading           Key = "preview.loading"
+	KeyPreviewTables            Key = "preview.tables"
+	KeyPreviewColumns           Key = "preview.columns"
+	KeyPreviewKeys              Key = "preview.foreign_keys"
+	KeyPreviewSummary           Key = "preview.summary"
+	KeyPreviewDiagnostics       Key = "preview.diagnostics"
+	KeyPreviewSQL               Key = "preview.sql"
+	KeyPreviewError             Key = "preview.error"
+	KeyPreviewWarning           Key = "preview.warning"
+	KeyPreviewLine              Key = "preview.line"
+	KeyPreviewDiagnosticHeading Key = "preview.diagnostic_heading"
+	KeyPreviewSchemaIssue       Key = "preview.issue.schema"
+	KeyPreviewColumnIssue       Key = "preview.issue.column"
+	KeyPreviewDefaultIssue      Key = "preview.issue.default"
+	KeyPreviewIndexIssue        Key = "preview.issue.index"
+	KeyPreviewForeignKeyIssue   Key = "preview.issue.foreign_key"
+	KeyPreviewParserIssue       Key = "preview.issue.parser"
+	KeyPreviewDatabaseIssue     Key = "preview.issue.database"
 )
 
 type message struct {
@@ -151,6 +172,27 @@ var resources = map[Locale]map[Key]message{
 		KeyCopyTable:         {text: "Copy table info"},
 		KeyCopySucceeded:     {text: "Copied"},
 		KeyCopyFailed:        {text: "Copy failed"},
+
+		KeyDatabaseSQL:              {text: "Database SQL"},
+		KeyPreviewBack:              {text: "Back"},
+		KeyPreviewLoading:           {text: "Generating database SQL…"},
+		KeyPreviewTables:            {text: "Tables {count}", params: []string{"count"}},
+		KeyPreviewColumns:           {text: "Columns {count}", params: []string{"count"}},
+		KeyPreviewKeys:              {text: "Foreign keys {count}", params: []string{"count"}},
+		KeyPreviewSummary:           {text: "Errors {errors} · Warnings {warnings}", params: []string{"errors", "warnings"}},
+		KeyPreviewDiagnostics:       {text: "Diagnostics"},
+		KeyPreviewSQL:               {text: "Full SQL"},
+		KeyPreviewError:             {text: "Error"},
+		KeyPreviewWarning:           {text: "Warning"},
+		KeyPreviewLine:              {text: "line {line}", params: []string{"line"}},
+		KeyPreviewDiagnosticHeading: {text: "{category} · {severity}", params: []string{"category", "severity"}},
+		KeyPreviewSchemaIssue:       {text: "Schema"},
+		KeyPreviewColumnIssue:       {text: "Columns and types"},
+		KeyPreviewDefaultIssue:      {text: "Default values"},
+		KeyPreviewIndexIssue:        {text: "Indexes and keys"},
+		KeyPreviewForeignKeyIssue:   {text: "Foreign keys"},
+		KeyPreviewParserIssue:       {text: "Source parsing"},
+		KeyPreviewDatabaseIssue:     {text: "Database options"},
 	},
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
@@ -218,6 +260,27 @@ var resources = map[Locale]map[Key]message{
 		KeyCopyTable:         {text: "复制表信息"},
 		KeyCopySucceeded:     {text: "已复制"},
 		KeyCopyFailed:        {text: "复制失败"},
+
+		KeyDatabaseSQL:              {text: "数据库 SQL"},
+		KeyPreviewBack:              {text: "返回"},
+		KeyPreviewLoading:           {text: "正在生成数据库 SQL…"},
+		KeyPreviewTables:            {text: "表 {count}", params: []string{"count"}},
+		KeyPreviewColumns:           {text: "字段 {count}", params: []string{"count"}},
+		KeyPreviewKeys:              {text: "外键 {count}", params: []string{"count"}},
+		KeyPreviewSummary:           {text: "{errors} 个错误 · {warnings} 个警告", params: []string{"errors", "warnings"}},
+		KeyPreviewDiagnostics:       {text: "诊断"},
+		KeyPreviewSQL:               {text: "完整 SQL"},
+		KeyPreviewError:             {text: "错误"},
+		KeyPreviewWarning:           {text: "警告"},
+		KeyPreviewLine:              {text: "行 {line}", params: []string{"line"}},
+		KeyPreviewDiagnosticHeading: {text: "{category} · {severity}", params: []string{"category", "severity"}},
+		KeyPreviewSchemaIssue:       {text: "结构"},
+		KeyPreviewColumnIssue:       {text: "字段与类型"},
+		KeyPreviewDefaultIssue:      {text: "默认值"},
+		KeyPreviewIndexIssue:        {text: "索引与键"},
+		KeyPreviewForeignKeyIssue:   {text: "外键"},
+		KeyPreviewParserIssue:       {text: "源解析"},
+		KeyPreviewDatabaseIssue:     {text: "数据库选项"},
 	},
 }
 

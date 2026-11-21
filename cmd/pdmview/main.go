@@ -87,6 +87,9 @@ func showMainWindow() {
 	workspace.SetSearchStarter(func(request appui.SearchRequest) {
 		startWorkspaceSearch(win, workspace, request)
 	})
+	workspace.SetDatabasePreviewStarter(func(request appui.DatabasePreviewRequest) {
+		startDatabasePreview(win, workspace, request)
+	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
 		startBoardLoad(win, workspace, path)
 	}
@@ -205,6 +208,25 @@ func startWorkspaceSearch(win *mygo.Window, workspace *appui.Workspace, request 
 				return
 			}
 			workspace.PublishSearchResults(request, results)
+		})
+	}()
+}
+
+func startDatabasePreview(
+	win *mygo.Window,
+	workspace *appui.Workspace,
+	request appui.DatabasePreviewRequest,
+) {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return
+	}
+	go func() {
+		result := request.Run()
+		mygo.RunOnMain(func() {
+			if win.IsDestroyed() {
+				return
+			}
+			workspace.PublishDatabasePreview(request, result)
 		})
 	}()
 }

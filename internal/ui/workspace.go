@@ -5,6 +5,7 @@ import (
 
 	"pdmview/internal/app"
 	"pdmview/internal/i18n"
+	"pdmview/internal/pdm"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -37,6 +38,7 @@ type Workspace struct {
 	NavigationPercent    float32
 	CanvasPercent        float32
 	canvas               *canvasView
+	document             *pdm.Document
 	boards               []DiagramBoard
 	activeBoard          int
 	loadToken            uint64
@@ -70,6 +72,8 @@ type Workspace struct {
 	openHandler          func()
 	boardSelector        func(int)
 	searchStarter        func(SearchRequest)
+	previewStarter       func(DatabasePreviewRequest)
+	preview              databasePreviewState
 	searchIndex          *searchIndex
 	searchQuery          string
 	searchResults        []SearchResult
@@ -119,6 +123,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
 	w.cancelPendingSwitch()
+	w.invalidateDatabasePreview()
 	w.resetSearch()
 	w.clearCopyFeedback()
 	w.loading = true
@@ -138,6 +143,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 		set.Default = 0
 	}
 	w.boards = append([]DiagramBoard(nil), set.Boards...)
+	w.document = set.Document
 	w.boardToken++
 	w.hasModel = true
 	w.loading = false
@@ -169,6 +175,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.pendingTableToken = 0
 	w.pendingSmoothTable = false
 	w.canvas.activatePrepared(set.Prepared)
+	w.invalidateDatabasePreview()
 	w.notifyChanged()
 	return true
 }
@@ -599,10 +606,14 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 		workspace.canvas = newCanvasView()
 	}
 	return func(c *ui.Context) {
-		width, _ := c.Size()
-		workspace.constrainPanes(width)
 		t := c.Theme()
 		lang := string(state.Locale())
+		if workspace.preview.open {
+			workspace.databasePreviewView(c, state, t, lang)
+			return
+		}
+		width, _ := c.Size()
+		workspace.constrainPanes(width)
 		ui.Column(c.Key(RootKey)).Fill().Background(t.Background).Children(func() {
 			ui.SplitPercent(c.Key(NavigationSplitKey), &workspace.NavigationPercent,
 				func() {
@@ -628,6 +639,9 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
 	ui.Button(c, state.Text(i18n.KeyOpenPDM, nil)).Key(OpenPDMKey).
 		FillWidth().Disabled(w.loading).OnClick(w.openHandler)
+	ui.Button(c, state.Text(i18n.KeyDatabaseSQL, nil)).Key(DatabasePreviewOpenKey).
+		FillWidth().Disabled(!w.hasModel || w.document == nil || w.loading).
+		OnClick(w.openDatabasePreview)
 	search := state.Text(i18n.KeySearch, nil)
 	c.Key(SearchKey)
 	field := ui.SearchField(c, &w.searchQuery).
