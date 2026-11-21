@@ -2,7 +2,7 @@
 
 状态说明：`TODO` / `IN_PROGRESS` / `BLOCKED` / `REVIEW` / `DONE`
 
-Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 2 的八组原生画布长测已归档，模拟图性能达到阶段目标。
+Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 按本地样本盘点、结构验证、解析与诊断测试的顺序推进。
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
@@ -18,9 +18,9 @@ Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 2 的八组
 | P2-03 | HitTest 与空间索引 | DONE | DeepSeek / GPT | 单测、vet、格式检查通过。四种规模和每档 71 个查询区域与线性扫描一致。500 节点局部查询 7.90 → 1.47 µs，全图查询 5.68 → 0.60 µs | |
 | P2-04 | Viewport Culling 与 LOD | DONE | DeepSeek / GPT | `make check`、e2e 标签测试通过。覆盖穿越关系、视口外跳过字段、0/2/5 行及双阈值回滞。macOS Metal 2× 原生窗口验证命中、拖动、滚轮锚点、适应选中和全图 | 长文字按卡片可用宽度预排版省略号 |
 | P2-05 | 性能基准与报告 | DONE | DeepSeek / GPT | [验收记录](../docs/CANVAS_BENCHMARK.md)。macOS Metal 2×，密集与稀疏布局各四组 10 秒长测全部完成。150/300 节点均达 60 FPS 目标，500 节点密集/稀疏分别为 60.70/60.79 FPS。`make check` 及原生基准构建通过 | |
-| P3-01 | 真实 PDM 样本盘点 | TODO | GPT | | |
-| P3-02 | XML 结构与版本研究 | TODO | GPT | | |
-| P3-03 | 原始 XML 表示 | TODO | DeepSeek | | |
+| P3-01 | 真实 PDM 样本盘点 | DONE | GPT | 本地只读盘点及 SHA-256 复核通过。132,997 字节、UTF-8、16.5.0.3982、1 画板，详见 `docs/PDM_FORMAT.md` | 仅一份真实样本 |
+| P3-02 | XML 结构与版本研究 | DONE | GPT | Expat 盘点、ElementTree 结构核对及 `xmllint --nonet --noout` 通过，详见 `docs/PDM_FORMAT.md` | 画板单位及其他版本待实机对照 |
+| P3-03 | 原始 XML 表示 | IN_PROGRESS | DeepSeek / GPT | 使用严格 XML 解码，保留原始对象、属性和引用，并输出诊断 | |
 | P3-04 | Model/Package/Table 解析 | TODO | DeepSeek | | |
 | P3-05 | Column/Key/Index/Reference 解析 | TODO | DeepSeek | | |
 | P3-06 | Diagram/Symbol/路径解析 | TODO | DeepSeek | | |
