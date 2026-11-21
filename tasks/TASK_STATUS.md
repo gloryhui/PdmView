@@ -4,6 +4,8 @@
 
 Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 的解析器、诊断和 XML 对照已完成。Gate 1 的 PowerDesigner 应用内对照待验收。
 
+Phase 4 的领域模型冻结、映射及 XML 对照已完成。P4-03 的 PowerDesigner 应用内对照待本地 Windows 客户端验收，详见 [Phase 4 验收记录](../docs/PHASE_4_ACCEPTANCE.md)。
+
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
 | P0-01 | 仓库与环境勘察 | DONE | GPT | `23ea2fd`，`sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
@@ -25,9 +27,9 @@ Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 的解析
 | P3-05 | Column/Key/Index/Reference 解析 | DONE | DeepSeek / GPT | 包级测试、vet 通过。本地 149 字段及顺序、13 主键、13 非空标记、55 字段注释及 6 个 Precision 原值逐项对照 XML。合成测试覆盖复合索引和跨包外键 | 用户样本无索引、外键及自增 |
 | P3-06 | Diagram/Symbol/路径解析 | DONE | DeepSeek / GPT | 包级测试、vet 通过。用户样本 1 画板、8 表图元、全部矩形及表引用对照一致。三份公开导出共 9 画板、37 表图元及 23 关系图元的引用和几何逐项核对 | 画板原始单位和应用内坐标对照待 P4-03 |
 | P3-07 | 诊断与解析测试 | DONE | DeepSeek / GPT | `make check` 通过。`cmd/pdm-inspect` 本地样本 0 条诊断。31,431,470 字节合成文件实测 1,000 表、50,000 字段，0.30 秒、峰值 RSS 193.5 MiB。截断、未知属性、引用、重复 ID、Unicode、空值、多包多画板和输入上限均有验证 | |
-| P4-01 | Domain Model 冻结 | DONE | GPT | ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
-| P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
-| P4-03 | 原始布局核对 | IN_PROGRESS | GPT | 逐项核对本地样本与公开 XML 导出，复核 PowerDesigner 可用性 | |
+| P4-01 | Domain Model 冻结 | DONE | GPT | `8f479ce`，ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
+| P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `c8dcfe1`，`MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
+| P4-03 | 原始布局核对 | BLOCKED | GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。本地样本 8/8 图元的 X/Y、宽高和 90/90 字段顺序一致。三份公开 XML 的 23 条关系和 56 个路径点逐项一致。`make check`、实样本对照及 SHA-256 复核通过 | 缺可用的本地 PowerDesigner Windows 客户端，应用内对照与单位标定待验收。状态标志 `AutoLayout` 已交付，界面显示待接入正式画布 |
 | P5-01 | Graph Node/Edge | TODO | DeepSeek | | |
 | P5-02 | World/View/Screen 变换 | TODO | DeepSeek | | |
 | P5-03 | R-Tree/空间查询 | TODO | DeepSeek | | |
