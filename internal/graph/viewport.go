@@ -3,9 +3,12 @@ package graph
 import "math"
 
 const (
-	// MinScale and MaxScale bound camera zoom under every operation.
+	// MinScale bounds the Phase 2 camera; MaxScale bounds every camera.
 	MinScale = 0.02
 	MaxScale = 8.0
+
+	// diagramMinScale permits fitting uncalibrated PDM int64 coordinates.
+	diagramMinScale = 1e-18
 )
 
 // Camera maps world units through a viewport-local DIP plane to a
@@ -16,13 +19,24 @@ type Camera struct {
 	viewport Rect
 	origin   Point
 	scale    float64
+	minScale float64
 }
 
 // NewCamera creates a camera for a window-content DIP rectangle. Non-finite
 // coordinates and dimensions that collapse or run backwards are sanitized to
 // a safe zero-sized viewport.
 func NewCamera(viewport Rect) *Camera {
-	c := &Camera{scale: 1}
+	c := &Camera{scale: 1, minScale: MinScale}
+	c.SetViewport(viewport)
+	return c
+}
+
+// NewDiagramCamera creates a camera for real PDM world coordinates. It keeps
+// MaxScale but allows a much lower minimum so very wide integer-coordinate
+// scenes can be fitted; this is still a DIP/world-unit ratio, not a physical
+// unit calibration.
+func NewDiagramCamera(viewport Rect) *Camera {
+	c := &Camera{scale: 1, minScale: diagramMinScale}
 	c.SetViewport(viewport)
 	return c
 }
@@ -77,6 +91,11 @@ func (c *Camera) ScreenToWorld(p Point) Point {
 	return c.ViewportToWorld(c.ScreenToViewport(p))
 }
 
+// ViewportBounds returns the window-relative DIP rectangle of the viewport.
+func (c *Camera) ViewportBounds() Rect {
+	return c.viewport
+}
+
 // VisibleWorld returns the world rectangle shown by the viewport.
 func (c *Camera) VisibleWorld() Rect {
 	width, height := c.viewport.Width(), c.viewport.Height()
@@ -104,7 +123,7 @@ func (c *Camera) ZoomAt(anchor Point, factor float64) {
 		return
 	}
 	worldAnchor := c.ViewportToWorld(anchor)
-	next := clampScale(c.Scale() * factor)
+	next := c.clampScale(c.Scale() * factor)
 	c.scale = next
 	c.origin = Point{
 		X: worldAnchor.X - anchor.X/next,
@@ -112,21 +131,21 @@ func (c *Camera) ZoomAt(anchor Point, factor float64) {
 	}
 }
 
-// Fit centers bounds in the viewport and chooses the largest scale within
-// MinScale..MaxScale that leaves padding window DIP on every edge where the
-// bounds have extent. Padding that is invalid or consumes either viewport
-// dimension is ignored.
+// FitBounds centers bounds in the viewport and chooses the largest scale
+// within the camera's limits that leaves padding window DIP on every edge
+// where the bounds have extent. Padding that is invalid or consumes either
+// viewport dimension is ignored.
 // A zero-area point is centered at the current scale; one zero dimension fits
 // through the other. A zero-sized viewport centers the bounds without
 // changing scale.
-func (c *Camera) Fit(bounds Rect, padding float64) {
+func (c *Camera) FitBounds(bounds Rect, padding float64) {
 	bounds = orderedRect(bounds)
 	width, height := c.viewport.Width(), c.viewport.Height()
 	if !finite(padding) || padding < 0 || padding >= min(width, height)/2 {
 		padding = 0
 	}
 	boundsWidth, boundsHeight := bounds.Width(), bounds.Height()
-	centerX, centerY := (bounds.Min.X+bounds.Max.X)/2, (bounds.Min.Y+bounds.Max.Y)/2
+	centerX, centerY := midpoint(bounds.Min.X, bounds.Max.X), midpoint(bounds.Min.Y, bounds.Max.Y)
 
 	if width <= 0 || height <= 0 {
 		c.origin = Point{X: centerX, Y: centerY}
@@ -148,7 +167,7 @@ func (c *Camera) Fit(bounds Rect, padding float64) {
 	if !finite(scale) {
 		scale = c.Scale()
 	} else {
-		scale = clampScale(scale)
+		scale = c.clampScale(scale)
 	}
 	c.scale = scale
 	c.origin = Point{
@@ -157,9 +176,14 @@ func (c *Camera) Fit(bounds Rect, padding float64) {
 	}
 }
 
-// ShowAll fits a synthetic scene's whole Bounds.
+// Fit forwards to FitBounds for Phase 2 compatibility.
+func (c *Camera) Fit(bounds Rect, padding float64) {
+	c.FitBounds(bounds, padding)
+}
+
+// ShowAll fits a scene's whole Bounds.
 func (c *Camera) ShowAll(scene Scene, padding float64) {
-	c.Fit(scene.Bounds, padding)
+	c.FitBounds(scene.Bounds, padding)
 }
 
 func orderedRect(r Rect) Rect {
@@ -174,8 +198,22 @@ func orderedRect(r Rect) Rect {
 	return Rect{Min: Point{X: minX, Y: minY}, Max: Point{X: maxX, Y: maxY}}
 }
 
-func clampScale(v float64) float64 {
-	return min(max(v, MinScale), MaxScale)
+func (c *Camera) clampScale(v float64) float64 {
+	return min(max(v, c.minimumScale()), MaxScale)
+}
+
+func (c *Camera) minimumScale() float64 {
+	if c.minScale > 0 {
+		return c.minScale
+	}
+	return MinScale
+}
+
+func midpoint(a, b float64) float64 {
+	if math.Signbit(a) == math.Signbit(b) {
+		return a + (b-a)/2
+	}
+	return a/2 + b/2
 }
 
 func finite(v float64) bool {

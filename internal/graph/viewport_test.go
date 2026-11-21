@@ -195,10 +195,147 @@ func TestCameraSafeInvalidViewport(t *testing.T) {
 	}
 }
 
+func TestDiagramCameraViewportAndCoordinateRoundTrip(t *testing.T) {
+	viewport := Rect{Min: Point{X: -30, Y: 40}, Max: Point{X: 170, Y: 140}}
+	cam := NewDiagramCamera(viewport)
+	if cam.Scale() != 1 {
+		t.Fatalf("initial diagram scale = %v", cam.Scale())
+	}
+	if got := cam.ViewportBounds(); got != viewport {
+		t.Fatalf("view bounds = %+v, want %+v", got, viewport)
+	}
+
+	for _, factor := range []float64{0.25, 4, 1e-6} {
+		anchor := Point{X: 37, Y: 83}
+		worldAnchor := cam.ViewportToWorld(anchor)
+		cam.ZoomAt(anchor, factor)
+		if got := cam.ViewportToWorld(anchor); !pointsNearScaled(got, worldAnchor, 1e-9) {
+			t.Fatalf("zoom %v moved anchor: %+v -> %+v", factor, worldAnchor, got)
+		}
+		for _, world := range []Point{
+			{X: -9_000_000_000, Y: 4_000_000_000},
+			{X: 12.5, Y: -7.5},
+			{X: 8_000_000_000_000, Y: -3_000_000_000_000},
+		} {
+			screen := cam.WorldToScreen(world)
+			if got := cam.ScreenToWorld(screen); !pointsNearScaled(got, world, 1e-9) {
+				t.Fatalf("screen/world round trip by %v = %+v -> %+v", factor, world, got)
+			}
+			viewportPoint := cam.ScreenToViewport(screen)
+			if got := cam.ViewportToScreen(viewportPoint); !pointsNear(got, screen) {
+				t.Fatalf("viewport/screen round trip = %+v -> %+v", screen, got)
+			}
+		}
+	}
+
+	cam.SetViewport(Rect{Min: Point{X: 500, Y: 600}, Max: Point{X: 700, Y: 800}})
+	if got := cam.ViewportBounds(); got != (Rect{Min: Point{X: 500, Y: 600}, Max: Point{X: 700, Y: 800}}) {
+		t.Fatalf("updated view bounds = %+v", got)
+	}
+}
+
+func TestDiagramCameraFitBoundsWideSpanPaddingAndLimits(t *testing.T) {
+	viewport := Rect{Min: Point{X: 100, Y: 50}, Max: Point{X: 900, Y: 650}}
+	diagram := NewDiagramCamera(viewport)
+	bounds := Rect{Min: Point{X: -4e20, Y: -4e20}, Max: Point{X: 4e20, Y: 4e20}}
+	diagram.FitBounds(bounds, 40)
+	if got := diagram.Scale(); got != diagramMinScale {
+		t.Fatalf("wide diagram scale = %v, want %v", got, diagramMinScale)
+	}
+	center := Point{X: midpoint(bounds.Min.X, bounds.Max.X), Y: midpoint(bounds.Min.Y, bounds.Max.Y)}
+	if got := diagram.WorldToScreen(center); !pointsNear(got, Point{X: 500, Y: 350}) {
+		t.Fatalf("wide diagram center = %+v", got)
+	}
+
+	fitBounds := Rect{Min: Point{X: -4e17, Y: -2e17}, Max: Point{X: 4e17, Y: 2e17}}
+	diagram.FitBounds(fitBounds, 40)
+	if got, want := diagram.Scale(), 720.0/8e17; !nearRelative(got, want, 1e-12) {
+		t.Fatalf("padded wide scale = %v, want %v", got, want)
+	}
+	minScreen := diagram.WorldToScreen(fitBounds.Min)
+	maxScreen := diagram.WorldToScreen(fitBounds.Max)
+	if minScreen.X < 139.999 || maxScreen.X > 860.001 ||
+		minScreen.Y < 89.999 || maxScreen.Y > 610.001 {
+		t.Fatalf("wide padding not honored: %+v .. %+v", minScreen, maxScreen)
+	}
+
+	legacy := NewCamera(viewport)
+	legacy.FitBounds(bounds, 40)
+	if got := legacy.Scale(); got != MinScale {
+		t.Fatalf("legacy wide-fit scale = %v, want %v", got, MinScale)
+	}
+
+	anchor := Point{X: 13, Y: 29}
+	worldAnchor := diagram.ViewportToWorld(anchor)
+	diagram.ZoomAt(anchor, 1e-30)
+	if diagram.Scale() != diagramMinScale {
+		t.Fatalf("diagram min zoom = %v", diagram.Scale())
+	}
+	if got := diagram.ViewportToWorld(anchor); !pointsNearScaled(got, worldAnchor, 1e-12) {
+		t.Fatalf("diagram min zoom moved anchor: %+v -> %+v", worldAnchor, got)
+	}
+	diagram.ZoomAt(anchor, 1e30)
+	if diagram.Scale() != MaxScale {
+		t.Fatalf("diagram max zoom = %v", diagram.Scale())
+	}
+	if got := diagram.ViewportToWorld(anchor); !pointsNearScaled(got, worldAnchor, 1e-12) {
+		t.Fatalf("diagram max zoom moved anchor: %+v -> %+v", worldAnchor, got)
+	}
+
+	var zero Camera
+	zero.SetViewport(viewport)
+	zeroAnchorWorld := zero.ViewportToWorld(anchor)
+	zero.ZoomAt(anchor, 1e-30)
+	if zero.Scale() != MinScale {
+		t.Fatalf("zero camera min scale = %v, want %v", zero.Scale(), MinScale)
+	}
+	if got := zero.ViewportToWorld(anchor); !pointsNear(got, zeroAnchorWorld) {
+		t.Fatalf("zero camera moved anchor: %+v -> %+v", zeroAnchorWorld, got)
+	}
+}
+
+func TestFitBoundsSafeMidpointAndShowAll(t *testing.T) {
+	if got := midpoint(1e308, 1.2e308); math.IsInf(got, 0) || !nearRelative(got, 1.1e308, 1e-12) {
+		t.Fatalf("same-sign midpoint = %+v", got)
+	}
+	if got := midpoint(-1e308, 1e308); got != 0 {
+		t.Fatalf("opposite-sign midpoint = %v", got)
+	}
+
+	cam := NewDiagramCamera(Rect{Min: Point{X: 10, Y: 20}, Max: Point{X: 110, Y: 120}})
+	cam.FitBounds(Rect{Min: Point{X: 1e308, Y: 1e308}, Max: Point{X: 1.2e308, Y: 1.2e308}}, 0)
+	if math.IsInf(cam.origin.X, 0) || math.IsInf(cam.origin.Y, 0) ||
+		math.IsNaN(cam.origin.X) || math.IsNaN(cam.origin.Y) {
+		t.Fatalf("fit midpoint overflowed origin: %+v", cam.origin)
+	}
+
+	scene := Scene{Bounds: Rect{Min: Point{X: -4e20, Y: -4e20}, Max: Point{X: 4e20, Y: 4e20}}}
+	show := NewDiagramCamera(cam.ViewportBounds())
+	show.ShowAll(scene, 0)
+	direct := NewDiagramCamera(cam.ViewportBounds())
+	direct.FitBounds(scene.Bounds, 0)
+	if show.Scale() != direct.Scale() || show.VisibleWorld() != direct.VisibleWorld() {
+		t.Fatalf("ShowAll differs from FitBounds: %+v / %+v", show, direct)
+	}
+}
+
 func pointsNear(a, b Point) bool {
 	return near(a.X, b.X) && near(a.Y, b.Y)
 }
 
+func pointsNearScaled(a, b Point, tolerance float64) bool {
+	scale := max(1, max(math.Abs(a.X), max(math.Abs(a.Y), max(math.Abs(b.X), math.Abs(b.Y)))))
+	return math.Abs(a.X-b.X) <= tolerance*scale && math.Abs(a.Y-b.Y) <= tolerance*scale
+}
+
 func near(a, b float64) bool {
 	return math.Abs(a-b) <= 1e-9
+}
+
+func nearRelative(a, b, tolerance float64) bool {
+	scale := max(math.Abs(a), math.Abs(b))
+	if scale == 0 {
+		return true
+	}
+	return math.Abs(a-b) <= tolerance*scale
 }
