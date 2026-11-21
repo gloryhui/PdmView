@@ -26,8 +26,8 @@ Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 的解析
 | P3-06 | Diagram/Symbol/路径解析 | DONE | DeepSeek / GPT | 包级测试、vet 通过。用户样本 1 画板、8 表图元、全部矩形及表引用对照一致。三份公开导出共 9 画板、37 表图元及 23 关系图元的引用和几何逐项核对 | 画板原始单位和应用内坐标对照待 P4-03 |
 | P3-07 | 诊断与解析测试 | DONE | DeepSeek / GPT | `make check` 通过。`cmd/pdm-inspect` 本地样本 0 条诊断。31,431,470 字节合成文件实测 1,000 表、50,000 字段，0.30 秒、峰值 RSS 193.5 MiB。截断、未知属性、引用、重复 ID、Unicode、空值、多包多画板和输入上限均有验证 | |
 | P4-01 | Domain Model 冻结 | DONE | GPT | ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
-| P4-02 | Diagram 到 Graph 映射 | IN_PROGRESS | DeepSeek / GPT | 按 ADR-004 实现及审查 | |
-| P4-03 | 原始布局核对 | TODO | GPT | | |
+| P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
+| P4-03 | 原始布局核对 | IN_PROGRESS | GPT | 逐项核对本地样本与公开 XML 导出，复核 PowerDesigner 可用性 | |
 | P5-01 | Graph Node/Edge | TODO | DeepSeek | | |
 | P5-02 | World/View/Screen 变换 | TODO | DeepSeek | | |
 | P5-03 | R-Tree/空间查询 | TODO | DeepSeek | | |

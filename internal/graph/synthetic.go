@@ -1,5 +1,5 @@
-// Package graph holds toolkit-free graph geometry and synthetic fixtures for
-// the native canvas. It does not depend on MyGo, PDM parsing, or SQL.
+// Package graph holds toolkit-free graph geometry, diagram mapping, and
+// synthetic fixtures. It does not depend on MyGo or SQL.
 package graph
 
 import (
@@ -62,8 +62,7 @@ type Field struct {
 	Name string
 }
 
-// Node is one synthetic table node. IDs are stable zero-based indexes in the
-// deterministic row-major node order.
+// Node is one table node. IDs are stable zero-based indexes in its Scene.
 type Node struct {
 	ID     int
 	Bounds Rect
@@ -71,8 +70,8 @@ type Node struct {
 	Fields []Field
 }
 
-// Edge is one directed relationship. From and To are Node IDs. Points is the
-// sampled display path, starting and ending at actual node port centers.
+// Edge is one directed relationship. From and To are Node IDs or -1 for an
+// unresolved endpoint. Points holds the display path when available.
 type Edge struct {
 	ID     int
 	From   int
@@ -95,7 +94,7 @@ func (e Edge) Bounds() Rect {
 	return bounds
 }
 
-// Scene is a deterministic synthetic graph fixture.
+// Scene is a deterministic graph scene.
 type Scene struct {
 	Nodes  []Node
 	Edges  []Edge
