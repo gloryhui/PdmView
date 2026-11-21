@@ -31,7 +31,7 @@ Phase 5 五项任务已于 2026-11-21 完成并通过 [图引擎验收](../docs/
 | P3-07 | 诊断与解析测试 | DONE | DeepSeek / GPT | `make check` 通过。`cmd/pdm-inspect` 本地样本 0 条诊断。31,431,470 字节合成文件实测 1,000 表、50,000 字段，0.30 秒、峰值 RSS 193.5 MiB。截断、未知属性、引用、重复 ID、Unicode、空值、多包多画板和输入上限均有验证 | |
 | P4-01 | Domain Model 冻结 | DONE | GPT | `8f479ce`，ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
 | P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `c8dcfe1`，`MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
-| P4-03 | 原始布局核对 | BLOCKED | GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。本地样本 8/8 图元的 X/Y、宽高和 90/90 字段顺序一致。三份公开 XML 的 23 条关系和 56 个路径点逐项一致。`make check`、实样本对照及 SHA-256 复核通过 | 缺可用的本地 PowerDesigner Windows 客户端，应用内对照与单位标定待验收。状态标志 `AutoLayout` 已交付，界面显示待接入正式画布 |
+| P4-03 | 原始布局核对 | BLOCKED | GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。本地样本 8/8 图元的 X/Y、宽高和 90/90 字段顺序一致。三份公开 XML 的 23 条关系和 56 个路径点逐项一致。`make check`、实样本对照及 SHA-256 复核通过 | 缺可用的本地 PowerDesigner Windows 客户端，应用内对照与单位标定待验收 |
 | P5-01 | Graph Node/Edge | DONE | DeepSeek / GPT | `bef71cf`，ADR-005。正式场景与合成数据分离，节点和边可按偏移追溯 Diagram、图元、模型对象和原始几何。Graph/PDM 定向测试及 vet 通过 | |
 | P5-02 | World/View/Screen 变换 | DONE | DeepSeek / GPT | `46f42bb`，Graph 定向测试、vet 通过。在 1024 × 768 DIP 视口和 24 DIP 边距下，本地样本完整适应，8/8 图元中心往返通过，原型相机下限会截断全图 | PDM 物理单位标定随 P4-03 保留 |
 | P5-03 | R-Tree/空间查询 | DONE | DeepSeek / GPT | `96f6415`，BVH 支持原子替换场景和点查询，定向测试、并发 race 验证及本地样本线性对照通过。500 节点点查询 298.1 → 33.56 ns，局部视口 8.034 → 1.650 µs，500 节点与 1,000 边索引重建 2.11 ms | 重建在交互查询路径外执行 |
@@ -40,8 +40,8 @@ Phase 5 五项任务已于 2026-11-21 完成并通过 [图引擎验收](../docs/
 | P6-01 | 表节点绘制 | DONE | DeepSeek / GPT | ADR-006。Graph/Renderer 定向测试、vet 与格式检查通过，覆盖字段原始类型、跨包 PK/FK 来源、固定 DIP 文字、裁剪及选中/悬停样式 | 原生截图与交互统一在 P6-05 核验 |
 | P6-02 | 关系线绘制 | DONE | DeepSeek / GPT | Graph/Renderer 定向测试、vet、格式检查通过。三份公开 XML 的 23 条关系、56 个路径点完整保留。验证选中关系和相邻关系高亮、末端方向、DIP 描边及箭头包络裁剪 | 原生截图在 P6-05 核验 |
 | P6-03 | LOD/缓存/裁剪 | DONE | DeepSeek / GPT | Graph/Renderer/UI/基准包单测、vet 和格式检查通过。760×560 DIP 下本地 8/8 表适应后进入近景并绘制字段。50 节点、100 边密集图原生短测 60.00 FPS，覆盖三档 LOD，网格命中 300/300 | 每画板最多缓存 256 表视觉、512 共享文本条目，超容量表暂显示轮廓。完整长测在 P6-05 |
-| P6-04 | 多画板与视口工具 | IN_PROGRESS | DeepSeek / GPT | 正式图引擎接入和画板级状态切换 | |
-| P6-05 | 画布性能验收 | TODO | GPT | | |
+| P6-04 | 多画板与视口工具 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_6_ACCEPTANCE.md#多画板和视口工具)。本地 8/8 表命中，公开样本 3 张画板、8/8 表及 13 个原始关系路径点命中。原生打开、平移、缩放、适应、显示全部和复位通过，定向测试和 vet 通过 | |
+| P6-05 | 画布性能验收 | IN_PROGRESS | GPT | 原生正式渲染器，双密度、四规模固定操作长测 | |
 | P7-01 | 主窗口三栏布局 | TODO | GPT | | |
 | P7-02 | 模型树与 Package | TODO | DeepSeek | | |
 | P7-03 | 表详情与字段列表 | TODO | DeepSeek | | |

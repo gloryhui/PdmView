@@ -73,3 +73,19 @@ func TestCanvasSelectionPanZoomAndFit(t *testing.T) {
 		t.Fatal("switching language changed the camera or selected node")
 	}
 }
+
+func TestCanvasClearsHoverWhenPointerLeaves(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	tester := ui.NewTester(View(state, workspace), 1200, 800)
+	view := workspace.canvas
+	point := view.camera.WorldToScreen(graph.Point{X: 100, Y: 55})
+	tester.Move(float32(point.X), float32(point.Y))
+	if view.hovered.Kind != graph.HitNode || view.hovered.Index != 0 {
+		t.Fatalf("hover = %+v, want table 0", view.hovered)
+	}
+	tester.Move(4, 4)
+	if view.hovered.Kind != graph.HitNone {
+		t.Fatalf("hover when pointer leaves = %+v", view.hovered)
+	}
+}

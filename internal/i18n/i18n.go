@@ -25,9 +25,18 @@ const (
 	KeyNavigationHeading Key = "workspace.navigation"
 	KeyCanvasHeading     Key = "workspace.canvas"
 	KeyDetailsHeading    Key = "workspace.details"
+	KeyOpenPDM           Key = "workspace.open_pdm"
+	KeyDiagramsHeading   Key = "workspace.diagrams"
+	KeyDiagramFallback   Key = "workspace.diagram_fallback"
+	KeyLoadingPDM        Key = "workspace.loading_pdm"
+	KeyPreparingDiagram  Key = "workspace.preparing_diagram"
+	KeyLoadPDMFailed     Key = "workspace.load_pdm_failed"
+	KeyNoDiagramFallback Key = "workspace.no_diagram_fallback"
+	KeyAutoLayoutStatus  Key = "workspace.auto_layout"
 	KeySampleDiagram     Key = "canvas.sample"
 	KeyFitSelection      Key = "canvas.fit_selection"
 	KeyShowAll           Key = "canvas.show_all"
+	KeyResetView         Key = "canvas.reset"
 	KeyZoomIn            Key = "canvas.zoom_in"
 	KeyZoomOut           Key = "canvas.zoom_out"
 )
@@ -52,9 +61,18 @@ var resources = map[Locale]map[Key]message{
 		KeyNavigationHeading: {text: "Navigation"},
 		KeyCanvasHeading:     {text: "Diagram canvas"},
 		KeyDetailsHeading:    {text: "Details"},
+		KeyOpenPDM:           {text: "Open PDM…"},
+		KeyDiagramsHeading:   {text: "Diagrams"},
+		KeyDiagramFallback:   {text: "Diagram {index}", params: []string{"index"}},
+		KeyLoadingPDM:        {text: "Loading PDM…"},
+		KeyPreparingDiagram:  {text: "Preparing diagram…"},
+		KeyLoadPDMFailed:     {text: "Could not open PDM file"},
+		KeyNoDiagramFallback: {text: "No diagrams · Auto layout"},
+		KeyAutoLayoutStatus:  {text: "Includes automatically arranged tables"},
 		KeySampleDiagram:     {text: "Sample diagram"},
 		KeyFitSelection:      {text: "Fit selection"},
 		KeyShowAll:           {text: "Show all"},
+		KeyResetView:         {text: "Reset view"},
 		KeyZoomIn:            {text: "Zoom in"},
 		KeyZoomOut:           {text: "Zoom out"},
 	},
@@ -72,9 +90,18 @@ var resources = map[Locale]map[Key]message{
 		KeyNavigationHeading: {text: "导航"},
 		KeyCanvasHeading:     {text: "图表画布"},
 		KeyDetailsHeading:    {text: "详情"},
+		KeyOpenPDM:           {text: "打开 PDM…"},
+		KeyDiagramsHeading:   {text: "画板"},
+		KeyDiagramFallback:   {text: "画板 {index}", params: []string{"index"}},
+		KeyLoadingPDM:        {text: "正在加载 PDM…"},
+		KeyPreparingDiagram:  {text: "正在准备画板…"},
+		KeyLoadPDMFailed:     {text: "无法打开 PDM 文件"},
+		KeyNoDiagramFallback: {text: "无画板 · 自动布局"},
+		KeyAutoLayoutStatus:  {text: "含自动布局的表"},
 		KeySampleDiagram:     {text: "模拟图表"},
 		KeyFitSelection:      {text: "适应选中"},
 		KeyShowAll:           {text: "显示全部"},
+		KeyResetView:         {text: "重置视图"},
 		KeyZoomIn:            {text: "放大"},
 		KeyZoomOut:           {text: "缩小"},
 	},

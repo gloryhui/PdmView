@@ -3,13 +3,18 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"pdmview/internal/app"
+	"pdmview/internal/i18n"
+	"pdmview/internal/pdm"
 	appui "pdmview/internal/ui"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
+
+var pdmChooserOpen atomic.Bool
 
 const (
 	appName       = "PdmView"
@@ -64,4 +69,140 @@ func showMainWindow() {
 	}
 	refresh()
 	win = mygo.NewWindow(windowOptions(state, workspace))
+	workspace.SetOnChanged(func() {
+		if win != nil && !win.IsDestroyed() {
+			win.Invalidate()
+		}
+	})
+	workspace.SetOpenHandler(func() {
+		openPDMDialog(win, workspace, state)
+	})
+	workspace.SetBoardSelector(func(index int) {
+		startBoardSwitch(win, workspace, index)
+	})
+	if path, ok := optionalPDMPath(os.Args[1:]); ok {
+		startBoardLoad(win, workspace, path)
+	}
+}
+
+func optionalPDMPath(args []string) (string, bool) {
+	if len(args) != 1 || args[0] == "" || args[0][0] == '-' {
+		return "", false
+	}
+	return args[0], true
+}
+
+func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.State) {
+	if win == nil || win.IsDestroyed() {
+		return
+	}
+	if !pdmChooserOpen.CompareAndSwap(false, true) {
+		return
+	}
+	title := state.Text(i18n.KeyOpenPDM, nil)
+	go func() {
+		defer pdmChooserOpen.Store(false)
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent: win,
+			Title:  title,
+			Filters: []mygo.FileFilter{{
+				Name:       "PowerDesigner",
+				Extensions: []string{"pdm"},
+			}},
+		})
+		if err != nil {
+			mygo.RunOnMain(func() {
+				if win.IsDestroyed() {
+					return
+				}
+				workspace.ReportOpenError()
+			})
+			return
+		}
+		if len(paths) == 0 {
+			return
+		}
+		mygo.RunOnMain(func() {
+			if win.IsDestroyed() {
+				return
+			}
+			startBoardLoad(win, workspace, paths[0])
+		})
+	}()
+}
+
+func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, path string) {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return
+	}
+	token := workspace.BeginOpen()
+	go func() {
+		set, err := loadBoardSet(path)
+		mygo.RunOnMain(func() {
+			applyBoardResult(win, workspace, token, set, err)
+		})
+	}()
+}
+
+func loadBoardSet(path string) (appui.BoardSet, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return appui.BoardSet{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return appui.BoardSet{}, fmt.Errorf("pdmview: not a regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return appui.BoardSet{}, err
+	}
+	defer file.Close()
+	document, err := pdm.Parse(file)
+	if err != nil {
+		return appui.BoardSet{}, err
+	}
+	return appui.BuildBoardSet(document), nil
+}
+
+func startBoardSwitch(win *mygo.Window, workspace *appui.Workspace, index int) {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return
+	}
+	board, ok := workspace.BoardDescriptor(index)
+	if !ok {
+		return
+	}
+	token, ok := workspace.BeginBoardSwitch(index)
+	if !ok {
+		return
+	}
+	go func() {
+		prepared := appui.PrepareBoard(board)
+		mygo.RunOnMain(func() {
+			if win.IsDestroyed() {
+				return
+			}
+			workspace.PublishPreparedBoard(token, prepared)
+		})
+	}()
+}
+
+type windowLifecycle interface {
+	IsDestroyed() bool
+}
+
+func applyBoardResult(
+	win windowLifecycle,
+	workspace *appui.Workspace,
+	token uint64,
+	set appui.BoardSet,
+	loadErr error,
+) bool {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return false
+	}
+	if loadErr != nil {
+		return workspace.FailOpen(token)
+	}
+	return workspace.PublishBoards(token, set)
 }
