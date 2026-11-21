@@ -20,8 +20,8 @@ Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 按本地
 | P2-05 | 性能基准与报告 | DONE | DeepSeek / GPT | [验收记录](../docs/CANVAS_BENCHMARK.md)。macOS Metal 2×，密集与稀疏布局各四组 10 秒长测全部完成。150/300 节点均达 60 FPS 目标，500 节点密集/稀疏分别为 60.70/60.79 FPS。`make check` 及原生基准构建通过 | |
 | P3-01 | 真实 PDM 样本盘点 | DONE | GPT | 本地只读盘点及 SHA-256 复核通过。132,997 字节、UTF-8、16.5.0.3982、1 画板，详见 `docs/PDM_FORMAT.md` | 仅一份真实样本 |
 | P3-02 | XML 结构与版本研究 | DONE | GPT | Expat 盘点、ElementTree 结构核对及 `xmllint --nonet --noout` 通过，详见 `docs/PDM_FORMAT.md` | 画板单位及其他版本待实机对照 |
-| P3-03 | 原始 XML 表示 | IN_PROGRESS | DeepSeek / GPT | 使用严格 XML 解码，保留原始对象、属性和引用，并输出诊断 | |
-| P3-04 | Model/Package/Table 解析 | TODO | DeepSeek | | |
+| P3-03 | 原始 XML 表示 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/pdm`、`go vet ./internal/pdm` 通过。本地样本解码得到 190 个定义，原始层诊断 0 条 | 支持 UTF-8 XML |
+| P3-04 | Model/Package/Table 解析 | IN_PROGRESS | DeepSeek / GPT | 核对模型、表、包及归属 | |
 | P3-05 | Column/Key/Index/Reference 解析 | TODO | DeepSeek | | |
 | P3-06 | Diagram/Symbol/路径解析 | TODO | DeepSeek | | |
 | P3-07 | 诊断与解析测试 | TODO | DeepSeek | | |

@@ -30,7 +30,9 @@ shasum -a 256 -c .local/phase3/sample.sha256
 
 ## 未覆盖结构与版本范围
 
-- 当前文件没有 Package、Index、Reference、ReferenceSymbol，也没有显式默认值、自增或空注释。嵌套 Package、多 Diagram、空值与缺失值、索引列、外键字段配对、线段和控制点用合成夹具回归。
-- 本阶段输入范围为可识别的 PowerDesigner XML。当前只有一份 16.5 PDM 实测样本，暂无跨版本差异结论。
-- 解析契约中，外键 Join 以成对的主、从表字段记录，索引保留 XML 中的索引列顺序。画板端点以图元 ID 关联，逻辑外键以模型对象 ID 关联。对应 XML 路径由合成夹具覆盖，待真实样本对照。
+- 用户样本没有 Package、Index、Reference、ReferenceSymbol，也没有显式默认值、自增或空注释。嵌套 Package、多 Diagram、空值与缺失值、索引列、外键字段配对、线段和控制点用合成夹具回归。
+- 本机额外只读检查三份公开 XML 导出的结构。12.5.0.2169 与 15.1.0.2850 的样例使用 `a:Mandatory`，16.5.0.3982 的样例使用 `a:Column.Mandatory`。公开样例同时出现 `a:Identity` 与 `a:DefaultValue`。这些是样本间观察到的变化，兼容范围以实际测试为准。[12.5 公开导出](https://github.com/ponxu/blog4j/blob/d9be3eaa3e4f972ec11732ddc3fb238fafb6ec85/doc/core.pdm) · [15.1 公开导出](https://github.com/sosoapi/sosoapi-web/blob/213d470f12e35b092f28db5fbc57281accb34305/doc/sosoapi.pdm) · [16.5 公开导出](https://github.com/yilezhu/Czar.Cms/blob/3b4a2c75d4ddb6104c42416d546299632216c5e5/pdm/Czar.Cms.pdm)
+- 公开样例的 Package 通过 `c:Packages/o:Package` 归属父级，包内同样可有 `c:Tables`、`c:References` 和 `c:PhysicalDiagrams`。索引列通过 `c:Indexes/o:Index/c:IndexColumns/o:IndexColumn/c:Column/o:Column[@Ref]` 取顺序，唯一性使用 `a:Unique`。16.5 样例还出现索引的 `c:LinkedObject`，关联键或外键。
+- 外键在 `c:References/o:Reference`，`c:ParentTable`、`c:ChildTable` 和 `c:ParentKey` 提供端点。`c:Joins/o:ReferenceJoin` 下 `c:Object1/o:Column[@Ref]` 是主端字段，`c:Object2/o:Column[@Ref]` 是从端字段。已对照列的实际归属。15.1 公开样例含指向 `o:Shortcut` 的父端，本阶段保留引用并报告外部对象解析限制。
+- `o:ReferenceSymbol/c:Object/o:Reference[@Ref]` 指向逻辑外键，`c:SourceSymbol`、`c:DestinationSymbol` 指向本画板的 `o:TableSymbol`。可核对的源端对应从表，目标端对应主表。`a:ListOfPoints` 为 `((x1,y1),(x2,y2),...)`，公开样例观察到 2 至 4 个整数点。路径点按原序保存，点是否为折点或曲线控制点由原属性和后续实机研究决定。
 - 本机尚未进行 PowerDesigner 应用内对照。样本统计与人工结构对照以 XML 工具为独立基准。跨版本、画板物理单位及 Gate 1 的应用内对照需要更多样本和 PowerDesigner 实测。
