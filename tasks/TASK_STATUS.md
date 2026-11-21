@@ -4,9 +4,9 @@
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
-| P0-01 | 仓库与环境勘察 | DONE | GPT | `sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
-| P0-02 | Go/MyGo 版本与 API 调研 | IN_PROGRESS | GPT / DeepSeek | 核对 v0.10.0 源码，原生探针开发中 | |
-| P0-03 | 项目骨架与规范文件 | TODO | GPT | | |
+| P0-01 | 仓库与环境勘察 | DONE | GPT | `23ea2fd`，`sh -n`、脚本实跑、忽略规则验证通过，见 `docs/ENVIRONMENT.md` | P3 待真实脱敏 PDM，P9 待隔离 MySQL 8.0 |
+| P0-02 | Go/MyGo 版本与 API 调研 | DONE | GPT / DeepSeek | `cmd/mygo-probe`，macOS Metal 实跑、2× HiDPI、画布输入、系统剪贴板、Gate 0 三档性能和 Windows x64 构建，见 `docs/MYGO_API_VERIFICATION.md` | 文件面板已验证显示和取消，成功选中文件待复核。Windows 桌面待实跑。 |
+| P0-03 | 项目骨架与规范文件 | IN_PROGRESS | GPT | Go 模块、Makefile 和边界文档已建立 | |
 | P1-01 | Native UI 最小窗口 | TODO | DeepSeek | | |
 | P1-02 | Painter/Canvas API 验证 | TODO | DeepSeek | | |
 | P1-03 | 三栏布局原型 | TODO | DeepSeek | | |
