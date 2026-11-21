@@ -64,6 +64,6 @@ Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出�
 | P9-02 | SQL 复制与文件导出 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-02-sql-复制与文件导出)。双语剪贴板与两次保存的全库 1,445 字节一致，单表 944 字节一致，取消无文件，建议名只有一个 `.sql` 后缀 | Windows 原生保存随 P10 |
 | P9-03 | Golden Tests | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-03-golden-tests)。一份 1,317 字节全库脚本与三份单表 SQL，静态逐字节断言、循环、自引用、默认值、转义和索引测试通过 | |
 | P9-04 | MySQL 8.0 集成测试 | DONE | GPT | [实测](../docs/PHASE_9_ACCEPTANCE.md#p9-04-mysql-80-实际执行)。隔离的 MySQL 8.0.46 执行 Golden、原生导出和本地样本，13 表、149 字段、13 主键、68 注释与 XML 一致，另核对索引、默认值、循环外键与动作 | |
-| P10-01 | macOS 验收与打包 | TODO | GPT | | |
+| P10-01 | macOS 验收与打包 | IN_PROGRESS | DeepSeek / GPT | [验收记录](../docs/PHASE_10_ACCEPTANCE.md#p10-01-macos-apple-silicon)。arm64 `.app` 和 ZIP 构建、清单、最低系统版本与 ad hoc 签名校验通过 | 原生流程实测进行中。MyGo 启动加载系统 WebKit，首次 180 秒画布长测未完成 |
 | P10-02 | Windows x64 验收 | TODO | GPT | | |
 | P10-03 | 文档与发布检查 | TODO | GPT | | |
