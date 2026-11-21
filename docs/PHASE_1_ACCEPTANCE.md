@@ -36,4 +36,16 @@ CGO_ENABLED=0 go vet ./cmd/mygo-probe
 - 复用 Phase 0 探针。错开两张模拟表验证实际可见的虚线贝塞尔曲线。确认 `Fill`、`Stroke`、`Line`、`StrokePath`、`Clip`、`Transform`、`TextLayout`，技术证据见 [MyGo API 核对](MYGO_API_VERIFICATION.md)。
 - 在 2× HiDPI 的 2800×1744 截图中观察到圆角节点、网格、曲线及中英数字混排。首帧日志确认硬件加速。用原生 automation 移动视口至 `(2500,2500)`，截图中节点和边消失，网格持续显示，再操作缩放至 118%。原图和裁剪图在 `.out/phase1/`。
 - 目标测试与 vet 通过。新增断言检查曲线端点高度、移出视口后的绘制像素与可见计数，以及连续帧复用同一个 Canvas。Phase 0 的大规模基准仍使用原有线段和几何。
-- `Draw` 随原生 UI 主线程的帧运行，同一帧可能重入绘制回调。`Canvas.Draw` 使用本帧的 Painter 将网格绘入纹理，后续绘制复用 `Bitmap()`。文本排版在回调之前完成，Painter 仅在当前绘制回调内使用。
+- `Draw` 随原生 UI 主线程的帧运行，同一帧可能调用多次。`Canvas.Draw` 使用本帧的 Painter 将网格绘入纹理，后续绘制复用 `Bitmap()`。文本排版在回调之前完成，Painter 仅在当前绘制回调内使用。
+
+## P1-03 三栏原型
+
+- 在 P1-04 验收通过后接入导航、图表画布和详情。画布用 MyGo Painter 绘制网格。两道原生分隔区保持独立尺寸比例，界面文案使用 P1-04 的资源。
+- `go test -count=1 ./internal/ui ./cmd/pdmview` 通过。覆盖双语布局、两条分隔线拖动、键盘调整、语言刷新保留栏宽、最小宽度下的长警告。
+- macOS 原生窗口实测将两条分隔线分别向右和向左移动 42 DIP。切换为英文后两个分隔位置仍相同。将窗口框缩至 800×600 DIP，在该尺寸验证中英文三栏标题和状态提示。内容截图为 1600×1144，窗口装饰占用 28 DIP 高度。原始截图为 `.out/phase1/p1-03-zh.png`、`p1-03-en-min.png` 与 `p1-03-zh-min.png`。
+
+## 阶段检查
+
+- `make check`、`CGO_ENABLED=0 go test -tags e2e -count=1 ./...` 和 `go mod verify` 通过。
+- `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -mod=readonly -o .out/phase1/pdmview-windows-amd64.exe ./cmd/pdmview` 通过。Windows 桌面验收留在 P10-02。
+- Phase 1 的三栏画布用于布局验证。P2 的坐标与交互原型及性能任务尚未启动。

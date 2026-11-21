@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"pdmview/internal/app"
-	"pdmview/internal/i18n"
+	appui "pdmview/internal/ui"
 
 	"github.com/egoist/mygo/ui"
 )
 
 func TestWindowOptions(t *testing.T) {
 	state := app.New(app.NewStore(filepath.Join(t.TempDir(), "PdmView", "preferences.json")), "en-US")
-	opts := windowOptions(state)
+	opts := windowOptions(state, appui.NewWorkspace())
 
 	if opts.Title != appName {
 		t.Fatalf("title = %q, want %q", opts.Title, appName)
@@ -31,23 +31,22 @@ func TestWindowOptions(t *testing.T) {
 	}
 }
 
-func TestMinimumViewShowsLocalizedStatus(t *testing.T) {
+func TestMinimumViewShowsLocalizedWorkspace(t *testing.T) {
 	state := app.New(app.NewStore(filepath.Join(t.TempDir(), "PdmView", "preferences.json")), "en-US")
-	tt := ui.NewTester(view(state), 640, 400)
+	workspace := appui.NewWorkspace()
+	tt := ui.NewTester(appui.View(state, workspace), 800, 600)
 
-	if !tt.HasText("PdmView") || !tt.HasText("Interface language: English") {
+	if !tt.HasText("Interface language: English") ||
+		!tt.HasText("Navigation") || !tt.HasText("Diagram canvas") || !tt.HasText("Details") {
 		t.Fatalf("English minimum view missing; texts=%q", tt.Texts())
 	}
-	if texts := tt.Texts(); len(texts) != 2 {
-		t.Fatalf("view texts = %q, want brand and status", texts)
-	}
 
-	state.SelectLanguage(i18n.ZHCN)
-	tt = ui.NewTester(view(state), 640, 400)
-	if !tt.HasText("当前界面语言：简体中文。语言偏好已保存。") {
+	state.SelectLanguage("zh-CN")
+	tt.Frame()
+	if !tt.HasText("当前界面语言：简体中文。语言偏好已保存。") || !tt.HasText("导航") {
 		t.Fatalf("Chinese status missing; texts=%q", tt.Texts())
 	}
-	if appRootKey == "" || appStatusKey == "" {
+	if appui.RootKey == "" || appui.StatusKey == "" {
 		t.Fatal("stable view keys are empty")
 	}
 }

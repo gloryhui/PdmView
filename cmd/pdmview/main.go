@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"pdmview/internal/app"
-	"pdmview/internal/i18n"
+	appui "pdmview/internal/ui"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -13,26 +13,13 @@ import (
 
 const (
 	appName       = "PdmView"
-	appRootKey    = "pdmview.app.root"
-	appStatusKey  = "pdmview.app.status"
 	defaultWidth  = 1200
 	defaultHeight = 800
 	minWidth      = 800
 	minHeight     = 600
 )
 
-func view(state *app.State) func(*ui.Context) {
-	return func(c *ui.Context) {
-		t := c.Theme()
-		lang := string(state.Locale())
-		ui.Column(c.Key(appRootKey)).Fill().Center().Gap(12).Background(t.Background).Children(func() {
-			ui.Text(c, state.Text(i18n.KeyAppBrand, nil)).FontSize(32).Bold().Lang(lang)
-			ui.Text(c, state.StatusText()).Key(appStatusKey).FontSize(15).TextColor(t.TextMuted).Lang(lang)
-		})
-	}
-}
-
-func windowOptions(state *app.State) mygo.WindowOptions {
+func windowOptions(state *app.State, workspace *appui.Workspace) mygo.WindowOptions {
 	return mygo.WindowOptions{
 		Title:          appName,
 		Width:          defaultWidth,
@@ -40,7 +27,7 @@ func windowOptions(state *app.State) mygo.WindowOptions {
 		UseContentSize: true,
 		MinWidth:       minWidth,
 		MinHeight:      minHeight,
-		Content:        ui.View(view(state)),
+		Content:        ui.View(appui.View(state, workspace)),
 	}
 }
 
@@ -65,6 +52,7 @@ func showMainWindow() {
 		fmt.Fprintln(os.Stderr, "pdmview: preferences:", err)
 	}
 	state := app.New(app.NewStore(path), systemTag)
+	workspace := appui.NewWorkspace()
 
 	var win *mygo.Window
 	var refresh func()
@@ -75,5 +63,5 @@ func showMainWindow() {
 		}
 	}
 	refresh()
-	win = mygo.NewWindow(windowOptions(state))
+	win = mygo.NewWindow(windowOptions(state, workspace))
 }

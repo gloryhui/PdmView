@@ -14,9 +14,12 @@ make env    # 复查机器、构建工具和本地样本元信息
 make fmt    # 格式化 Go 源码
 make check  # 验证格式，运行 go test ./... 和 go vet ./...
 make probe  # 启动 Phase 0 独立原生探针
+CGO_ENABLED=0 go run ./cmd/pdmview  # 启动 Phase 1 原生三栏原型
 ```
 
 `cmd/mygo-probe/` 是技术验证入口，显示两张模拟表。正式应用的目录边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，验证步骤见 [MyGo API 验证](docs/MYGO_API_VERIFICATION.md)，任务进展见 [任务状态](tasks/TASK_STATUS.md)。
+
+三栏原型提供导航、画布和详情区域，可拖动两条分隔线。通过原生菜单「设置 → 语言」/「Settings → Language」即时切换简体中文与英文，选择保存在本机。窗口、语言和布局的实测记录见 [Phase 1 验收](docs/PHASE_1_ACCEPTANCE.md)。
 
 真实样本放在 `.local/fixtures/`。本地日志、运行截图和二进制放在 `.out/`。
 
