@@ -41,7 +41,7 @@ Phase 10 的 macOS 验收与打包已完成，鼠标滚轮双向缩放和指针�
 | P3-07 | 诊断与解析测试 | DONE | DeepSeek / GPT | `make check` 通过。`cmd/pdm-inspect` 本地样本 0 条诊断。31,431,470 字节合成文件实测 1,000 表、50,000 字段，0.30 秒、峰值 RSS 193.5 MiB。截断、未知属性、引用、重复 ID、Unicode、空值、多包多画板和输入上限均有验证 | |
 | P4-01 | Domain Model 冻结 | DONE | GPT | `8f479ce`，ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
 | P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `c8dcfe1`，`MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
-| P4-03 | 原始布局核对 | BLOCKED | DeepSeek / GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。已修正纵轴投影，并按 PDM 保存值还原表图元配色和字段显示。原生合成画板的三个图元验证颜色及 9、3、0 行字段。四份本地 XML 样本用于原始坐标和投影对照 | 截图所用 PDM 的修复后对照、PowerDesigner 应用内关系路径及单位标定待验收 |
+| P4-03 | 原始布局核对 | BLOCKED | DeepSeek / GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。已修正纵轴投影，并按 PDM 保存值还原表图元配色和字段显示。`cd4f06d` 修复缺少展示设置时字段裁减及字号缩放。原生合成画板实测 `21 / 21 / 3 / 0` 行，1.25 倍放大时字形高度从 25–26 像素增至 31–32 像素 | 截图所用 PDM 的修复后对照、PowerDesigner 应用内关系路径及单位标定待验收 |
 | P5-01 | Graph Node/Edge | DONE | DeepSeek / GPT | `bef71cf`，ADR-005。正式场景与合成数据分离，节点和边可按偏移追溯 Diagram、图元、模型对象和原始几何。Graph/PDM 定向测试及 vet 通过 | |
 | P5-02 | World/View/Screen 变换 | DONE | DeepSeek / GPT | `46f42bb`，Graph 定向测试、vet 通过。在 1024 × 768 DIP 视口和 24 DIP 边距下，本地样本完整适应，8/8 图元中心往返通过，原型相机下限会截断全图 | PDM 物理单位标定随 P4-03 保留 |
 | P5-03 | R-Tree/空间查询 | DONE | DeepSeek / GPT | `96f6415`，BVH 支持原子替换场景和点查询，定向测试、并发 race 验证及本地样本线性对照通过。500 节点点查询 298.1 → 33.56 ns，局部视口 8.034 → 1.650 µs，500 节点与 1,000 边索引重建 2.11 ms | 重建在交互查询路径外执行 |
@@ -54,7 +54,7 @@ Phase 10 的 macOS 验收与打包已完成，鼠标滚轮双向缩放和指针�
 | P6-05 | 画布性能验收 | DONE | GPT | [长测报告](../docs/PHASE_6_ACCEPTANCE.md#正式渲染器性能)。macOS Metal 2× 八组 10 秒测试，150 表两组为 60.00 FPS，300 表密集为 60.00 FPS、稀疏两次复测均 60.00 FPS，500 表两组均为 59.99 FPS。`make check`、e2e 标签测试、macOS 构建通过 | 300 表稀疏首测 59.70 FPS。PowerDesigner 应用内对照仍由 P4-03 跟踪 |
 | P7-01 | 主窗口三栏布局 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-01-三栏工作区)。800×600 DIP 中英文五个画布工具完整可见，双向切换保留画板与选中表。定向测试、vet 与格式检查通过 | |
 | P7-02 | 模型树与 Package | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-02-模型树与-package)。两级 Package、折叠保留选择、跨画板和本地样本 13 表逐项通过。定向测试、vet 与格式检查通过 | |
-| P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致，合成复合键与外键顺序、双语及独立滚动通过。定向测试、vet 与格式检查通过 | |
+| P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致。补充双击表属性，原生最小窗口双语、完整 21 行滚动及 657 字节只读 SQL 与复制验证通过 | [其余六个页签延后](../docs/TABLE_PROPERTIES_BACKLOG.md) |
 | P7-04 | 搜索与定位 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-04-搜索与定位)。六种查询、同画板回中、跨画板及双语无结果通过。千表模型宽泛查询首屏构建 23 行，连续编辑至最新结果中位数 34.1 ms | |
 | P7-05 | 完整信息复制 | DONE | DeepSeek / GPT | [剪贴板验收](../docs/PHASE_7_ACCEPTANCE.md#p7-05-完整信息复制)。详情滚动后仍可操作，双语 3,058 字节一致，原剪贴板恢复并逐项核对通过。注入失败、全量检查、e2e 标签测试和 macOS 构建通过 | 单表 SQL 随 Phase 8/9 验收 |
 | P8-01 | MySQL 类型映射 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-01-类型映射和未知类型诊断)。本地 149/149 字段一致，18 种源写法归一为 17 种输出。未知类型阻断、参数冲突测试与 vet 通过 | |

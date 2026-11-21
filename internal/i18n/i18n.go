@@ -78,6 +78,14 @@ const (
 	KeyCopySucceeded     Key = "copy.succeeded"
 	KeyCopyFailed        Key = "copy.failed"
 
+	KeyTablePropertiesTitle     Key = "table_properties.title"
+	KeyTablePropertiesGeneral   Key = "table_properties.general"
+	KeyTablePropertiesPreview   Key = "table_properties.preview"
+	KeyTablePropertiesClose     Key = "table_properties.close"
+	KeyTablePropertiesName      Key = "table_properties.name"
+	KeyTablePropertiesFlags     Key = "table_properties.flags"
+	KeyTablePropertiesMandatory Key = "table_properties.mandatory"
+
 	KeyDatabaseSQL              Key = "database.sql"
 	KeyPreviewBack              Key = "preview.back"
 	KeyPreviewLoading           Key = "preview.loading"
@@ -184,6 +192,14 @@ var resources = map[Locale]map[Key]message{
 		KeyCopySucceeded:     {text: "Copied"},
 		KeyCopyFailed:        {text: "Copy failed"},
 
+		KeyTablePropertiesTitle:     {text: "Table properties"},
+		KeyTablePropertiesGeneral:   {text: "General"},
+		KeyTablePropertiesPreview:   {text: "Preview"},
+		KeyTablePropertiesClose:     {text: "Close"},
+		KeyTablePropertiesName:      {text: "Name"},
+		KeyTablePropertiesFlags:     {text: "Flags"},
+		KeyTablePropertiesMandatory: {text: "Mandatory"},
+
 		KeyDatabaseSQL:              {text: "Database SQL"},
 		KeyPreviewBack:              {text: "Back"},
 		KeyPreviewLoading:           {text: "Generating database SQL…"},
@@ -282,6 +298,14 @@ var resources = map[Locale]map[Key]message{
 		KeyCopyTable:         {text: "复制表信息"},
 		KeyCopySucceeded:     {text: "已复制"},
 		KeyCopyFailed:        {text: "复制失败"},
+
+		KeyTablePropertiesTitle:     {text: "表属性"},
+		KeyTablePropertiesGeneral:   {text: "常规"},
+		KeyTablePropertiesPreview:   {text: "预览"},
+		KeyTablePropertiesClose:     {text: "关闭"},
+		KeyTablePropertiesName:      {text: "名称"},
+		KeyTablePropertiesFlags:     {text: "标记"},
+		KeyTablePropertiesMandatory: {text: "必填"},
 
 		KeyDatabaseSQL:              {text: "数据库 SQL"},
 		KeyPreviewBack:              {text: "返回"},

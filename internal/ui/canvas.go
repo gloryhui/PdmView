@@ -47,6 +47,7 @@ type canvasView struct {
 	prepareAfterFit  bool
 	cameraTween      *cameraTween
 	onTableSelection func(string)
+	onTableOpen      func(string)
 }
 
 func newCanvasView() *canvasView {
@@ -258,10 +259,16 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		}
 		wasDragging := view.dragging
 		if !event.Canceled && !wasDragging {
-			view.selection = view.hitTest(pointer)
+			hit := view.hitTest(pointer)
+			view.selection = hit
 			view.hovered = view.selection
 			view.prepareVisible()
 			view.reportTableSelection()
+			if event.Clicks == 2 && view.onTableOpen != nil {
+				if tableID := view.tableID(hit); tableID != "" {
+					view.onTableOpen(tableID)
+				}
+			}
 		}
 		view.pointerDown, view.dragging = false, false
 		if wasDragging {
@@ -348,13 +355,17 @@ func (view *canvasView) reportTableSelection() {
 	if view.onTableSelection == nil {
 		return
 	}
-	tableID := ""
-	if view.selection.Kind == graph.HitNode && !view.demo {
-		if source, ok := view.diagram.NodeSource(view.selection.Index); ok {
-			tableID = source.TableID
-		}
+	view.onTableSelection(view.tableID(view.selection))
+}
+
+func (view *canvasView) tableID(hit graph.Hit) string {
+	if view.demo || hit.Kind != graph.HitNode {
+		return ""
 	}
-	view.onTableSelection(tableID)
+	if source, ok := view.diagram.NodeSource(hit.Index); ok {
+		return source.TableID
+	}
+	return ""
 }
 
 func (view *canvasView) hitTest(pointer graph.Point) graph.Hit {

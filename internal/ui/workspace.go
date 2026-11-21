@@ -63,6 +63,7 @@ type Workspace struct {
 	detailsScroll        ui.ScrollState
 	tableDetail          TableDetail
 	hasTableDetail       bool
+	tableProperties      tablePropertiesState
 	unplacedTable        bool
 	requestedTableID     string
 	pendingTableID       string
@@ -103,6 +104,7 @@ func NewWorkspace() *Workspace {
 	workspace.outline.List.Selected = &workspace.navSelected
 	workspace.outline.List.Selection = &workspace.navChosen
 	workspace.canvas.onTableSelection = workspace.syncCanvasTableSelection
+	workspace.canvas.onTableOpen = workspace.openTableProperties
 	return workspace
 }
 
@@ -125,6 +127,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
 	w.cancelPendingSwitch()
+	w.tableProperties = tablePropertiesState{}
 	w.invalidateDatabasePreview()
 	w.resetSearch()
 	w.clearCopyFeedback()
@@ -171,6 +174,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.selectedTableName = ""
 	w.tableDetail = TableDetail{}
 	w.hasTableDetail = false
+	w.tableProperties = tablePropertiesState{}
 	w.unplacedTable = false
 	w.requestedTableID = ""
 	w.pendingTableID = ""
@@ -277,6 +281,7 @@ func (w *Workspace) PublishPreparedBoard(token uint64, prepared PreparedBoard) b
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
 	w.pendingSmoothTable = false
+	w.tableProperties = tablePropertiesState{}
 	w.canvas.activatePrepared(prepared)
 	if locateTableID != "" {
 		if offset, ok := w.canvas.tableNodeOffset(locateTableID); ok {
@@ -635,6 +640,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 			ui.Box(c).FillWidth().Height(1).Background(t.Border)
 			statusBar(c, state, t, lang)
 		})
+		workspace.tablePropertiesView(c, state, t, lang)
 	}
 }
 
