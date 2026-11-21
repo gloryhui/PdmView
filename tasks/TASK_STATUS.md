@@ -21,8 +21,8 @@ Phase 0、Phase 1 与 Phase 2 已于 2026-11-21 验收完成。Phase 3 按本地
 | P3-01 | 真实 PDM 样本盘点 | DONE | GPT | 本地只读盘点及 SHA-256 复核通过。132,997 字节、UTF-8、16.5.0.3982、1 画板，详见 `docs/PDM_FORMAT.md` | 仅一份真实样本 |
 | P3-02 | XML 结构与版本研究 | DONE | GPT | Expat 盘点、ElementTree 结构核对及 `xmllint --nonet --noout` 通过，详见 `docs/PDM_FORMAT.md` | 画板单位及其他版本待实机对照 |
 | P3-03 | 原始 XML 表示 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/pdm`、`go vet ./internal/pdm` 通过。本地样本解码得到 190 个定义，原始层诊断 0 条 | 支持 UTF-8 XML |
-| P3-04 | Model/Package/Table 解析 | IN_PROGRESS | DeepSeek / GPT | 核对模型、表、包及归属 | |
-| P3-05 | Column/Key/Index/Reference 解析 | TODO | DeepSeek | | |
+| P3-04 | Model/Package/Table 解析 | DONE | DeepSeek / GPT | 包级测试、vet 通过。本地核对 1 模型、13 表、0 Package，DBMS、表顺序、Name/Code 和归属与 XML 一致。嵌套 Package 合成测试通过 | PowerDesigner 应用内对照待验证 |
+| P3-05 | Column/Key/Index/Reference 解析 | IN_PROGRESS | DeepSeek / GPT | 按表与字段归属校验键、索引和外键字段配对 | |
 | P3-06 | Diagram/Symbol/路径解析 | TODO | DeepSeek | | |
 | P3-07 | 诊断与解析测试 | TODO | DeepSeek | | |
 | P4-01 | Domain Model 冻结 | TODO | GPT | | |
