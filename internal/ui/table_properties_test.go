@@ -87,11 +87,12 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 
 	tester := ui.NewTester(workspace.TablePropertiesView(state), 800, 600)
 	tester.Frame()
-	for _, text := range []string{"General", "Columns", "Indexes", "Keys", "Preview", "Close", "Orders", "Order records", "Sales"} {
+	for _, text := range []string{"General", "Columns", "Indexes", "Keys", "Preview", "Close", "Orders"} {
 		if !tester.HasText(text) {
-			t.Fatalf("missing modal text %q: %q", text, tester.Texts())
+			t.Fatalf("missing window text %q: %q", text, tester.Texts())
 		}
 	}
+	assertTablePropertyValues(t, tester, "Orders", "orders", "Order records", "Sales")
 	if workspace.tableProperties.tab != 0 || !workspace.tableProperties.hasDetail ||
 		workspace.tableProperties.detail.ID != "orders" {
 		t.Fatalf("initial modal state = %+v", workspace.tableProperties)
@@ -107,50 +108,53 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 	if workspace.tableProperties.tab != 1 || len(workspace.tableProperties.detail.Columns) != 21 {
 		t.Fatalf("columns state = %+v", workspace.tableProperties)
 	}
-	if !tester.HasText("Column 01") || !tester.HasText("COL_01") {
-		t.Fatalf("first column missing: %q", tester.Texts())
+	assertTablePropertyValues(t, tester, "Column 01", "COL_01")
+	workspace.tableProperties.draft.Columns[0].Name = "Draft column"
+	tester.Frame()
+	assertTablePropertyValues(t, tester, "Draft column")
+	originalTable := workspace.detailIndex.tables["orders"]
+	if originalTable.Columns[0].Name != "Column 01" {
+		t.Fatalf("draft write changed source column: %q", originalTable.Columns[0].Name)
 	}
-	listBounds, ok := modalListBounds(tester)
+	listBounds, ok := propertiesListBounds(tester)
 	if !ok {
 		t.Fatal("columns list not found")
 	}
 	tester.Scroll(listBounds.X+listBounds.W/2, listBounds.Y+listBounds.H/2, 0, 2000)
 	tester.Frame()
-	if !tester.HasText("Column 21") {
-		t.Fatalf("last column missing after scrolling: %q", tester.Texts())
-	}
+	assertTablePropertyValues(t, tester, "Column 21")
 
 	if err := tester.Click("Indexes"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	for _, text := range []string{"Index Orders", "Unique", "DESC", "ASC"} {
-		if !tester.HasText(text) {
-			t.Errorf("missing index text %q: %q", text, tester.Texts())
-		}
+	assertTablePropertyValues(t, tester, "Index Orders", "DESC", "ASC")
+	if check, ok := tester.AccessByRole(ui.RoleCheckBox, "Unique"); !ok || !check.Checked {
+		t.Fatalf("unique index check = %+v, %v", check, ok)
 	}
 	if err := tester.Click("Keys"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	for _, text := range []string{"PK Orders", "Primary", "Column 01"} {
-		if !tester.HasText(text) {
-			t.Errorf("missing key text %q: %q", text, tester.Texts())
-		}
+	assertTablePropertyValues(t, tester, "PK Orders", "Column 01")
+	if check, ok := tester.AccessByRole(ui.RoleCheckBox, "Primary"); !ok || !check.Checked {
+		t.Fatalf("primary key check = %+v, %v", check, ok)
 	}
 
 	if err := tester.Click("Preview"); err != nil {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	table := workspace.detailIndex.tables["orders"]
-	wantSQL := sqlgen.GenerateTable(*table).SQL
+	wantSQL := sqlgen.GenerateTable(*originalTable).SQL
 	if !workspace.tableProperties.previewLoaded || workspace.tableProperties.previewEditor == nil ||
-		!workspace.tableProperties.previewEditor.ReadOnly ||
+		workspace.tableProperties.previewEditor.ReadOnly ||
 		workspace.tableProperties.previewEditor.Buffer.String() != wantSQL {
 		t.Fatalf("preview state = %+v", workspace.tableProperties)
 	}
 	editor := workspace.tableProperties.previewEditor
+	const draftSQL = "-- SQL draft\nSELECT 1;"
+	editor.Buffer.Set(draftSQL)
+	tester.Frame()
 	var copied string
 	workspace.SetClipboardWriter(func(text string) error {
 		copied = text
@@ -160,7 +164,7 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	if copied != wantSQL || !tester.HasText("SQL copied") {
+	if copied != draftSQL || !tester.HasText("SQL copied") {
 		t.Fatalf("preview copy = %q, texts %q", copied, tester.Texts())
 	}
 
@@ -172,8 +176,8 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 		}
 	}
 	if workspace.tableProperties.previewEditor != editor ||
-		workspace.tableProperties.previewEditor.Buffer.String() != wantSQL {
-		t.Fatal("locale change regenerated the table SQL")
+		workspace.tableProperties.previewEditor.Buffer.String() != draftSQL {
+		t.Fatal("locale change reset the SQL draft")
 	}
 	if got := workspace.TablePropertiesTitle(state); got != "表属性 — Orders" {
 		t.Fatalf("Chinese title = %q", got)
@@ -228,7 +232,7 @@ func TestTablePropertiesFitsMinimumContentHeight(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	listBounds, ok := modalListBounds(tester)
+	listBounds, ok := propertiesListBounds(tester)
 	if !ok || listBounds.X < 0 || listBounds.Y < 0 ||
 		listBounds.X+listBounds.W > 800 || listBounds.Y+listBounds.H > 572 {
 		t.Fatalf("columns list outside 800x572: %+v, %v", listBounds, ok)
@@ -339,7 +343,22 @@ func tablePropertiesDocument() *pdm.Document {
 	}}
 }
 
-func modalListBounds(tester *ui.Tester) (ui.Rect, bool) {
+func assertTablePropertyValues(t *testing.T, tester *ui.Tester, values ...string) {
+	t.Helper()
+	inputs := make(map[string]bool)
+	for _, info := range tester.AccessAll() {
+		if info.Role == ui.RoleTextField && !info.ReadOnly {
+			inputs[info.Value] = true
+		}
+	}
+	for _, value := range values {
+		if !inputs[value] {
+			t.Fatalf("editable value %q missing in %v", value, inputs)
+		}
+	}
+}
+
+func propertiesListBounds(tester *ui.Tester) (ui.Rect, bool) {
 	best := ui.Rect{}
 	for _, info := range tester.AccessAll() {
 		if info.Role == ui.RoleList && info.Bounds.W > best.W {

@@ -54,7 +54,7 @@ Phase 10 的 macOS 验收与打包已完成，鼠标滚轮双向缩放和指针�
 | P6-05 | 画布性能验收 | DONE | GPT | [长测报告](../docs/PHASE_6_ACCEPTANCE.md#正式渲染器性能)。macOS Metal 2× 八组 10 秒测试，150 表两组为 60.00 FPS，300 表密集为 60.00 FPS、稀疏两次复测均 60.00 FPS，500 表两组均为 59.99 FPS。`make check`、e2e 标签测试、macOS 构建通过 | 300 表稀疏首测 59.70 FPS。PowerDesigner 应用内对照仍由 P4-03 跟踪 |
 | P7-01 | 主窗口三栏布局 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-01-三栏工作区)。800×600 DIP 中英文五个画布工具完整可见，双向切换保留画板与选中表。定向测试、vet 与格式检查通过 | |
 | P7-02 | 模型树与 Package | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-02-模型树与-package)。两级 Package、折叠保留选择、跨画板和本地样本 13 表逐项通过。定向测试、vet 与格式检查通过 | |
-| P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致。补充双击表属性，原生最小窗口双语、完整 21 行滚动及 657 字节只读 SQL 与复制验证通过 | [其余六个页签延后](../docs/TABLE_PROPERTIES_BACKLOG.md) |
+| P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致。`4e0f976` 增加可调整大小的原生表属性窗口，五页草稿编辑、复制、双语切换、640 DIP 下的横向滚动及第 21 行编辑通过 | [其余六个页签延后](../docs/TABLE_PROPERTIES_BACKLOG.md) |
 | P7-04 | 搜索与定位 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-04-搜索与定位)。六种查询、同画板回中、跨画板及双语无结果通过。千表模型宽泛查询首屏构建 23 行，连续编辑至最新结果中位数 34.1 ms | |
 | P7-05 | 完整信息复制 | DONE | DeepSeek / GPT | [剪贴板验收](../docs/PHASE_7_ACCEPTANCE.md#p7-05-完整信息复制)。详情滚动后仍可操作，双语 3,058 字节一致，原剪贴板恢复并逐项核对通过。注入失败、全量检查、e2e 标签测试和 macOS 构建通过 | 单表 SQL 随 Phase 8/9 验收 |
 | P8-01 | MySQL 类型映射 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-01-类型映射和未知类型诊断)。本地 149/149 字段一致，18 种源写法归一为 17 种输出。未知类型阻断、参数冲突测试与 vet 通过 | |

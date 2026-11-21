@@ -83,7 +83,6 @@ const (
 	KeyTablePropertiesPreview   Key = "table_properties.preview"
 	KeyTablePropertiesClose     Key = "table_properties.close"
 	KeyTablePropertiesName      Key = "table_properties.name"
-	KeyTablePropertiesFlags     Key = "table_properties.flags"
 	KeyTablePropertiesMandatory Key = "table_properties.mandatory"
 
 	KeyDatabaseSQL              Key = "database.sql"
@@ -197,7 +196,6 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesPreview:   {text: "Preview"},
 		KeyTablePropertiesClose:     {text: "Close"},
 		KeyTablePropertiesName:      {text: "Name"},
-		KeyTablePropertiesFlags:     {text: "Flags"},
 		KeyTablePropertiesMandatory: {text: "Mandatory"},
 
 		KeyDatabaseSQL:              {text: "Database SQL"},
@@ -304,7 +302,6 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesPreview:   {text: "预览"},
 		KeyTablePropertiesClose:     {text: "关闭"},
 		KeyTablePropertiesName:      {text: "名称"},
-		KeyTablePropertiesFlags:     {text: "标记"},
 		KeyTablePropertiesMandatory: {text: "必填"},
 
 		KeyDatabaseSQL:              {text: "数据库 SQL"},

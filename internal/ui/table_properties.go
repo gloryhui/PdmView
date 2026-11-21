@@ -2,7 +2,6 @@ package appui
 
 import (
 	"strconv"
-	"strings"
 
 	"pdmview/internal/app"
 	"pdmview/internal/i18n"
@@ -28,6 +27,7 @@ const (
 	TablePropertiesCopyStatusKey  = "pdmview.table-properties.preview.status"
 	TablePropertiesDiagnosticsKey = "pdmview.table-properties.preview.diagnostics"
 	TablePropertiesCloseKey       = "pdmview.table-properties.close"
+	tablePropertiesPadding        = 12
 )
 
 func TablePropertiesTabKey(index int) string {
@@ -38,20 +38,40 @@ func TablePropertiesColumnKey(id string) string {
 	return "pdmview.table-properties.column." + id
 }
 
+func TablePropertiesColumnFieldKey(id, field string) string {
+	return TablePropertiesColumnKey(id) + "." + field
+}
+
 func TablePropertiesIndexKey(id string) string {
 	return "pdmview.table-properties.index." + id
+}
+
+func TablePropertiesIndexFieldKey(id, field string) string {
+	return TablePropertiesIndexKey(id) + "." + field
 }
 
 func TablePropertiesIndexMemberKey(id string, ordinal int) string {
 	return TablePropertiesIndexKey(id) + ".member." + strconv.Itoa(ordinal)
 }
 
+func TablePropertiesIndexMemberFieldKey(id string, ordinal int, field string) string {
+	return TablePropertiesIndexMemberKey(id, ordinal) + "." + field
+}
+
 func TablePropertiesKeyKey(id string) string {
 	return "pdmview.table-properties.key." + id
 }
 
+func TablePropertiesKeyFieldKey(id, field string) string {
+	return TablePropertiesKeyKey(id) + "." + field
+}
+
 func TablePropertiesKeyMemberKey(id string, ordinal int) string {
 	return TablePropertiesKeyKey(id) + ".member." + strconv.Itoa(ordinal)
+}
+
+func TablePropertiesKeyMemberFieldKey(id string, ordinal int, field string) string {
+	return TablePropertiesKeyMemberKey(id, ordinal) + "." + field
 }
 
 type tablePropertiesState struct {
@@ -59,6 +79,7 @@ type tablePropertiesState struct {
 	tableID           string
 	detail            TableDetail
 	hasDetail         bool
+	draft             tablePropertiesDraft
 	tab               int
 	generalScroll     ui.ScrollState
 	columnsList       ui.ListState
@@ -71,6 +92,130 @@ type tablePropertiesState struct {
 	diagnosticsScroll ui.ScrollState
 	copyFeedback      copyFeedback
 	copyToken         uint64
+	copiedVersion     uint64
+	copyVersion       uint64
+}
+
+type tablePropertiesDraft struct {
+	General tableGeneralDraft
+	Columns []tableColumnDraft
+	Indexes []tableIndexDraft
+	Keys    []tableKeyDraft
+}
+
+type tableGeneralDraft struct {
+	Name           string
+	Code           string
+	Comment        string
+	Package        string
+	PackagePresent bool
+}
+
+type tableColumnDraft struct {
+	ID         string
+	Name       string
+	Code       string
+	Comment    string
+	DataType   string
+	Length     string
+	Precision  string
+	PrimaryKey bool
+	ForeignKey bool
+	Mandatory  ui.CheckState
+}
+
+type tableIndexDraft struct {
+	ID      string
+	Name    string
+	Code    string
+	Unique  ui.CheckState
+	Members []tableMemberDraft
+}
+
+type tableKeyDraft struct {
+	ID      string
+	Name    string
+	Code    string
+	Primary bool
+	Members []tableMemberDraft
+}
+
+type tableMemberDraft struct {
+	Name string
+	Sort string
+}
+
+func newTablePropertiesDraft(detail TableDetail) tablePropertiesDraft {
+	draft := tablePropertiesDraft{
+		General: tableGeneralDraft{
+			Name:    detail.Name,
+			Code:    detail.Code,
+			Comment: detail.Comment.Value,
+			Package: packagePathText(detail.PackagePath),
+		},
+	}
+	draft.General.PackagePresent = len(detail.PackagePath) > 0
+	draft.Columns = make([]tableColumnDraft, len(detail.Columns))
+	for offset, column := range detail.Columns {
+		mandatory := ui.CheckMixed
+		if column.Nullable != nil {
+			if *column.Nullable {
+				mandatory = ui.CheckOff
+			} else {
+				mandatory = ui.CheckOn
+			}
+		}
+		draft.Columns[offset] = tableColumnDraft{
+			ID:         column.ID,
+			Name:       column.Name,
+			Code:       column.Code,
+			Comment:    column.Comment.Value,
+			DataType:   column.DataType.Value,
+			Length:     column.Length.Value,
+			Precision:  column.Precision.Value,
+			PrimaryKey: column.PrimaryKey,
+			ForeignKey: column.ForeignKey,
+			Mandatory:  mandatory,
+		}
+	}
+	draft.Indexes = make([]tableIndexDraft, len(detail.Indexes))
+	for offset, index := range detail.Indexes {
+		unique := ui.CheckMixed
+		if index.Unique != nil {
+			if *index.Unique {
+				unique = ui.CheckOn
+			} else {
+				unique = ui.CheckOff
+			}
+		}
+		draft.Indexes[offset] = tableIndexDraft{
+			ID:     index.ID,
+			Name:   index.Name,
+			Code:   index.Code,
+			Unique: unique,
+		}
+		for _, member := range index.Columns {
+			draft.Indexes[offset].Members = append(draft.Indexes[offset].Members, tableMemberDraft{
+				Name: firstNonEmpty(member.Column.Name, member.Column.Code, member.Column.ID),
+				Sort: member.SortOrder.Value,
+			})
+		}
+	}
+	draft.Keys = make([]tableKeyDraft, len(detail.Keys))
+	for offset, key := range detail.Keys {
+		draft.Keys[offset] = tableKeyDraft{
+			ID:      key.ID,
+			Name:    key.Name,
+			Code:    key.Code,
+			Primary: key.Primary,
+		}
+		for _, member := range key.Columns {
+			draft.Keys[offset].Members = append(draft.Keys[offset].Members, tableMemberDraft{
+				Name: firstNonEmpty(member.Name, member.Code, member.ID),
+			})
+		}
+	}
+	return draft
 }
 
 func (w *Workspace) requestTableProperties(tableID string) {
@@ -97,6 +242,7 @@ func (w *Workspace) OpenTableProperties(tableID string) bool {
 	}
 	w.tableProperties.detail = detail
 	w.tableProperties.hasDetail = true
+	w.tableProperties.draft = newTablePropertiesDraft(detail)
 	w.tableProperties.open = true
 	w.notifyChanged()
 	return true
@@ -158,7 +304,7 @@ func (w *Workspace) renderTableProperties(
 ) {
 	title := firstNonEmpty(detail.Name, detail.Code, detail.ID, state.Text(i18n.KeyTablePropertiesTitle, nil))
 	ui.Column(c.Key(TablePropertiesRootKey)).Fill().Children(func() {
-		ui.Column(c.Key(TablePropertiesContentKey)).Fill().Gap(8).Children(func() {
+		ui.Column(c.Key(TablePropertiesContentKey)).Fill().Padding(tablePropertiesPadding).Gap(8).Children(func() {
 			ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
 					TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
@@ -191,13 +337,13 @@ func (w *Workspace) renderTableProperties(
 			ui.Column(c).Grow(1).FillWidth().Children(func() {
 				switch w.tableProperties.tab {
 				case 0:
-					w.tablePropertiesGeneral(c, state, theme, lang, detail)
+					w.tablePropertiesGeneral(c, state, theme, lang)
 				case 1:
-					w.tablePropertiesColumns(c, state, theme, lang, detail)
+					w.tablePropertiesColumns(c, state, theme, lang)
 				case 2:
-					w.tablePropertiesIndexes(c, state, theme, lang, detail)
+					w.tablePropertiesIndexes(c, state, theme, lang)
 				case 3:
-					w.tablePropertiesKeys(c, state, theme, lang, detail)
+					w.tablePropertiesKeys(c, state, theme, lang)
 				case 4:
 					w.tablePropertiesPreview(c, state, theme, lang, detail)
 				}
@@ -211,20 +357,20 @@ func (w *Workspace) tablePropertiesGeneral(
 	state *app.State,
 	theme *ui.Theme,
 	lang string,
-	detail TableDetail,
 ) {
+	draft := &w.tableProperties.draft.General
 	ui.Scroll(c.Key(TablePropertiesGeneralScroll)).TrackScroll(&w.tableProperties.generalScroll).
 		Grow(1).FillWidth().Children(func() {
 		ui.Column(c.Key(TablePropertiesGeneralKey)).FillWidth().Gap(8).Padding(4).Children(func() {
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesGeneralKey+".name",
-				state.Text(i18n.KeyTablePropertiesName, nil), valueOrDash(detail.Name))
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesGeneralKey+".code",
-				state.Text(i18n.KeyDetailCode, nil), valueOrDash(detail.Code))
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesGeneralKey+".comment",
-				state.Text(i18n.KeyDetailComment, nil), optionalValue(detail.Comment))
-			if path := packagePathText(detail.PackagePath); path != "" {
-				tablePropertiesProperty(c, state, theme, lang, TablePropertiesGeneralKey+".package",
-					state.Text(i18n.KeyDetailPackage, nil), path)
+			tablePropertiesLabeledInput(c, theme, lang,
+				TablePropertiesGeneralKey+".name", state.Text(i18n.KeyTablePropertiesName, nil), &draft.Name)
+			tablePropertiesLabeledInput(c, theme, lang,
+				TablePropertiesGeneralKey+".code", state.Text(i18n.KeyDetailCode, nil), &draft.Code)
+			tablePropertiesLabeledArea(c, theme, lang,
+				TablePropertiesGeneralKey+".comment", state.Text(i18n.KeyDetailComment, nil), &draft.Comment)
+			if draft.PackagePresent {
+				tablePropertiesLabeledInput(c, theme, lang,
+					TablePropertiesGeneralKey+".package", state.Text(i18n.KeyDetailPackage, nil), &draft.Package)
 			}
 		})
 	})
@@ -235,44 +381,89 @@ func (w *Workspace) tablePropertiesColumns(
 	state *app.State,
 	theme *ui.Theme,
 	lang string,
-	detail TableDetail,
 ) {
 	const (
-		nameWidth      = float32(140)
-		codeWidth      = float32(100)
-		commentWidth   = float32(150)
-		typeWidth      = float32(100)
-		lengthWidth    = float32(50)
-		precisionWidth = float32(60)
-		flagsWidth     = float32(80)
+		minNameWidth    = float32(130)
+		minCodeWidth    = float32(110)
+		minCommentWidth = float32(160)
+		minTypeWidth    = float32(90)
+		lengthWidth     = float32(50)
+		precisionWidth  = float32(60)
+		keyWidth        = float32(45)
+		mandatoryWidth  = float32(80)
+		flagsWidth      = 2*keyWidth + mandatoryWidth
+		minWidth        = minNameWidth + minCodeWidth + minCommentWidth + minTypeWidth +
+			lengthWidth + precisionWidth + flagsWidth + 6*4 + 8
 	)
+	available, _ := c.Size()
+	extra := max(0, available-2*tablePropertiesPadding-12-minWidth)
+	nameWidth, codeWidth := minNameWidth+extra*0.25, minCodeWidth+extra*0.25
+	commentWidth, typeWidth := minCommentWidth+extra*0.3, minTypeWidth+extra*0.2
+	totalWidth := minWidth + extra
+	primary := state.Text(i18n.KeyDetailPK, nil)
+	foreign := state.Text(i18n.KeyDetailFK, nil)
+	mandatory := state.Text(i18n.KeyTablePropertiesMandatory, nil)
 	header := func(label string, width float32) {
 		ui.Text(c, label).Width(width).Shrink(0).SingleLine().FontSize(10).
 			TextColor(theme.TextMuted).Lang(lang)
 	}
-	ui.Row(c).FillWidth().Height(24).Padding(1, 4).Gap(4).Background(theme.Surface).Children(func() {
+	flagCell := func(width float32, build func()) {
+		ui.Row(c).Width(width).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).Children(build)
+	}
+	head := ui.Row(c).Width(totalWidth).Height(24).Clip().Padding(1, 4).Gap(4).
+		Background(theme.Surface).Children(func() {
 		header(state.Text(i18n.KeyTablePropertiesName, nil), nameWidth)
 		header(state.Text(i18n.KeyDetailCode, nil), codeWidth)
 		header(state.Text(i18n.KeyDetailComment, nil), commentWidth)
 		header(state.Text(i18n.KeyDetailType, nil), typeWidth)
 		header(state.Text(i18n.KeyDetailLength, nil), lengthWidth)
 		header(state.Text(i18n.KeyDetailPrecision, nil), precisionWidth)
-		header(state.Text(i18n.KeyTablePropertiesFlags, nil), flagsWidth)
-	})
-	w.tableProperties.columnsList.Key = func(row int) any { return detail.Columns[row].ID }
-	ui.List(c.Key(TablePropertiesColumnsKey), &w.tableProperties.columnsList, len(detail.Columns), func(row int) {
-		column := detail.Columns[row]
-		c.Key(TablePropertiesColumnKey(column.ID))
-		ui.Row(c).FillWidth().Height(26).Padding(1, 4).Gap(4).Children(func() {
-			tablePropertiesCell(c, valueOrDash(column.Name), nameWidth, lang)
-			tablePropertiesCell(c, valueOrDash(column.Code), codeWidth, lang)
-			tablePropertiesCell(c, optionalValue(column.Comment), commentWidth, lang)
-			tablePropertiesCell(c, optionalValue(column.DataType), typeWidth, lang)
-			tablePropertiesCell(c, optionalValue(column.Length), lengthWidth, lang)
-			tablePropertiesCell(c, optionalValue(column.Precision), precisionWidth, lang)
-			tablePropertiesCell(c, tablePropertiesFlags(state, column), flagsWidth, lang)
+		ui.Row(c).Width(flagsWidth).Shrink(0).Children(func() {
+			for _, flag := range []struct {
+				label string
+				width float32
+			}{{primary, keyWidth}, {foreign, keyWidth}, {mandatory, mandatoryWidth}} {
+				flagCell(flag.width, func() {
+					ui.Text(c, flag.label).SingleLine().FontSize(10).TextColor(theme.TextMuted).Lang(lang)
+				})
+			}
 		})
-	}).Grow(1).FillWidth()
+	})
+	w.tableProperties.columnsList.Key = func(row int) any { return w.tableProperties.draft.Columns[row].ID }
+	list := ui.List(c.Key(TablePropertiesColumnsKey), &w.tableProperties.columnsList,
+		len(w.tableProperties.draft.Columns), func(row int) {
+			column := &w.tableProperties.draft.Columns[row]
+			c.Key(TablePropertiesColumnKey(column.ID))
+			ui.Row(c).Width(totalWidth).Shrink(0).Height(32).Padding(1, 4).Gap(4).Children(func() {
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "name"),
+					state.Text(i18n.KeyTablePropertiesName, nil), nameWidth, &column.Name, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "code"),
+					state.Text(i18n.KeyDetailCode, nil), codeWidth, &column.Code, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "comment"),
+					state.Text(i18n.KeyDetailComment, nil), commentWidth, &column.Comment, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "type"),
+					state.Text(i18n.KeyDetailType, nil), typeWidth, &column.DataType, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "length"),
+					state.Text(i18n.KeyDetailLength, nil), lengthWidth, &column.Length, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "precision"),
+					state.Text(i18n.KeyDetailPrecision, nil), precisionWidth, &column.Precision, lang)
+				ui.Row(c).Width(flagsWidth).Shrink(0).Children(func() {
+					flagCell(keyWidth, func() {
+						ui.Checkbox(c.Key(TablePropertiesColumnFieldKey(column.ID, "pk")), &column.PrimaryKey, "").
+							Label(primary).Lang(lang)
+					})
+					flagCell(keyWidth, func() {
+						ui.Checkbox(c.Key(TablePropertiesColumnFieldKey(column.ID, "fk")), &column.ForeignKey, "").
+							Label(foreign).Lang(lang)
+					})
+					flagCell(mandatoryWidth, func() {
+						ui.CheckboxState(c.Key(TablePropertiesColumnFieldKey(column.ID, "mandatory")), &column.Mandatory, "").
+							Label(mandatory).Lang(lang)
+					})
+				})
+			})
+		}).RowWidth(totalWidth).Grow(1).FillWidth()
+	head.ScrollWith(list)
 }
 
 func (w *Workspace) tablePropertiesIndexes(
@@ -280,30 +471,37 @@ func (w *Workspace) tablePropertiesIndexes(
 	state *app.State,
 	theme *ui.Theme,
 	lang string,
-	detail TableDetail,
 ) {
-	w.tableProperties.indexesList.Key = func(row int) any { return detail.Indexes[row].ID }
-	ui.List(c.Key(TablePropertiesIndexesKey), &w.tableProperties.indexesList, len(detail.Indexes), func(row int) {
-		index := detail.Indexes[row]
-		id := detailID(index.ID, row)
-		c.Key(TablePropertiesIndexKey(id))
-		ui.Column(c).FillWidth().Padding(4, 6).Gap(2).Children(func() {
-			ui.Text(c, firstNonEmpty(index.Name, index.Code, index.ID, "—")).
-				FontSize(12).Bold().TextColor(theme.Text).Lang(lang)
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesIndexKey(id)+".code",
-				state.Text(i18n.KeyDetailCode, nil), valueOrDash(index.Code))
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesIndexKey(id)+".unique",
-				state.Text(i18n.KeyDetailUnique, nil), boolValue(state, index.Unique))
-			for member, column := range index.Columns {
-				value := detailRefText(state, column.Column)
-				if column.SortOrder.Present {
-					value += " · " + state.Text(i18n.KeyDetailSort, nil) + ": " + optionalValue(column.SortOrder)
+	w.tableProperties.indexesList.Key = func(row int) any { return w.tableProperties.draft.Indexes[row].ID }
+	ui.List(c.Key(TablePropertiesIndexesKey), &w.tableProperties.indexesList,
+		len(w.tableProperties.draft.Indexes), func(row int) {
+			index := &w.tableProperties.draft.Indexes[row]
+			id := detailID(index.ID, row)
+			c.Key(TablePropertiesIndexKey(id))
+			ui.Column(c).FillWidth().Padding(4, 6).Gap(4).Children(func() {
+				tablePropertiesLabeledInput(c, theme, lang,
+					TablePropertiesIndexFieldKey(id, "name"),
+					state.Text(i18n.KeyTablePropertiesName, nil), &index.Name)
+				tablePropertiesLabeledInput(c, theme, lang,
+					TablePropertiesIndexFieldKey(id, "code"),
+					state.Text(i18n.KeyDetailCode, nil), &index.Code)
+				tablePropertiesCheckboxState(c, TablePropertiesIndexFieldKey(id, "unique"),
+					state.Text(i18n.KeyDetailUnique, nil), &index.Unique, lang)
+				for member := range index.Members {
+					entry := &index.Members[member]
+					ui.Row(c).FillWidth().Gap(6).Children(func() {
+						ui.Text(c, strconv.Itoa(member+1)).Width(24).Shrink(0).
+							FontSize(11).TextColor(theme.TextMuted).Lang(lang)
+						tablePropertiesInput(c,
+							TablePropertiesIndexMemberFieldKey(id, member, "name"),
+							state.Text(i18n.KeyDetailColumns, nil), 0, &entry.Name, lang)
+						tablePropertiesInput(c,
+							TablePropertiesIndexMemberFieldKey(id, member, "sort"),
+							state.Text(i18n.KeyDetailSort, nil), 90, &entry.Sort, lang)
+					})
 				}
-				tablePropertiesProperty(c, state, theme, lang,
-					TablePropertiesIndexMemberKey(id, member), strconv.Itoa(member+1), value)
-			}
-		})
-	}).Grow(1).FillWidth()
+			})
+		}).Grow(1).FillWidth()
 }
 
 func (w *Workspace) tablePropertiesKeys(
@@ -311,26 +509,34 @@ func (w *Workspace) tablePropertiesKeys(
 	state *app.State,
 	theme *ui.Theme,
 	lang string,
-	detail TableDetail,
 ) {
-	w.tableProperties.keysList.Key = func(row int) any { return detail.Keys[row].ID }
-	ui.List(c.Key(TablePropertiesKeysKey), &w.tableProperties.keysList, len(detail.Keys), func(row int) {
-		key := detail.Keys[row]
-		id := detailID(key.ID, row)
-		c.Key(TablePropertiesKeyKey(id))
-		ui.Column(c).FillWidth().Padding(4, 6).Gap(2).Children(func() {
-			ui.Text(c, firstNonEmpty(key.Name, key.Code, key.ID, "—")).
-				FontSize(12).Bold().TextColor(theme.Text).Lang(lang)
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesKeyKey(id)+".code",
-				state.Text(i18n.KeyDetailCode, nil), valueOrDash(key.Code))
-			tablePropertiesProperty(c, state, theme, lang, TablePropertiesKeyKey(id)+".primary",
-				state.Text(i18n.KeyDetailPrimary, nil), boolValue(state, &key.Primary))
-			for member, ref := range key.Columns {
-				tablePropertiesProperty(c, state, theme, lang,
-					TablePropertiesKeyMemberKey(id, member), strconv.Itoa(member+1), detailRefText(state, ref))
-			}
-		})
-	}).Grow(1).FillWidth()
+	w.tableProperties.keysList.Key = func(row int) any { return w.tableProperties.draft.Keys[row].ID }
+	ui.List(c.Key(TablePropertiesKeysKey), &w.tableProperties.keysList,
+		len(w.tableProperties.draft.Keys), func(row int) {
+			key := &w.tableProperties.draft.Keys[row]
+			id := detailID(key.ID, row)
+			c.Key(TablePropertiesKeyKey(id))
+			ui.Column(c).FillWidth().Padding(4, 6).Gap(4).Children(func() {
+				tablePropertiesLabeledInput(c, theme, lang,
+					TablePropertiesKeyFieldKey(id, "name"),
+					state.Text(i18n.KeyTablePropertiesName, nil), &key.Name)
+				tablePropertiesLabeledInput(c, theme, lang,
+					TablePropertiesKeyFieldKey(id, "code"),
+					state.Text(i18n.KeyDetailCode, nil), &key.Code)
+				tablePropertiesCheckbox(c, TablePropertiesKeyFieldKey(id, "primary"),
+					state.Text(i18n.KeyDetailPrimary, nil), &key.Primary, lang)
+				for member := range key.Members {
+					entry := &key.Members[member]
+					ui.Row(c).FillWidth().Gap(6).Children(func() {
+						ui.Text(c, strconv.Itoa(member+1)).Width(24).Shrink(0).
+							FontSize(11).TextColor(theme.TextMuted).Lang(lang)
+						tablePropertiesInput(c,
+							TablePropertiesKeyMemberFieldKey(id, member, "name"),
+							state.Text(i18n.KeyDetailColumns, nil), 0, &entry.Name, lang)
+					})
+				}
+			})
+		}).Grow(1).FillWidth()
 }
 
 func (w *Workspace) tablePropertiesPreview(
@@ -342,11 +548,12 @@ func (w *Workspace) tablePropertiesPreview(
 ) {
 	w.ensureTablePropertiesPreview(detail)
 	result := w.tableProperties.previewResult
+	preview := w.tableProperties.previewEditor
 	ui.Column(c.Key(TablePropertiesPreviewKey)).FillWidth().Grow(1).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 			label := state.Text(i18n.KeyPreviewCopySQL, nil)
 			ui.Button(c, label).Key(TablePropertiesCopyKey).Label(label).Lang(lang).
-				Disabled(result.HasErrors() || result.SQL == "").
+				Disabled(preview == nil || preview.Buffer.Len() == 0).
 				OnClick(w.copyTablePropertiesSQL)
 			if status := w.tablePropertiesCopyStatus(state); status != "" {
 				ui.Text(c, status).Key(TablePropertiesCopyStatusKey).Grow(1).
@@ -354,9 +561,9 @@ func (w *Workspace) tablePropertiesPreview(
 			}
 		})
 		w.tablePropertiesDiagnostics(c, state, theme, lang, result)
-		if w.tableProperties.previewEditor != nil {
-			w.tableProperties.previewEditor.Label = state.Text(i18n.KeyPreviewSQL, nil)
-			editor.View(c.Key(TablePropertiesSQLKey), w.tableProperties.previewEditor).
+		if preview != nil {
+			preview.Label = state.Text(i18n.KeyPreviewSQL, nil)
+			editor.View(c.Key(TablePropertiesSQLKey), preview).
 				Grow(1).FillWidth()
 		}
 	})
@@ -378,14 +585,10 @@ func (w *Workspace) ensureTablePropertiesPreview(detail TableDetail) {
 		return
 	}
 	w.tableProperties.previewResult = sqlgen.GenerateTable(*table)
-	if w.tableProperties.previewResult.HasErrors() || w.tableProperties.previewResult.SQL == "" {
-		return
-	}
 	buffer := editor.NewBuffer(w.tableProperties.previewResult.SQL)
 	buffer.SetLanguage(editor.LanguageFor("database.sql"))
 	w.tableProperties.previewEditor = &editor.State{
 		Buffer:          buffer,
-		ReadOnly:        true,
 		SoftWrap:        false,
 		KeepScrollbars:  true,
 		NoScrollPastEnd: true,
@@ -393,31 +596,31 @@ func (w *Workspace) ensureTablePropertiesPreview(detail TableDetail) {
 }
 
 func (w *Workspace) copyTablePropertiesSQL() {
-	if w.tableProperties.previewEditor == nil ||
-		w.tableProperties.previewResult.HasErrors() ||
-		w.tableProperties.previewResult.SQL == "" {
+	preview := w.tableProperties.previewEditor
+	if preview == nil || preview.Buffer.Len() == 0 {
 		return
 	}
-	text := w.tableProperties.previewResult.SQL
-	tableID := w.tableProperties.tableID
+	text := preview.Buffer.String()
+	version := preview.Buffer.Version()
 	w.tableProperties.copyToken++
 	token := w.tableProperties.copyToken
 	writer := w.clipboardWriter
+	feedback := copyFeedbackSucceeded
 	if writer == nil || writer(text) != nil {
-		if token == w.tableProperties.copyToken && tableID == w.tableProperties.tableID {
-			w.tableProperties.copyFeedback = copyFeedbackFailed
-			w.notifyChanged()
-		}
+		feedback = copyFeedbackFailed
+	}
+	if token != w.tableProperties.copyToken || preview != w.tableProperties.previewEditor {
 		return
 	}
-	if token != w.tableProperties.copyToken || tableID != w.tableProperties.tableID {
-		return
-	}
-	w.tableProperties.copyFeedback = copyFeedbackSucceeded
+	w.tableProperties.copyFeedback = feedback
+	w.tableProperties.copiedVersion = version
 	w.notifyChanged()
 }
 
 func (w *Workspace) tablePropertiesCopyStatus(state *app.State) string {
+	if preview := w.tableProperties.previewEditor; preview == nil || preview.Buffer.Version() != w.tableProperties.copiedVersion {
+		return ""
+	}
 	switch w.tableProperties.copyFeedback {
 	case copyFeedbackSucceeded:
 		return state.Text(i18n.KeyPreviewSQLCopied, nil)
@@ -463,43 +666,67 @@ func (w *Workspace) tablePropertiesDiagnostics(
 	})
 }
 
-func tablePropertiesProperty(
+func tablePropertiesLabeledInput(
 	c *ui.Context,
-	state *app.State,
 	theme *ui.Theme,
 	lang string,
 	key string,
-	label, value string,
+	label string,
+	value *string,
 ) {
-	ui.Row(c).FillWidth().Gap(8).Children(func() {
-		ui.Text(c, label).Width(90).Shrink(0).FontSize(11).
-			TextColor(theme.TextMuted).Lang(lang)
-		ui.Text(c, value).Key(key).FillWidth().Wrap().
-			FontSize(11).TextColor(theme.Text).Lang(lang)
+	ui.Column(c).FillWidth().Gap(3).Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(theme.TextMuted).Lang(lang)
+		tablePropertiesInput(c, key, label, 0, value, lang)
 	})
 }
 
-func tablePropertiesCell(c *ui.Context, text string, width float32, lang string) {
-	cell := ui.Text(c, text).Width(width).Shrink(0).SingleLine().Ellipsis("…").
-		FontSize(11).Lang(lang)
-	if text != "" && text != "—" {
-		cell.Tooltip(text)
+func tablePropertiesLabeledArea(
+	c *ui.Context,
+	theme *ui.Theme,
+	lang string,
+	key string,
+	label string,
+	value *string,
+) {
+	ui.Column(c).FillWidth().Gap(3).Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(theme.TextMuted).Lang(lang)
+		c.Key(key)
+		ui.TextArea(c, value).Label(label).FillWidth().MinHeight(64).Lang(lang)
+	})
+}
+
+func tablePropertiesInput(
+	c *ui.Context,
+	key, label string,
+	width float32,
+	value *string,
+	lang string,
+) {
+	c.Key(key)
+	input := ui.TextInput(c, value).Label(label).Lang(lang)
+	if width > 0 {
+		input.Width(width).Shrink(0)
+	} else {
+		input.FillWidth()
 	}
 }
 
-func tablePropertiesFlags(state *app.State, column ColumnDetail) string {
-	var flags []string
-	if column.PrimaryKey {
-		flags = append(flags, state.Text(i18n.KeyDetailPK, nil))
-	}
-	if column.ForeignKey {
-		flags = append(flags, state.Text(i18n.KeyDetailFK, nil))
-	}
-	if column.Nullable != nil && !*column.Nullable {
-		flags = append(flags, state.Text(i18n.KeyTablePropertiesMandatory, nil))
-	}
-	if len(flags) == 0 {
-		return "—"
-	}
-	return strings.Join(flags, " ")
+func tablePropertiesCheckbox(
+	c *ui.Context,
+	key, label string,
+	value *bool,
+	lang string,
+) {
+	c.Key(key)
+	ui.Checkbox(c, value, label).Label(label).Lang(lang)
+}
+
+func tablePropertiesCheckboxState(
+	c *ui.Context,
+	key, label string,
+	value *ui.CheckState,
+	lang string,
+) {
+	c.Key(key)
+	ui.CheckboxState(c, value, label).Label(label).Lang(lang)
 }
