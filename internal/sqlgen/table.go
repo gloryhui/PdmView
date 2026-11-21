@@ -70,7 +70,11 @@ type Result struct {
 
 // HasErrors reports whether any diagnostic blocks SQL generation.
 func (result Result) HasErrors() bool {
-	for _, diagnostic := range result.Diagnostics {
+	return containsError(result.Diagnostics)
+}
+
+func containsError(diagnostics []Diagnostic) bool {
+	for _, diagnostic := range diagnostics {
 		if diagnostic.Severity == SeverityError {
 			return true
 		}
@@ -83,6 +87,11 @@ func (result Result) HasErrors() bool {
 // comments, primary/unique/ordinary indexes, and ENGINE=InnoDB. Foreign keys
 // remain for later stages.
 func GenerateTable(table pdm.Table) Result {
+	_, sql, diagnostics := compileAndRenderTable(table)
+	return Result{SQL: sql, Diagnostics: diagnostics}
+}
+
+func compileAndRenderTable(table pdm.Table) (compiledTable, string, []Diagnostic) {
 	compiled, diagnostics := compileTable(table)
 	defaults := make([]string, len(compiled.columns))
 	for offset, column := range compiled.columns {
@@ -92,12 +101,10 @@ func GenerateTable(table pdm.Table) Result {
 			diagnostics = append(diagnostics, *diagnostic)
 		}
 	}
-	result := Result{Diagnostics: diagnostics}
-	if result.HasErrors() {
-		return result
+	if containsError(diagnostics) {
+		return compiled, "", diagnostics
 	}
-	result.SQL = renderCreateTable(compiled, defaults)
-	return result
+	return compiled, renderCreateTable(compiled, defaults), diagnostics
 }
 
 type compiledTable struct {

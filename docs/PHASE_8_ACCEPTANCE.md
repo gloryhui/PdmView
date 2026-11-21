@@ -19,3 +19,10 @@
 - 本地业务样本的 13 个主键均只声明一次。两份本地合成 XML 覆盖 2 个复合主键、1 个降序前缀索引和 1 个带升降序的复合唯一索引。
 - `go test -count=1 ./internal/sqlgen ./internal/pdm`、对应 `go vet` 和 `make format-check` 通过。补充用例覆盖同名主键镜像去重、不同名称的索引保留、缺列及重复列、JSON 索引、前缀过长、复合索引列数上限、类型不兼容、无效的 `SET NULL` 和自引用同列。
 - 生成阶段检查可从模型确定的索引长度上限。继承字符集及目标实例页大小导致的字节限制随 P9-04 实测。
+
+## P8-04 全库依赖和外键策略
+
+- 依赖计划先收集 Model 与所有 Package 中的表，再解析外键。表与外键分别按最终 SQL 名称稳定排序，复用单表编译和渲染。确定性测试覆盖同名冲突、缺失表或列、缺失父键、类型不匹配、跨 Package、循环以及合法自引用。
+- 外部表快捷方式、SQL 对象的解析结构错误、多根 Model 和无法映射的库或 Schema 限定生成带位置的阻断诊断。SQL 相关的未知 XML 项保留为警告。Package 仅用于组织表和关系。
+- 本地 `yian.pdm` 的计划含 13 张表和 0 个外键，零阻断。合成 XML 的 2 张表、2 个跨 Package 循环外键和 4 个有序列映射逐项一致。通过忽略目录中的 `go test -overlay` 夹具核对，全库和单表的 `CREATE TABLE` 复用由包级测试断言。
+- `go test -count=1 ./internal/sqlgen ./internal/pdm`、对应 `go vet`、`make format-check` 及 `git diff --check` 通过。
