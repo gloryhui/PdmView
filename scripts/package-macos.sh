@@ -5,6 +5,8 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 GO=${GO:-go}
 VERSION=${VERSION-0.1.0}
 APP_NAME=PdmView
+ICON_NAME="$APP_NAME.icns"
+ICON_SOURCE="$ROOT/assets/$ICON_NAME"
 OUT="$ROOT/.out/release"
 
 die() {
@@ -22,6 +24,7 @@ printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
 
 [ "$(uname -s)" = Darwin ] || die "macOS is required for app-bundle signing and ditto"
 command -v "$GO" >/dev/null 2>&1 || die "Go command not found: $GO"
+[ -s "$ICON_SOURCE" ] || die "app icon missing or empty: $ICON_SOURCE"
 
 VERSION_DIR="$OUT/$VERSION"
 BASE_OUTPUT="$VERSION_DIR/macos-arm64"
@@ -71,6 +74,7 @@ printf 'Building %s %s darwin/arm64\n' "$APP_NAME" "$VERSION"
 chmod 755 "$BINARY"
 
 sh "$ROOT/scripts/package-notices.sh" macos "$NOTICES" "$BINARY" "$AUDIT"
+cp "$ICON_SOURCE" "$RESOURCES/$ICON_NAME"
 
 cat >"$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -83,6 +87,8 @@ cat >"$CONTENTS/Info.plist" <<EOF
 	<string>$APP_NAME</string>
 	<key>CFBundleExecutable</key>
 	<string>$APP_NAME</string>
+	<key>CFBundleIconFile</key>
+	<string>$ICON_NAME</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.pdmview.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -120,6 +126,8 @@ plutil -lint "$CONTENTS/Info.plist" >/dev/null
 	die "unexpected bundle identifier"
 [ "$(plutil -extract CFBundleShortVersionString raw -o - "$CONTENTS/Info.plist")" = "$VERSION" ] ||
 	die "unexpected bundle version"
+[ "$(plutil -extract CFBundleIconFile raw -o - "$CONTENTS/Info.plist")" = "$ICON_NAME" ] ||
+	die "unexpected bundle icon"
 
 {
 	cat <<'EOF'
@@ -127,6 +135,7 @@ Contents/Info.plist
 Contents/MacOS/PdmView
 Contents/PkgInfo
 EOF
+	printf 'Contents/Resources/%s\n' "$ICON_NAME"
 	while IFS= read -r name; do
 		printf 'Contents/Resources/ThirdPartyNotices/%s\n' "$name"
 	done <"$AUDIT/notices-files.txt"
@@ -180,6 +189,7 @@ PdmView.app/Contents/MacOS/PdmView
 PdmView.app/Contents/PkgInfo
 PdmView.app/Contents/_CodeSignature/CodeResources
 EOF
+	printf 'PdmView.app/Contents/Resources/%s\n' "$ICON_NAME"
 	while IFS= read -r name; do
 		printf 'PdmView.app/Contents/Resources/ThirdPartyNotices/%s\n' "$name"
 	done <"$AUDIT/notices-files.txt"

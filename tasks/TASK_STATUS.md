@@ -18,6 +18,8 @@ Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出�
 
 Phase 10 的 macOS 验收与打包已完成，鼠标滚轮双向缩放和指针锚点验证通过。Windows 桌面验收延期，由 Windows 本机执行。详见 [Phase 10 验收](../docs/PHASE_10_ACCEPTANCE.md)。
 
+2026-11-22 已构建 [macOS Apple Silicon 1.0.0](../RELEASE.md)，采用扁平猫头鹰图标。图标资源、ZIP 清单、解压后的 ad hoc 签名和原生启动退出均通过验证。P4-03 仍为 `BLOCKED`，Windows 桌面验收仍为 `DEFERRED`。
+
 ## PDM 保存
 
 | 任务 | 状态 | 执行 | 验收结果 | 待验证 |

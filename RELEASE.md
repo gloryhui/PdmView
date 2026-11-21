@@ -1,4 +1,19 @@
-# PdmView 0.1.0 发布候选
+# PdmView 发布记录
+
+## 1.0.0 · macOS Apple Silicon
+
+2026-11-22 构建。最低系统版本为 macOS 13.0。解压 `PdmView-1.0.0-macos-arm64.zip` 后打开 `PdmView.app`。
+
+```sh
+make package-macos VERSION=1.0.0
+```
+
+- 产物为 `.out/release/1.0.0/macos-arm64/PdmView-1.0.0-macos-arm64.zip`，SHA-256 为 `3aee63187b528167ece5d9614cd085c720472696939e7443ea2182339985b5ec`。
+- 猫头鹰图标原图为 [`assets/PdmView.png`](assets/PdmView.png)。应用通过 `CFBundleIconFile` 使用同名 ICNS，含 16 至 1024 像素的 10 个标准图标资源。图标文件纳入应用包和 ZIP 文件清单。
+- macOS 15.8.1 arm64 上通过 ZIP 完整性及精确清单校验。解压后验证两处版本号、Mach-O 架构、图标文件字节和 ad hoc 签名完整性。通过 Launch Services 启动，观察到原生主窗口，运行中的应用图标与系统读取的应用包图标一致，正常退出。
+- 本机未配置 Developer ID Application 证书。本次为 ad hoc 签名的本地发布包，未做 Apple 公证。Windows 桌面验收仍由 Windows 本机执行。
+
+## 0.1.0 发布候选
 
 2026-11-21 在 macOS Apple Silicon 上构建本地候选。平台验收范围见 [Phase 10 验收](docs/PHASE_10_ACCEPTANCE.md)。完整 Gate 5 待通过。
 
