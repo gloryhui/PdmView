@@ -44,6 +44,33 @@ const (
 	KeyResetShort        Key = "canvas.reset_short"
 	KeyZoomIn            Key = "canvas.zoom_in"
 	KeyZoomOut           Key = "canvas.zoom_out"
+	KeyDetailCode        Key = "details.code"
+	KeyDetailComment     Key = "details.comment"
+	KeyDetailPackage     Key = "details.package"
+	KeyDetailColumns     Key = "details.columns"
+	KeyDetailKeys        Key = "details.keys"
+	KeyDetailIndexes     Key = "details.indexes"
+	KeyDetailForeignKeys Key = "details.foreign_keys"
+	KeyDetailType        Key = "details.type"
+	KeyDetailLength      Key = "details.length"
+	KeyDetailPrecision   Key = "details.precision"
+	KeyDetailScale       Key = "details.scale"
+	KeyDetailNull        Key = "details.null"
+	KeyDetailDefault     Key = "details.default"
+	KeyDetailIdentity    Key = "details.identity"
+	KeyDetailPK          Key = "details.pk"
+	KeyDetailFK          Key = "details.fk"
+	KeyDetailUnique      Key = "details.unique"
+	KeyDetailSort        Key = "details.sort"
+	KeyDetailPrimary     Key = "details.primary"
+	KeyDetailParent      Key = "details.parent"
+	KeyDetailChild       Key = "details.child"
+	KeyDetailOnUpdate    Key = "details.on_update"
+	KeyDetailOnDelete    Key = "details.on_delete"
+	KeyDetailCardinality Key = "details.cardinality"
+	KeyDetailYes         Key = "details.yes"
+	KeyDetailNo          Key = "details.no"
+	KeyDetailUnresolved  Key = "details.unresolved"
 )
 
 type message struct {
@@ -85,6 +112,33 @@ var resources = map[Locale]map[Key]message{
 		KeyResetShort:        {text: "Reset"},
 		KeyZoomIn:            {text: "Zoom in"},
 		KeyZoomOut:           {text: "Zoom out"},
+		KeyDetailCode:        {text: "Code"},
+		KeyDetailComment:     {text: "Comment"},
+		KeyDetailPackage:     {text: "Package"},
+		KeyDetailColumns:     {text: "Columns"},
+		KeyDetailKeys:        {text: "Keys"},
+		KeyDetailIndexes:     {text: "Indexes"},
+		KeyDetailForeignKeys: {text: "Foreign keys"},
+		KeyDetailType:        {text: "Type"},
+		KeyDetailLength:      {text: "Length"},
+		KeyDetailPrecision:   {text: "Precision"},
+		KeyDetailScale:       {text: "Scale"},
+		KeyDetailNull:        {text: "NULL"},
+		KeyDetailDefault:     {text: "Default"},
+		KeyDetailIdentity:    {text: "Identity"},
+		KeyDetailPK:          {text: "PK"},
+		KeyDetailFK:          {text: "FK"},
+		KeyDetailUnique:      {text: "Unique"},
+		KeyDetailSort:        {text: "Sort"},
+		KeyDetailPrimary:     {text: "Primary"},
+		KeyDetailParent:      {text: "Parent"},
+		KeyDetailChild:       {text: "Child"},
+		KeyDetailOnUpdate:    {text: "On update"},
+		KeyDetailOnDelete:    {text: "On delete"},
+		KeyDetailCardinality: {text: "Cardinality"},
+		KeyDetailYes:         {text: "Yes"},
+		KeyDetailNo:          {text: "No"},
+		KeyDetailUnresolved:  {text: "unresolved"},
 	},
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
@@ -119,6 +173,33 @@ var resources = map[Locale]map[Key]message{
 		KeyResetShort:        {text: "重置"},
 		KeyZoomIn:            {text: "放大"},
 		KeyZoomOut:           {text: "缩小"},
+		KeyDetailCode:        {text: "编码"},
+		KeyDetailComment:     {text: "注释"},
+		KeyDetailPackage:     {text: "包"},
+		KeyDetailColumns:     {text: "字段"},
+		KeyDetailKeys:        {text: "键"},
+		KeyDetailIndexes:     {text: "索引"},
+		KeyDetailForeignKeys: {text: "外键"},
+		KeyDetailType:        {text: "类型"},
+		KeyDetailLength:      {text: "长度"},
+		KeyDetailPrecision:   {text: "精度"},
+		KeyDetailScale:       {text: "小数位"},
+		KeyDetailNull:        {text: "NULL"},
+		KeyDetailDefault:     {text: "默认值"},
+		KeyDetailIdentity:    {text: "自增"},
+		KeyDetailPK:          {text: "主键"},
+		KeyDetailFK:          {text: "外键"},
+		KeyDetailUnique:      {text: "唯一"},
+		KeyDetailSort:        {text: "排序"},
+		KeyDetailPrimary:     {text: "主键"},
+		KeyDetailParent:      {text: "主表"},
+		KeyDetailChild:       {text: "从表"},
+		KeyDetailOnUpdate:    {text: "更新时"},
+		KeyDetailOnDelete:    {text: "删除时"},
+		KeyDetailCardinality: {text: "基数"},
+		KeyDetailYes:         {text: "是"},
+		KeyDetailNo:          {text: "否"},
+		KeyDetailUnresolved:  {text: "未解析"},
 	},
 }
 

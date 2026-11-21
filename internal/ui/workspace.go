@@ -57,6 +57,10 @@ type Workspace struct {
 	openBefore        map[string]struct{}
 	selectedTableID   string
 	selectedTableName string
+	detailIndex       *tableDetailIndex
+	detailsScroll     ui.ScrollState
+	tableDetail       TableDetail
+	hasTableDetail    bool
 	unplacedTable     bool
 	requestedTableID  string
 	pendingTableID    string
@@ -127,6 +131,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.activeAutoLayout = set.Prepared.Graph.AutoLayout
 	w.pendingBoard = -1
 	w.catalog = set.Catalog
+	w.detailIndex = set.Details
 	w.outline = ui.OutlineState[string]{}
 	w.outline.Open.Add(ModelRootKey)
 	w.outline.List.Selected = &w.navSelected
@@ -136,6 +141,8 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.selectedNavKey = ""
 	w.selectedTableID = ""
 	w.selectedTableName = ""
+	w.tableDetail = TableDetail{}
+	w.hasTableDetail = false
 	w.unplacedTable = false
 	w.requestedTableID = ""
 	w.pendingTableID = ""
@@ -273,6 +280,7 @@ func (w *Workspace) LocateTable(tableID string) bool {
 	if w.catalog != nil {
 		w.selectedTableName = w.catalog.tableName(tableID)
 	}
+	w.refreshSelectedDetail()
 	w.unplacedTable = false
 	w.revealTable(tableID)
 
@@ -318,6 +326,7 @@ func (w *Workspace) syncCanvasTableSelection(tableID string) {
 	if w.catalog != nil {
 		w.selectedTableName = w.catalog.tableName(tableID)
 	}
+	w.refreshSelectedDetail()
 	w.unplacedTable = false
 	w.revealTable(tableID)
 	w.notifyChanged()
@@ -342,6 +351,8 @@ func (w *Workspace) revealTable(tableID string) {
 func (w *Workspace) clearTableSelection() {
 	w.selectedTableID = ""
 	w.selectedTableName = ""
+	w.tableDetail = TableDetail{}
+	w.hasTableDetail = false
 	w.unplacedTable = false
 	w.navSelected = -1
 	w.selectedNavKey = ""
@@ -389,6 +400,8 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 		w.canvas.clearSelection()
 		w.selectedTableID = ""
 		w.selectedTableName = ""
+		w.tableDetail = TableDetail{}
+		w.hasTableDetail = false
 		w.unplacedTable = false
 		w.notifyChanged()
 		return
@@ -411,8 +424,21 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 	w.canvas.clearSelection()
 	w.selectedTableID = ""
 	w.selectedTableName = ""
+	w.tableDetail = TableDetail{}
+	w.hasTableDetail = false
 	w.unplacedTable = false
 	w.notifyChanged()
+}
+
+func (w *Workspace) refreshSelectedDetail() {
+	if w.hasTableDetail && w.tableDetail.ID == w.selectedTableID {
+		return
+	}
+	w.detailsScroll.ScrollTo(0, 0, ui.Animation{})
+	w.tableDetail, w.hasTableDetail = w.detailIndex.resolve(w.selectedTableID)
+	if w.hasTableDetail {
+		w.selectedTableName = firstNonEmpty(w.tableDetail.Name, w.tableDetail.Code, w.tableDetail.ID)
+	}
 }
 
 func (w *Workspace) captureOpen() {
@@ -530,7 +556,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 						func() { workspace.canvas.view(c, state, t, lang) },
 						func() {
 							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, detailsMinWidth, detailsMaxWidth, func() {
-								ui.Scroll(c.Key(DetailsBodyKey)).Grow(1).FillWidth().Children(func() {
+								ui.Scroll(c.Key(DetailsBodyKey)).TrackScroll(&workspace.detailsScroll).Grow(1).FillWidth().Children(func() {
 									ui.Column(c).FillWidth().Gap(6).Children(func() {
 										workspace.selectedDetails(c, state, t, lang)
 									})
@@ -599,6 +625,10 @@ func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.The
 
 func (w *Workspace) selectedDetails(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
 	if w.selectedTableID != "" {
+		if w.hasTableDetail {
+			renderTableDetail(c, state, t, lang, w.tableDetail, w.unplacedTable)
+			return
+		}
 		ui.Text(c, w.selectedTableName).Key(SelectedNodeKey).
 			FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
 		if w.unplacedTable {

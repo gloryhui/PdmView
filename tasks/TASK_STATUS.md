@@ -46,8 +46,8 @@ Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/
 | P6-05 | 画布性能验收 | DONE | GPT | [长测报告](../docs/PHASE_6_ACCEPTANCE.md#正式渲染器性能)。macOS Metal 2× 八组 10 秒测试，150 表两组为 60.00 FPS，300 表密集为 60.00 FPS、稀疏两次复测均 60.00 FPS，500 表两组均为 59.99 FPS。`make check`、e2e 标签测试、macOS 构建通过 | 300 表稀疏首测 59.70 FPS。PowerDesigner 应用内对照仍由 P4-03 跟踪 |
 | P7-01 | 主窗口三栏布局 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-01-三栏工作区)。800×600 DIP 中英文五个画布工具完整可见，双向切换保留画板与选中表。定向测试、vet 与格式检查通过 | |
 | P7-02 | 模型树与 Package | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-02-模型树与-package)。两级 Package、折叠保留选择、跨画板和本地样本 13 表逐项通过。定向测试、vet 与格式检查通过 | |
-| P7-03 | 表详情与字段列表 | IN_PROGRESS | DeepSeek / GPT | | |
-| P7-04 | 搜索与定位 | TODO | DeepSeek | | |
+| P7-03 | 表详情与字段列表 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-03-表详情与字段列表)。13 表及 149 字段与 XML 一致，合成复合键与外键顺序、双语及独立滚动通过。定向测试、vet 与格式检查通过 | |
+| P7-04 | 搜索与定位 | IN_PROGRESS | DeepSeek / GPT | | |
 | P7-05 | 完整信息复制 | TODO | DeepSeek | | |
 | P8-01 | MySQL 类型映射 | TODO | GPT | | |
 | P8-02 | 单表 DDL | TODO | DeepSeek | | |
