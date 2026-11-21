@@ -1,0 +1,107 @@
+# 架构与模块边界
+
+## 1. 总体数据流
+
+```text
+PDM File
+  |
+  v
+XML Reader / Version Detector
+  |
+  v
+Raw PDM Representation + Diagnostics
+  |
+  v
+PDM Domain Model
+  |-----------------------------|
+  v                             v
+Diagram / Graph Model        MySQL SQL Generator
+  |                             |
+  v                             v
+Graph Layout / Spatial Index  SQL Preview / Export
+  |
+  v
+MyGo Canvas Renderer
+  |
+  v
+Native UI
+```
+
+UI 只负责交互、状态展示和调用应用服务。不得直接解析 XML、拼接 SQL 或实现图布局。
+
+## 2. 建议模块
+
+### `internal/pdm`
+职责：PDM 文件读取、版本识别、XML 对象解析、对象引用解析、统一 Domain Model、诊断信息。
+
+约束：
+- 保留原始 ID，引用关系通过 ID 解析。
+- 区分 Name 与 Code。
+- 保留字段顺序、NULL 与空值、默认值原始语义。
+- 未识别节点/属性产生诊断；必要时保留原始片段。
+- 解析器不依赖 UI、Graph Renderer、SQL Generator。
+
+### `internal/graph`
+职责：将 Diagram Symbol 与模型对象映射为图节点和边；坐标变换、视口、空间索引、命中测试、布局备用方案。
+
+约束：
+- 原始 Diagram 几何信息优先。
+- 图布局使用独立世界坐标。
+- 自动布局只作为缺失布局时的 fallback。
+- 不依赖 MyGo Painter。
+
+### `internal/renderer`
+职责：把 Graph Model 绘制到 MyGo Canvas/Painter。
+
+约束：
+- 只消费预先计算的图形数据。
+- Draw 回调不得解析 XML、执行自动布局、重建空间索引或进行昂贵文本测量。
+- 支持视口裁剪、LOD、缓存和可见关系线筛选。
+- 字体、HiDPI、文字测量必须在真实设备验证。
+
+### `internal/sqlgen`
+职责：MySQL DDL 生成、标识符转义、类型映射、依赖分析、诊断。
+
+约束：
+- 单表 SQL 和全库 SQL 使用同一套生成器。
+- 表先创建，外键可在所有表创建后通过 ALTER TABLE 添加，以处理循环依赖。
+- 未知类型/不支持属性必须生成警告或阻断错误，不能静默替换。
+- SQL 输出稳定、可重复，测试采用 golden files + MySQL 集成测试。
+
+### `internal/app`
+职责：应用生命周期、打开文件流程、当前模型状态、异步任务协调。
+
+### `internal/ui`
+职责：主窗口、模型树、画布、详情、SQL 预览、搜索、工具栏。
+
+## 3. 关键模型设计建议
+
+最终结构必须根据真实 PDM XML 校正，以下只是设计起点：
+
+- Model：ID、Name、Code、Version、DBMS、Packages、Tables、Diagrams、Diagnostics。
+- Package：ID、Name、Code、ParentID、ChildPackages、TableIDs。
+- Table：ID、Name、Code、Comment、PackageID、Columns、PrimaryKey、Indexes、References。
+- Column：ID、Name、Code、DataType、Length、Precision、Scale、Nullable、Default、Comment、Identity、Position。
+- Index：ID、Name、Code、Unique、Columns。
+- Reference：ID、Name、Code、ParentTableID、ChildTableID、ColumnMappings。
+- Diagram：ID、Name、Symbols、RelationSymbols。
+- Symbol：ID、ObjectID、X、Y、Width、Height、显示属性。
+- RelationSymbol：ID、ReferenceID、路径点、端点/连接点信息。
+
+不要假设 PDM 的坐标单位就是屏幕像素。必须调查并定义转换规则。
+
+## 4. 并发与 UI 线程
+
+- 文件解析在后台执行。
+- 大型布局计算在后台执行。
+- SQL 生成在后台执行。
+- UI 线程只接收结果并更新状态。
+- 所有跨线程 UI 更新必须遵守 MyGo 官方线程/事件模型。
+- 取消旧任务，避免用户连续打开文件时旧结果覆盖新结果。
+
+## 5. 依赖与版本
+
+- 调研时读取 MyGo 官方文档和仓库当前版本。
+- 记录 Go、MyGo、Lobe MyGo 的实际版本与兼容性。
+- 不要未经验证假设 `go 1.27+` 一定可用；以当前官方稳定版和项目依赖实际要求为准。
+- 不得编造 Painter、Canvas、剪贴板、文件选择器 API。先编译运行最小示例。
