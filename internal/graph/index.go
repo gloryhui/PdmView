@@ -1,6 +1,9 @@
 package graph
 
-import "sort"
+import (
+	"sort"
+	"sync/atomic"
+)
 
 // SpatialQuery finds scene slice offsets whose geometry intersects area.
 // Results are appended to dst and sorted ascending per call; existing dst
@@ -44,9 +47,14 @@ func (l *LinearIndex) QueryEdges(area Rect, dst []int) []int {
 	return dst
 }
 
-// SpatialIndex is a static, dependency-free BVH over node bounds and edge
-// sampled-polyline AABBs. Edge queries then verify the actual polyline.
+// SpatialIndex atomically publishes an immutable BVH snapshot over node bounds
+// and edge sampled-polyline AABBs. Edge queries then verify the actual
+// polyline.
 type SpatialIndex struct {
+	snapshot atomic.Pointer[spatialSnapshot]
+}
+
+type spatialSnapshot struct {
 	nodes         []Node
 	edges         []Edge
 	node          *aabbTree
@@ -58,27 +66,42 @@ type SpatialIndex struct {
 }
 
 func NewSpatialIndex(scene Scene) *SpatialIndex {
-	index := &SpatialIndex{
+	index := &SpatialIndex{}
+	index.ReplaceScene(scene)
+	return index
+}
+
+// ReplaceScene clones the scene, builds both trees, then publishes the complete
+// immutable snapshot in one atomic store.
+func (s *SpatialIndex) ReplaceScene(scene Scene) {
+	if s == nil {
+		return
+	}
+	s.snapshot.Store(buildSpatialSnapshot(scene))
+}
+
+func buildSpatialSnapshot(scene Scene) *spatialSnapshot {
+	snapshot := &spatialSnapshot{
 		nodes: cloneNodes(scene.Nodes),
 		edges: cloneEdges(scene.Edges),
 	}
-	nodeItems := make([]indexedRect, 0, len(index.nodes))
-	for offset, node := range index.nodes {
+	nodeItems := make([]indexedRect, 0, len(snapshot.nodes))
+	for offset, node := range snapshot.nodes {
 		nodeItems = append(nodeItems, indexedRect{offset: offset, bounds: node.Bounds})
-		if !index.hasNodes {
-			index.allNodeBounds, index.hasNodes = node.Bounds, true
+		if !snapshot.hasNodes {
+			snapshot.allNodeBounds, snapshot.hasNodes = node.Bounds, true
 		} else {
-			index.allNodeBounds = index.allNodeBounds.Union(node.Bounds)
+			snapshot.allNodeBounds = snapshot.allNodeBounds.Union(node.Bounds)
 		}
 	}
-	edgeItems := make([]indexedRect, 0, len(index.edges))
-	for offset, edge := range index.edges {
+	edgeItems := make([]indexedRect, 0, len(snapshot.edges))
+	for offset, edge := range snapshot.edges {
 		if len(edge.Points) > 0 {
 			bounds := edge.Bounds()
-			if !index.hasEdges {
-				index.allEdgeBounds, index.hasEdges = bounds, true
+			if !snapshot.hasEdges {
+				snapshot.allEdgeBounds, snapshot.hasEdges = bounds, true
 			} else {
-				index.allEdgeBounds = index.allEdgeBounds.Union(bounds)
+				snapshot.allEdgeBounds = snapshot.allEdgeBounds.Union(bounds)
 			}
 		}
 		switch len(edge.Points) {
@@ -99,13 +122,42 @@ func NewSpatialIndex(scene Scene) *SpatialIndex {
 			}
 		}
 	}
-	index.node = buildAABBTree(nodeItems)
-	index.edge = buildAABBTree(edgeItems)
-	return index
+	snapshot.node = buildAABBTree(nodeItems)
+	snapshot.edge = buildAABBTree(edgeItems)
+	return snapshot
 }
 
 func (s *SpatialIndex) QueryNodes(area Rect, dst []int) []int {
-	area = orderedRect(area)
+	return s.currentSnapshot().queryNodes(orderedRect(area), dst)
+}
+
+func (s *SpatialIndex) QueryEdges(area Rect, dst []int) []int {
+	return s.currentSnapshot().queryEdges(orderedRect(area), dst)
+}
+
+// QueryPoint finds nodes whose inclusive bounds contain point. Non-finite
+// points leave dst unchanged.
+func (s *SpatialIndex) QueryPoint(point Point, dst []int) []int {
+	if !finite(point.X) || !finite(point.Y) {
+		return dst
+	}
+	area := Rect{Min: point, Max: point}
+	return s.currentSnapshot().queryNodes(area, dst)
+}
+
+func (s *SpatialIndex) currentSnapshot() *spatialSnapshot {
+	if s == nil {
+		return &emptySpatialSnapshot
+	}
+	if snapshot := s.snapshot.Load(); snapshot != nil {
+		return snapshot
+	}
+	return &emptySpatialSnapshot
+}
+
+var emptySpatialSnapshot spatialSnapshot
+
+func (s *spatialSnapshot) queryNodes(area Rect, dst []int) []int {
 	if s.hasNodes && rectContainsInclusive(area, s.allNodeBounds) {
 		for offset := range s.nodes {
 			dst = append(dst, offset)
@@ -126,8 +178,7 @@ func (s *SpatialIndex) QueryNodes(area Rect, dst []int) []int {
 	return dst
 }
 
-func (s *SpatialIndex) QueryEdges(area Rect, dst []int) []int {
-	area = orderedRect(area)
+func (s *spatialSnapshot) queryEdges(area Rect, dst []int) []int {
 	if s.hasEdges && rectContainsInclusive(area, s.allEdgeBounds) {
 		for offset, edge := range s.edges {
 			if len(edge.Points) > 0 {

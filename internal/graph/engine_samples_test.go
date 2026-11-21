@@ -5,6 +5,7 @@ package graph
 import (
 	"math"
 	"os"
+	"slices"
 	"testing"
 
 	"pdmview/internal/pdm"
@@ -43,6 +44,49 @@ func TestPhase5SampleCamera(t *testing.T) {
 		t.Fatal("sample has no populated diagram")
 	}
 	t.Logf("1024x768 DIP viewport, 24 DIP padding: fitted_diagrams=%d node_round_trips=%d prototype_clipped_diagrams=%d", diagrams, nodes, legacyClipped)
+}
+
+func TestPhase5SampleIndex(t *testing.T) {
+	model := openEngineSample(t)
+	var pointQueries, viewQueries, replacements int
+	for _, diagram := range sampleDiagrams(&model.Contents) {
+		scene := MapDiagram(model, diagram).Scene
+		if len(scene.Nodes) == 0 {
+			continue
+		}
+		index := NewSpatialIndex(scene)
+		linear := NewLinearIndex(scene)
+		camera := NewDiagramCamera(Rect{Max: Point{X: 1024, Y: 768}})
+		camera.FitBounds(scene.Bounds, 24)
+		camera.ZoomAt(Point{X: 500, Y: 300}, 2)
+		view := camera.VisibleWorld()
+		if !slices.Equal(index.QueryNodes(view, nil), linear.QueryNodes(view, nil)) ||
+			!slices.Equal(index.QueryEdges(view, nil), linear.QueryEdges(view, nil)) {
+			t.Fatal("viewport query differs from linear oracle")
+		}
+		viewQueries++
+		for _, node := range scene.Nodes {
+			point := rectMiddle(node.Bounds)
+			got := index.QueryPoint(point, nil)
+			want := linear.QueryNodes(Rect{Min: point, Max: point}, nil)
+			if !slices.Equal(got, want) || !slices.Contains(got, node.ID) {
+				t.Fatalf("node %d center did not match the linear oracle", node.ID)
+			}
+			pointQueries++
+		}
+		replacement := Scene{Nodes: scene.Nodes[1:]}
+		index.ReplaceScene(replacement)
+		linear = NewLinearIndex(replacement)
+		if !slices.Equal(index.QueryNodes(scene.Bounds, nil), linear.QueryNodes(scene.Bounds, nil)) ||
+			len(index.QueryNodes(scene.Bounds, nil)) != len(scene.Nodes)-1 || len(index.QueryEdges(scene.Bounds, nil)) != 0 {
+			t.Fatal("scene replacement retained the removed node or old edges")
+		}
+		replacements++
+	}
+	if pointQueries == 0 {
+		t.Fatal("sample has no populated diagram")
+	}
+	t.Logf("BVH matched linear oracle: point_queries=%d viewport_queries=%d deletion_snapshots=%d", pointQueries, viewQueries, replacements)
 }
 
 func openEngineSample(t *testing.T) *pdm.Model {

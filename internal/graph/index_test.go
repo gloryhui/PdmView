@@ -1,8 +1,12 @@
 package graph
 
 import (
+	"math"
 	"reflect"
+	"runtime"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -84,6 +88,174 @@ func TestIndexedAndLinearAgreeAcrossScalesAndManyRectangles(t *testing.T) {
 	}
 }
 
+func TestSpatialIndexReplaceSceneUpdatesBoundsOffsetsAndEdges(t *testing.T) {
+	firstScene := manualScene(
+		[]Node{
+			{ID: 10, Bounds: Rect{Min: Point{X: 0, Y: 0}, Max: Point{X: 10, Y: 10}}},
+			{ID: 20, Bounds: Rect{Min: Point{X: 100, Y: 100}, Max: Point{X: 110, Y: 110}}},
+		},
+		[]Edge{
+			{ID: 30, Points: []Point{{X: 0, Y: 5}, {X: 10, Y: 5}}},
+			{ID: 40, Points: []Point{{X: 100, Y: 105}, {X: 110, Y: 105}}},
+		},
+	)
+	index := NewSpatialIndex(firstScene)
+	if got := index.QueryPoint(Point{X: 5, Y: 5}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("first scene point = %v", got)
+	}
+	if got := index.QueryPoint(Point{X: 105, Y: 105}, nil); !slices.Equal(got, []int{1}) {
+		t.Fatalf("first scene second point = %v", got)
+	}
+
+	secondScene := manualScene(
+		[]Node{
+			{ID: 50, Bounds: Rect{Min: Point{X: 300, Y: 300}, Max: Point{X: 310, Y: 310}}},
+			{ID: 10, Bounds: Rect{Min: Point{X: 200, Y: 200}, Max: Point{X: 210, Y: 210}}},
+		},
+		[]Edge{
+			{ID: 60, Points: []Point{{X: 200, Y: 205}, {X: 210, Y: 205}}},
+		},
+	)
+	index.ReplaceScene(secondScene)
+
+	if got := index.QueryPoint(Point{X: 5, Y: 5}, nil); len(got) != 0 {
+		t.Fatalf("old node bound still indexed: %v", got)
+	}
+	if got := index.QueryPoint(Point{X: 105, Y: 105}, nil); len(got) != 0 {
+		t.Fatalf("deleted node still indexed: %v", got)
+	}
+	if got := index.QueryPoint(Point{X: 205, Y: 205}, nil); !slices.Equal(got, []int{1}) {
+		t.Fatalf("moved/reordered node offset = %v, want 1", got)
+	}
+	if got := index.QueryPoint(Point{X: 305, Y: 305}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("new node offset = %v, want 0", got)
+	}
+	oldEdgeArea := Rect{Min: Point{X: 0, Y: 0}, Max: Point{X: 120, Y: 120}}
+	if got := index.QueryEdges(oldEdgeArea, nil); len(got) != 0 {
+		t.Fatalf("old edge bounds still indexed: %v", got)
+	}
+	if got := index.QueryEdges(Rect{Min: Point{X: 205, Y: 205}, Max: Point{X: 205, Y: 205}}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("replacement edge offset = %v", got)
+	}
+}
+
+func TestSpatialIndexQueryPointInclusivePrefixOrderAndNonFinite(t *testing.T) {
+	index := NewSpatialIndex(manualScene([]Node{
+		{ID: 1, Bounds: Rect{Min: Point{X: 0, Y: 0}, Max: Point{X: 10, Y: 10}}},
+		{ID: 2, Bounds: Rect{Min: Point{X: 10, Y: 5}, Max: Point{X: 20, Y: 15}}},
+		{ID: 3, Bounds: Rect{Min: Point{X: 30, Y: 30}, Max: Point{X: 40, Y: 40}}},
+	}, nil))
+
+	prefix := []int{99, 77}
+	got := index.QueryPoint(Point{X: 10, Y: 10}, append([]int(nil), prefix...))
+	if !slices.Equal(got, []int{99, 77, 0, 1}) {
+		t.Fatalf("inclusive point prefixes/order = %v", got)
+	}
+	if !slices.Equal(prefix, []int{99, 77}) {
+		t.Fatalf("caller prefix changed: %v", prefix)
+	}
+	if got := index.QueryPoint(Point{X: 25, Y: 25}, append([]int(nil), prefix...)); !slices.Equal(got, prefix) {
+		t.Fatalf("empty point result = %v", got)
+	}
+
+	for _, point := range []Point{
+		{X: math.NaN(), Y: 1},
+		{X: 1, Y: math.Inf(1)},
+		{X: math.Inf(-1), Y: 1},
+	} {
+		dst := append([]int(nil), prefix...)
+		result := index.QueryPoint(point, dst)
+		if len(result) != len(dst) || &result[0] != &dst[0] || !slices.Equal(result, prefix) {
+			t.Fatalf("non-finite point %+v changed dst: %v -> %v", point, dst, result)
+		}
+	}
+}
+
+func TestSpatialIndexZeroValueEmptyAndCallerIsolation(t *testing.T) {
+	prefix := []int{4, 2}
+	var zero SpatialIndex
+	if got := zero.QueryNodes(sceneWideRect(), append([]int(nil), prefix...)); !slices.Equal(got, prefix) {
+		t.Fatalf("zero index nodes = %v", got)
+	}
+	if got := zero.QueryEdges(sceneWideRect(), append([]int(nil), prefix...)); !slices.Equal(got, prefix) {
+		t.Fatalf("zero index edges = %v", got)
+	}
+	if got := zero.QueryPoint(Point{}, append([]int(nil), prefix...)); !slices.Equal(got, prefix) {
+		t.Fatalf("zero index point = %v", got)
+	}
+	zero.ReplaceScene(Scene{})
+	if got := zero.QueryPoint(Point{X: 1, Y: 1}, nil); len(got) != 0 {
+		t.Fatalf("empty replacement point = %v", got)
+	}
+	var nilIndex *SpatialIndex
+	if got := nilIndex.QueryPoint(Point{}, nil); len(got) != 0 {
+		t.Fatalf("nil index point = %v", got)
+	}
+
+	scene := manualScene(
+		[]Node{{ID: 1, Bounds: Rect{Min: Point{X: 0, Y: 0}, Max: Point{X: 10, Y: 10}}}},
+		[]Edge{{ID: 2, Points: []Point{{X: 0, Y: 5}, {X: 10, Y: 5}}}},
+	)
+	index := NewSpatialIndex(scene)
+	scene.Nodes[0].Bounds = Rect{Min: Point{X: 100, Y: 100}, Max: Point{X: 110, Y: 110}}
+	scene.Edges[0].Points[0] = Point{X: 100, Y: 105}
+	scene.Edges[0].Points[1] = Point{X: 110, Y: 105}
+	if got := index.QueryPoint(Point{X: 5, Y: 5}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("index aliased caller nodes: %v", got)
+	}
+	if got := index.QueryEdges(Rect{Min: Point{X: 5, Y: 5}, Max: Point{X: 5, Y: 5}}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("index aliased caller edges: %v", got)
+	}
+	if got := index.QueryPoint(Point{X: 105, Y: 105}, nil); len(got) != 0 {
+		t.Fatalf("caller mutation leaked into index: %v", got)
+	}
+	index.ReplaceScene(scene)
+	if got := index.QueryPoint(Point{X: 105, Y: 105}, nil); !slices.Equal(got, []int{0}) {
+		t.Fatalf("explicit replacement did not publish caller scene: %v", got)
+	}
+}
+
+func TestSpatialIndexConcurrentQueriesSeeCompleteSnapshots(t *testing.T) {
+	sceneA := snapshotScene(7, 3)
+	sceneB := snapshotScene(11, 5)
+	index := NewSpatialIndex(sceneA)
+	all := sceneWideRect()
+
+	var failed atomic.Bool
+	var readers sync.WaitGroup
+	for reader := 0; reader < 4; reader++ {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for query := 0; query < 300; query++ {
+				nodes := index.QueryNodes(all, nil)
+				if len(nodes) != 7 && len(nodes) != 11 {
+					failed.Store(true)
+					return
+				}
+				edges := index.QueryEdges(all, nil)
+				if len(edges) != 3 && len(edges) != 5 {
+					failed.Store(true)
+					return
+				}
+			}
+		}()
+	}
+
+	for iteration := 0; iteration < 200; iteration++ {
+		if iteration%2 == 0 {
+			index.ReplaceScene(sceneB)
+		} else {
+			index.ReplaceScene(sceneA)
+		}
+		runtime.Gosched()
+	}
+	readers.Wait()
+	if failed.Load() {
+		t.Fatal("concurrent query observed a partial or mixed snapshot")
+	}
+}
+
 func BenchmarkSpatialQueries(b *testing.B) {
 	scene, err := GenerateDefault(500, DensityDense)
 	if err != nil {
@@ -120,6 +292,50 @@ func BenchmarkSpatialQueries(b *testing.B) {
 }
 
 var benchmarkQueryResult int
+
+func BenchmarkSpatialQueryPoint500(b *testing.B) {
+	scene, err := GenerateDefault(500, DensityDense)
+	if err != nil {
+		b.Fatal(err)
+	}
+	point := rectMiddle(scene.Nodes[250].Bounds)
+	pointRect := Rect{Min: point, Max: point}
+	linear := NewLinearIndex(scene)
+	index := NewSpatialIndex(scene)
+
+	for _, tc := range []struct {
+		name  string
+		query func([]int) []int
+	}{
+		{name: "point/linear", query: func(dst []int) []int { return linear.QueryNodes(pointRect, dst) }},
+		{name: "point/index", query: func(dst []int) []int { return index.QueryPoint(point, dst) }},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				benchmarkPointResult = len(tc.query(nil))
+			}
+		})
+	}
+}
+
+func BenchmarkSpatialIndexReplaceScene(b *testing.B) {
+	scene, err := GenerateDefault(500, DensityDense)
+	if err != nil {
+		b.Fatal(err)
+	}
+	index := NewSpatialIndex(scene)
+	b.ReportAllocs()
+	for b.Loop() {
+		index.ReplaceScene(scene)
+	}
+	benchmarkReplaceSceneNodes = len(scene.Nodes)
+}
+
+var (
+	benchmarkPointResult       int
+	benchmarkReplaceSceneNodes int
+)
 
 func queryRectangles(scene Scene) []Rect {
 	rects := []Rect{scene.Bounds}
@@ -184,4 +400,27 @@ func manualScene(nodes []Node, edges []Edge) Scene {
 		}
 	}
 	return scene
+}
+
+func sceneWideRect() Rect {
+	return Rect{Min: Point{X: -1000, Y: -1000}, Max: Point{X: 1000, Y: 1000}}
+}
+
+func snapshotScene(nodeCount, edgeCount int) Scene {
+	nodes := make([]Node, nodeCount)
+	for node := range nodes {
+		x := float64(node * 20)
+		nodes[node] = Node{
+			ID:     node,
+			Bounds: Rect{Min: Point{X: x, Y: 0}, Max: Point{X: x + 10, Y: 10}},
+		}
+	}
+	edges := make([]Edge, edgeCount)
+	for edge := range edges {
+		edges[edge] = Edge{
+			ID:     edge,
+			Points: []Point{{X: 0, Y: 5}, {X: float64(nodeCount*20 + 10), Y: 5}},
+		}
+	}
+	return manualScene(nodes, edges)
 }
