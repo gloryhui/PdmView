@@ -47,13 +47,18 @@ type Package struct {
 // Table is a table definition with its nearest owning model or package ID.
 type Table struct {
 	Metadata
-	OwnerID string
+	OwnerID      string
+	Columns      []Column
+	Keys         []Key
+	PrimaryKeyID string
+	Indexes      []Index
 }
 
 // Contents holds directly owned package and table definitions.
 type Contents struct {
-	Packages []Package
-	Tables   []Table
+	Packages   []Package
+	Tables     []Table
+	References []Reference
 }
 
 // Parse decodes a PDM document and projects its model, packages, and tables.
@@ -99,15 +104,20 @@ func Project(raw *RawDocument) *Document {
 		return document
 	}
 
-	projector := &projector{raw: raw}
+	projector := &projector{
+		raw:    raw,
+		schema: newSchemaState(),
+	}
 	document.Model.Metadata = projector.metadata(raw.Model, true, &document.Diagnostics)
 	document.Model.DBMS = projector.projectDBMS(raw.Model)
 	document.Model.Contents = projector.projectContents(raw.Model, document.Model.ID, &document.Diagnostics)
+	projector.schema.validate(&document.Diagnostics)
 	return document
 }
 
 type projector struct {
-	raw *RawDocument
+	raw    *RawDocument
+	schema *schemaState
 }
 
 func (p *projector) metadata(element *Element, requireID bool, diagnostics *[]Diagnostic) Metadata {
@@ -217,11 +227,11 @@ func (p *projector) projectContents(parent *Element, ownerID string, diagnostics
 					continue
 				}
 				metadata := p.metadata(member, true, diagnostics)
-				contents.Tables = append(contents.Tables, Table{
-					Metadata: metadata,
-					OwnerID:  ownerID,
-				})
+				contents.Tables = append(contents.Tables, p.projectTable(member, ownerID, metadata, diagnostics))
 			}
+
+		case "References":
+			contents.References = append(contents.References, p.projectReferences(collection, ownerID, diagnostics)...)
 		}
 	}
 	return contents
