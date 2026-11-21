@@ -18,12 +18,14 @@ const (
 type Workspace struct {
 	NavigationPercent float32
 	CanvasPercent     float32
+	canvas            *canvasView
 }
 
 func NewWorkspace() *Workspace {
 	return &Workspace{
 		NavigationPercent: 24,
 		CanvasPercent:     72,
+		canvas:            newCanvasView(),
 	}
 }
 
@@ -31,16 +33,29 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 	if workspace == nil {
 		workspace = NewWorkspace()
 	}
+	if workspace.canvas == nil {
+		workspace.canvas = newCanvasView()
+	}
 	return func(c *ui.Context) {
 		t := c.Theme()
 		lang := string(state.Locale())
 		ui.Column(c.Key(RootKey)).Fill().Background(t.Background).Children(func() {
 			ui.SplitPercent(c.Key(NavigationSplitKey), &workspace.NavigationPercent,
-				func() { sidePane(c, state, i18n.KeyNavigationHeading, t, lang) },
+				func() {
+					sidePane(c, state, i18n.KeyNavigationHeading, t, lang, func() {
+						ui.Text(c, state.Text(i18n.KeySampleDiagram, nil)).FontSize(12).TextColor(t.TextMuted).Lang(lang)
+					})
+				},
 				func() {
 					ui.SplitPercent(c.Key(DetailsSplitKey), &workspace.CanvasPercent,
-						func() { canvasPane(c, state, t, lang) },
-						func() { sidePane(c, state, i18n.KeyDetailsHeading, t, lang) },
+						func() { workspace.canvas.view(c, state, t, lang) },
+						func() {
+							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, func() {
+								if node := workspace.canvas.selectedNode(); node != nil {
+									ui.Text(c, node.Name).FillWidth().Wrap().FontSize(12).TextColor(t.Text)
+								}
+							})
+						},
 					).Fill()
 				},
 			).Grow(1).FillWidth()
@@ -50,22 +65,10 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 	}
 }
 
-func canvasPane(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
-	heading := state.Text(i18n.KeyCanvasHeading, nil)
-	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		ui.Row(c).FillWidth().Height(36).Padding(4, 10).Background(t.Surface).Children(func() {
-			paneHeading(c, heading, t, lang)
-		})
-		ui.Box(c).Grow(1).FillWidth().Clip().
-			Key(CanvasKey).
-			Label(heading).
-			Draw(func(p *ui.Painter, r ui.Rect) { drawGrid(p, r, t) })
-	})
-}
-
-func sidePane(c *ui.Context, state *app.State, key i18n.Key, t *ui.Theme, lang string) {
+func sidePane(c *ui.Context, state *app.State, key i18n.Key, t *ui.Theme, lang string, content func()) {
 	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).Children(func() {
 		paneHeading(c, state.Text(key, nil), t, lang)
+		content()
 	})
 }
 
@@ -78,19 +81,5 @@ func statusBar(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
 		ui.Text(c, state.StatusText()).Key(StatusKey).
 			FillWidth().Wrap().MaxLines(2).Ellipsis("…").
 			FontSize(11).TextColor(t.TextMuted).Lang(lang)
-	})
-}
-
-func drawGrid(p *ui.Painter, r ui.Rect, t *ui.Theme) {
-	p.Clip(r, 0, func() {
-		p.Fill(r, t.Background, 0)
-		line := t.Background.Mix(t.Border, 0.35)
-		const step = 32
-		for x := r.X; x <= r.X+r.W; x += step {
-			p.Line(x, r.Y, x, r.Y+r.H, 0.5, line)
-		}
-		for y := r.Y; y <= r.Y+r.H; y += step {
-			p.Line(r.X, y, r.X+r.W, y, 0.5, line)
-		}
 	})
 }

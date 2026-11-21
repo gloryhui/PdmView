@@ -25,6 +25,11 @@ const (
 	KeyNavigationHeading Key = "workspace.navigation"
 	KeyCanvasHeading     Key = "workspace.canvas"
 	KeyDetailsHeading    Key = "workspace.details"
+	KeySampleDiagram     Key = "canvas.sample"
+	KeyFitSelection      Key = "canvas.fit_selection"
+	KeyShowAll           Key = "canvas.show_all"
+	KeyZoomIn            Key = "canvas.zoom_in"
+	KeyZoomOut           Key = "canvas.zoom_out"
 )
 
 type message struct {
@@ -47,6 +52,11 @@ var resources = map[Locale]map[Key]message{
 		KeyNavigationHeading: {text: "Navigation"},
 		KeyCanvasHeading:     {text: "Diagram canvas"},
 		KeyDetailsHeading:    {text: "Details"},
+		KeySampleDiagram:     {text: "Sample diagram"},
+		KeyFitSelection:      {text: "Fit selection"},
+		KeyShowAll:           {text: "Show all"},
+		KeyZoomIn:            {text: "Zoom in"},
+		KeyZoomOut:           {text: "Zoom out"},
 	},
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
@@ -62,6 +72,11 @@ var resources = map[Locale]map[Key]message{
 		KeyNavigationHeading: {text: "导航"},
 		KeyCanvasHeading:     {text: "图表画布"},
 		KeyDetailsHeading:    {text: "详情"},
+		KeySampleDiagram:     {text: "模拟图表"},
+		KeyFitSelection:      {text: "适应选中"},
+		KeyShowAll:           {text: "显示全部"},
+		KeyZoomIn:            {text: "放大"},
+		KeyZoomOut:           {text: "缩小"},
 	},
 }
 
