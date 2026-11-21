@@ -14,8 +14,8 @@ Phase 0 与 Phase 1 已于 2026-11-21 验收完成。Phase 2 按 P2-01 → P2-02
 | P1-03 | 三栏布局原型 | DONE | DeepSeek / GPT | 双语三栏、分隔线拖动、最小窗口截图、切换保留栏宽，通过 `make check`，见 `docs/PHASE_1_ACCEPTANCE.md` | |
 | P1-04 | 界面国际化基础与语言偏好 | DONE | DeepSeek / GPT | `6f01d72`，双语资源、偏好单测、macOS 菜单双向切换、重启恢复、保存失败实测通过，见 `docs/PHASE_1_ACCEPTANCE.md` | Windows 实机列入 P10-02 |
 | P2-01 | 模拟图数据生成器 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/graph`、`go vet ./internal/graph`、格式检查通过。固定 seed `20261121`，覆盖 50/150/300/500 节点、双密度、双语长名、交叉关系和端口 | |
-| P2-02 | 坐标变换与缩放平移 | IN_PROGRESS | DeepSeek / GPT | 世界坐标、视口局部 DIP 与窗口 DIP 的双向换算 | |
-| P2-03 | HitTest 与空间索引 | TODO | DeepSeek | | |
+| P2-02 | 坐标变换与缩放平移 | DONE | DeepSeek / GPT | `go test -count=1 ./internal/graph`、`go vet ./internal/graph`、格式检查通过。覆盖非零视口原点、反向变换、DIP 平移、缩放限位锚点、适应与 500 节点显示全部 | |
+| P2-03 | HitTest 与空间索引 | IN_PROGRESS | DeepSeek / GPT | 对照线性扫描，验证节点命中、关系路径命中和裁剪边界 | |
 | P2-04 | Viewport Culling 与 LOD | TODO | DeepSeek | | |
 | P2-05 | 性能基准与报告 | TODO | GPT | | |
 | P3-01 | 真实 PDM 样本盘点 | TODO | GPT | | |
