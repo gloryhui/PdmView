@@ -199,13 +199,20 @@ func TestCanvasControlsFitAtMinimumWindowBothLocales(t *testing.T) {
 			state.SelectLanguage(locale)
 		}
 		tester := ui.NewTester(View(state, NewWorkspace()), 800, 600)
+		openBounds, openOK := tester.Find(state.Text(i18n.KeyOpenPDM, nil))
+		if !openOK || openBounds.X < 0 || openBounds.Y < 0 ||
+			openBounds.X+openBounds.W > 801 || openBounds.Y+openBounds.H > 601 {
+			t.Fatalf("%s open control outside 800x600: %+v, %v", locale, openBounds, openOK)
+		}
 		for _, label := range []string{
-			state.Text(i18n.KeyOpenPDM, nil),
+			state.Text(i18n.KeyZoomOut, nil),
+			state.Text(i18n.KeyZoomIn, nil),
 			state.Text(i18n.KeyFitSelection, nil),
 			state.Text(i18n.KeyShowAll, nil),
 			state.Text(i18n.KeyResetView, nil),
 		} {
-			bounds, ok := tester.Find(label)
+			info, ok := tester.Access(label)
+			bounds := info.Bounds
 			if !ok || bounds.X < 0 || bounds.Y < 0 ||
 				bounds.X+bounds.W > 801 || bounds.Y+bounds.H > 601 {
 				t.Fatalf("%s control %q outside 800x600: %+v, %v", locale, label, bounds, ok)

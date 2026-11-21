@@ -35,8 +35,11 @@ const (
 	KeyAutoLayoutStatus  Key = "workspace.auto_layout"
 	KeySampleDiagram     Key = "canvas.sample"
 	KeyFitSelection      Key = "canvas.fit_selection"
+	KeyFitShort          Key = "canvas.fit_short"
 	KeyShowAll           Key = "canvas.show_all"
+	KeyShowAllShort      Key = "canvas.show_all_short"
 	KeyResetView         Key = "canvas.reset"
+	KeyResetShort        Key = "canvas.reset_short"
 	KeyZoomIn            Key = "canvas.zoom_in"
 	KeyZoomOut           Key = "canvas.zoom_out"
 )
@@ -71,8 +74,11 @@ var resources = map[Locale]map[Key]message{
 		KeyAutoLayoutStatus:  {text: "Includes automatically arranged tables"},
 		KeySampleDiagram:     {text: "Sample diagram"},
 		KeyFitSelection:      {text: "Fit selection"},
+		KeyFitShort:          {text: "Fit"},
 		KeyShowAll:           {text: "Show all"},
+		KeyShowAllShort:      {text: "All"},
 		KeyResetView:         {text: "Reset view"},
+		KeyResetShort:        {text: "Reset"},
 		KeyZoomIn:            {text: "Zoom in"},
 		KeyZoomOut:           {text: "Zoom out"},
 	},
@@ -100,8 +106,11 @@ var resources = map[Locale]map[Key]message{
 		KeyAutoLayoutStatus:  {text: "含自动布局的表"},
 		KeySampleDiagram:     {text: "模拟图表"},
 		KeyFitSelection:      {text: "适应选中"},
+		KeyFitShort:          {text: "适应"},
 		KeyShowAll:           {text: "显示全部"},
+		KeyShowAllShort:      {text: "全部"},
 		KeyResetView:         {text: "重置视图"},
+		KeyResetShort:        {text: "重置"},
 		KeyZoomIn:            {text: "放大"},
 		KeyZoomOut:           {text: "缩小"},
 	},

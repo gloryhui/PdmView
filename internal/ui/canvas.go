@@ -88,18 +88,24 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 	}
 	heading := state.Text(i18n.KeyCanvasHeading, nil)
 	ui.Column(c).Fill().Background(theme.Background).Children(func() {
-		ui.Row(c).FillWidth().Height(38).Padding(4, 8).Gap(4).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
+		ui.Row(c).FillWidth().Height(28).Padding(4, 8).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
 			paneHeading(c, heading, theme, lang)
-			ui.Box(c).Grow(1)
-			ui.Button(c, "−").Key(zoomOutKey).Label(state.Text(i18n.KeyZoomOut, nil)).OnClick(func() { view.zoomCentered(1 / 1.25) })
-			ui.Button(c, "+").Key(zoomInKey).Label(state.Text(i18n.KeyZoomIn, nil)).OnClick(func() { view.zoomCentered(1.25) })
-			ui.Button(c, state.Text(i18n.KeyFitSelection, nil)).Key(fitCanvasKey).
-				Disabled(view.selection.Kind == graph.HitNone).OnClick(view.fitSelection)
-			ui.Button(c, state.Text(i18n.KeyShowAll, nil)).Key(showAllKey).
-				OnClick(view.showAll)
-			ui.Button(c, state.Text(i18n.KeyResetView, nil)).Key(ResetViewKey).
-				OnClick(view.resetView)
 		})
+		ui.Row(c).FillWidth().Height(38).Padding(4, 8).Gap(4).
+			AlignItems(ui.Center).Background(theme.Surface).
+			Children(func() {
+				ui.Button(c, "−").Key(zoomOutKey).Label(state.Text(i18n.KeyZoomOut, nil)).OnClick(func() { view.zoomCentered(1 / 1.25) })
+				ui.Button(c, "+").Key(zoomInKey).Label(state.Text(i18n.KeyZoomIn, nil)).OnClick(func() { view.zoomCentered(1.25) })
+				ui.Button(c, state.Text(i18n.KeyFitShort, nil)).Key(fitCanvasKey).
+					Label(state.Text(i18n.KeyFitSelection, nil)).
+					Disabled(view.selection.Kind == graph.HitNone).OnClick(view.fitSelection)
+				ui.Button(c, state.Text(i18n.KeyShowAllShort, nil)).Key(showAllKey).
+					Label(state.Text(i18n.KeyShowAll, nil)).
+					OnClick(view.showAll)
+				ui.Button(c, state.Text(i18n.KeyResetShort, nil)).Key(ResetViewKey).
+					Label(state.Text(i18n.KeyResetView, nil)).
+					OnClick(view.resetView)
+			})
 		canvas := ui.Box(c).Grow(1).FillWidth().Clip().Key(CanvasKey).Label(heading).
 			HandleInput(view.handleInput).Draw(view.draw)
 		if !canvas.Hovered() && !view.pointerDown {

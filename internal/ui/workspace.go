@@ -18,6 +18,13 @@ const (
 	LoadStatusKey      = "pdmview.workspace.load-status"
 	NavigationSplitKey = "pdmview.workspace.navigation-split"
 	DetailsSplitKey    = "pdmview.workspace.details-split"
+	NavigationBodyKey  = "pdmview.workspace.navigation-body"
+	DetailsBodyKey     = "pdmview.workspace.details-body"
+	navigationMinWidth = 200
+	navigationMaxWidth = 360
+	detailsMinWidth    = 220
+	detailsMaxWidth    = 420
+	canvasMinWidth     = 360
 )
 
 // DiagramButtonKey returns the stable key for a zero-based board button.
@@ -47,8 +54,8 @@ type Workspace struct {
 
 func NewWorkspace() *Workspace {
 	return &Workspace{
-		NavigationPercent: 24,
-		CanvasPercent:     72,
+		NavigationPercent: 25,
+		CanvasPercent:     60,
 		canvas:            newCanvasView(),
 		pendingBoard:      -1,
 	}
@@ -200,6 +207,30 @@ func (w *Workspace) notifyChanged() {
 	}
 }
 
+func (w *Workspace) constrainPanes(total float32) {
+	if total < navigationMinWidth+detailsMinWidth+canvasMinWidth+2 {
+		return
+	}
+	available := total - 1
+	navMax := min(float32(navigationMaxWidth), max(float32(navigationMinWidth), available-detailsMinWidth-canvasMinWidth-1))
+	navWidth := available * w.NavigationPercent / 100
+	switch {
+	case navWidth < navigationMinWidth-0.5:
+		w.NavigationPercent = navigationMinWidth * 100 / available
+	case navWidth > navMax+0.5:
+		w.NavigationPercent = navMax * 100 / available
+	}
+	innerAvailable := available*(1-w.NavigationPercent/100) - 1
+	details := innerAvailable * (1 - w.CanvasPercent/100)
+	detailsMax := min(float32(detailsMaxWidth), max(float32(detailsMinWidth), innerAvailable-canvasMinWidth))
+	switch {
+	case details < detailsMinWidth-0.5:
+		w.CanvasPercent = 100 - detailsMinWidth*100/innerAvailable
+	case details > detailsMax+0.5:
+		w.CanvasPercent = 100 - detailsMax*100/innerAvailable
+	}
+}
+
 func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 	if workspace == nil {
 		workspace = NewWorkspace()
@@ -208,12 +239,14 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 		workspace.canvas = newCanvasView()
 	}
 	return func(c *ui.Context) {
+		width, _ := c.Size()
+		workspace.constrainPanes(width)
 		t := c.Theme()
 		lang := string(state.Locale())
 		ui.Column(c.Key(RootKey)).Fill().Background(t.Background).Children(func() {
 			ui.SplitPercent(c.Key(NavigationSplitKey), &workspace.NavigationPercent,
 				func() {
-					sidePane(c, state, i18n.KeyNavigationHeading, t, lang, func() {
+					sidePane(c, state, i18n.KeyNavigationHeading, t, lang, NavigationBodyKey, navigationMinWidth, navigationMaxWidth, func() {
 						workspace.diagramNavigation(c, state, t, lang)
 					})
 				},
@@ -221,7 +254,7 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 					ui.SplitPercent(c.Key(DetailsSplitKey), &workspace.CanvasPercent,
 						func() { workspace.canvas.view(c, state, t, lang) },
 						func() {
-							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, func() {
+							sidePane(c, state, i18n.KeyDetailsHeading, t, lang, DetailsBodyKey, detailsMinWidth, detailsMaxWidth, func() {
 								if node := workspace.canvas.selectedNode(); node != nil {
 									ui.Text(c, node.Name).Key(SelectedNodeKey).
 										FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
@@ -241,29 +274,27 @@ func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.The
 	ui.Button(c, state.Text(i18n.KeyOpenPDM, nil)).Key(OpenPDMKey).
 		FillWidth().Disabled(w.loading).OnClick(w.openHandler)
 	paneHeading(c, state.Text(i18n.KeyDiagramsHeading, nil), t, lang)
-	ui.Scroll(c).Grow(1).FillWidth().Children(func() {
-		ui.Column(c).FillWidth().Gap(4).Role(ui.RoleTabList).Children(func() {
-			for index := 0; index < w.BoardCount(); index++ {
-				label := state.Text(i18n.KeySampleDiagram, nil)
-				if w.hasModel {
-					board := w.boards[index]
-					label = board.Name
-					if label == "" {
-						label = state.Text(i18n.KeyDiagramFallback, map[string]string{
-							"index": fmt.Sprintf("%d", index),
-						})
-					}
-				}
-				index := index
-				button := ui.Button(c, label).Key(DiagramButtonKey(index)).
-					FillWidth().Role(ui.RoleTab).
-					AccessSelected(index == w.activeBoard).
-					OnClick(func() { w.ActivateBoard(index) })
-				if index == w.activeBoard {
-					button.Background(t.Accent).TextColor(t.AccentText).Bold()
+	ui.Column(c).FillWidth().Gap(4).Role(ui.RoleTabList).Children(func() {
+		for index := 0; index < w.BoardCount(); index++ {
+			label := state.Text(i18n.KeySampleDiagram, nil)
+			if w.hasModel {
+				board := w.boards[index]
+				label = board.Name
+				if label == "" {
+					label = state.Text(i18n.KeyDiagramFallback, map[string]string{
+						"index": fmt.Sprintf("%d", index),
+					})
 				}
 			}
-		})
+			index := index
+			button := ui.Button(c, label).Key(DiagramButtonKey(index)).
+				FillWidth().Role(ui.RoleTab).
+				AccessSelected(index == w.activeBoard).
+				OnClick(func() { w.ActivateBoard(index) })
+			if index == w.activeBoard {
+				button.Background(t.Accent).TextColor(t.AccentText).Bold()
+			}
+		}
 	})
 	if status := w.statusText(state); status != "" {
 		ui.Text(c, status).Key(LoadStatusKey).
@@ -289,10 +320,21 @@ func (w *Workspace) statusText(state *app.State) string {
 	}
 }
 
-func sidePane(c *ui.Context, state *app.State, key i18n.Key, t *ui.Theme, lang string, content func()) {
-	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).Children(func() {
+func sidePane(
+	c *ui.Context,
+	state *app.State,
+	key i18n.Key,
+	t *ui.Theme,
+	lang, bodyKey string,
+	minWidth, maxWidth float32,
+	content func(),
+) {
+	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).
+		MinWidth(minWidth).MaxWidth(maxWidth).Clip().Children(func() {
 		paneHeading(c, state.Text(key, nil), t, lang)
-		content()
+		ui.Scroll(c.Key(bodyKey)).Grow(1).FillWidth().Children(func() {
+			ui.Column(c).FillWidth().Gap(8).Children(content)
+		})
 	})
 }
 

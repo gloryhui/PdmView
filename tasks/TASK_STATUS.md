@@ -44,8 +44,8 @@ Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/
 | P6-03 | LOD/缓存/裁剪 | DONE | DeepSeek / GPT | `0fd43c8`，Graph/Renderer/UI/基准包单测、vet 和格式检查通过。760×560 DIP 下本地 8/8 表适应后进入近景并绘制字段。50 表、100 边密集图短测 60.00 FPS，网格命中 300/300 | 每画板最多缓存 256 表视觉、512 共享文本条目，超容量表暂显示轮廓 |
 | P6-04 | 多画板与视口工具 | DONE | DeepSeek / GPT | `bc1c3be`，[原生验收](../docs/PHASE_6_ACCEPTANCE.md#多画板和视口工具)。本地 8/8 表命中，公开样本 3 张画板、8/8 表及 13 个原始关系路径点命中。原生打开、平移、缩放、适应、显示全部和复位通过，定向测试和 vet 通过 | |
 | P6-05 | 画布性能验收 | DONE | GPT | [长测报告](../docs/PHASE_6_ACCEPTANCE.md#正式渲染器性能)。macOS Metal 2× 八组 10 秒测试，150 表两组为 60.00 FPS，300 表密集为 60.00 FPS、稀疏两次复测均 60.00 FPS，500 表两组均为 59.99 FPS。`make check`、e2e 标签测试、macOS 构建通过 | 300 表稀疏首测 59.70 FPS。PowerDesigner 应用内对照仍由 P4-03 跟踪 |
-| P7-01 | 主窗口三栏布局 | TODO | GPT | | |
-| P7-02 | 模型树与 Package | TODO | DeepSeek | | |
+| P7-01 | 主窗口三栏布局 | DONE | DeepSeek / GPT | [原生验收](../docs/PHASE_7_ACCEPTANCE.md#p7-01-三栏工作区)。800×600 DIP 中英文五个画布工具完整可见，双向切换保留画板与选中表。定向测试、vet 与格式检查通过 | |
+| P7-02 | 模型树与 Package | IN_PROGRESS | DeepSeek / GPT | 沿用领域模型对象 ID 和异步画板切换 | |
 | P7-03 | 表详情与字段列表 | TODO | DeepSeek | | |
 | P7-04 | 搜索与定位 | TODO | DeepSeek | | |
 | P7-05 | 完整信息复制 | TODO | DeepSeek | | |

@@ -47,14 +47,14 @@ func TestCanvasSelectionPanZoomAndFit(t *testing.T) {
 		t.Fatalf("cursor zoom moved the anchor: %+v to %+v, scale %g", world, zoomed, view.camera.Scale())
 	}
 
-	if err := tester.Click("Fit selection"); err != nil {
+	if err := tester.Click("Fit"); err != nil {
 		t.Fatal(err)
 	}
 	fitted := view.camera.WorldToViewport(graph.Point{X: 118, Y: 72})
 	if math.Abs(fitted.X-view.viewport.Width()/2) > 1e-8 || math.Abs(fitted.Y-view.viewport.Height()/2) > 1e-8 {
 		t.Fatalf("fit did not center the selected node: %+v", fitted)
 	}
-	if err := tester.Click("Show all"); err != nil {
+	if err := tester.Click("All"); err != nil {
 		t.Fatal(err)
 	}
 	worldBounds := view.camera.VisibleWorld()
@@ -66,7 +66,7 @@ func TestCanvasSelectionPanZoomAndFit(t *testing.T) {
 
 	state.SelectLanguage(i18n.ZHCN)
 	tester.Frame()
-	if !tester.HasText("显示全部") || !tester.HasText("适应选中") || !tester.HasText("模拟图表") {
+	if !tester.HasText("全部") || !tester.HasText("适应") || !tester.HasText("模拟图表") {
 		t.Fatalf("Chinese canvas controls missing: %v", tester.Texts())
 	}
 	if view.camera.VisibleWorld() != worldBounds || view.selectedNode() == nil {

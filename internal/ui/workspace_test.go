@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"pdmview/internal/app"
+	"pdmview/internal/graph"
 	"pdmview/internal/i18n"
 
 	"github.com/egoist/mygo/ui"
@@ -56,7 +57,7 @@ func TestWorkspaceSplitterDragKeyboardAndLocaleRefresh(t *testing.T) {
 	}
 
 	navBefore := workspace.NavigationPercent
-	drag(t, tt, splitters[0], 64, 0)
+	drag(t, tt, splitters[0], 32, 0)
 	if workspace.NavigationPercent <= navBefore {
 		t.Fatalf("navigation splitter drag kept percent at %v", workspace.NavigationPercent)
 	}
@@ -107,6 +108,79 @@ func TestLongWarningClampsAtMinimumWidth(t *testing.T) {
 	}
 }
 
+func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	tester := ui.NewTester(View(state, workspace), 800, 600)
+	splitters := splitterBounds(tester)
+	if len(splitters) != 2 {
+		t.Fatalf("splitters = %d", len(splitters))
+	}
+	if splitters[0].X < 199 || splitters[0].X > 361 {
+		t.Fatalf("navigation pane width outside limits: %+v", splitters[0])
+	}
+	detailsWidth := 800 - splitters[1].X
+	if detailsWidth < 219 || detailsWidth > 421 {
+		t.Fatalf("details pane width outside limits: %+v", splitters[1])
+	}
+	if scrolls := len(scrollAreas(tester)); scrolls < 2 {
+		t.Fatalf("pane scroll areas = %d, want navigation and details", scrolls)
+	}
+	canvasLeft, canvasRight := splitters[0].X, splitters[1].X
+	for _, label := range []string{"Zoom out", "Zoom in", "Fit selection", "Show all", "Reset view"} {
+		info, ok := tester.Access(label)
+		if !ok || info.Bounds.X < canvasLeft-0.5 ||
+			info.Bounds.X+info.Bounds.W > canvasRight+0.5 ||
+			info.Bounds.Y+info.Bounds.H > 601 {
+			t.Fatalf("800x600 canvas tool %q outside canvas %.2f..%.2f: %+v, %v",
+				label, canvasLeft, canvasRight, info.Bounds, ok)
+		}
+	}
+
+	view := workspace.canvas
+	point := view.camera.WorldToScreen(graph.Point{X: 100, Y: 55})
+	tester.ClickAt(float32(point.X), float32(point.Y))
+	if view.selection.Kind != graph.HitNode {
+		t.Fatalf("selection before resize = %+v", view.selection)
+	}
+	view.camera.ZoomAt(graph.Point{X: 10, Y: 10}, 1.5)
+	scale, origin := view.camera.Scale(), view.camera.VisibleWorld().Min
+
+	tester.SetSize(1000, 700)
+	tester.Frame()
+	if view.camera.Scale() != scale || view.camera.VisibleWorld().Min != origin ||
+		view.selection.Kind != graph.HitNode {
+		t.Fatalf("resize changed canvas state: scale=%v origin=%+v selection=%+v",
+			view.camera.Scale(), view.camera.VisibleWorld().Min, view.selection)
+	}
+
+	state.SelectLanguage(i18n.ZHCN)
+	tester.Frame()
+	if view.camera.Scale() != scale || view.camera.VisibleWorld().Min != origin ||
+		view.selection.Kind != graph.HitNode {
+		t.Fatal("locale change altered canvas state")
+	}
+	tester.SetSize(1600, 900)
+	tester.Frame()
+	splitters = splitterBounds(tester)
+	if splitters[0].X > 361 || 1600-splitters[1].X > 421 ||
+		splitters[1].X-splitters[0].X < canvasMinWidth-1 {
+		t.Fatalf("large-window pane allocation outside limits: %+v", splitters)
+	}
+
+	splitters = splitterBounds(tester)
+	canvasLeft, canvasRight = splitters[0].X, splitters[1].X
+	for _, label := range []string{"缩小", "放大", "适应选中", "显示全部", "重置视图"} {
+		info, ok := tester.Access(label)
+		if !ok || info.Bounds.X < canvasLeft-0.5 ||
+			info.Bounds.X+info.Bounds.W > canvasRight+0.5 ||
+			info.Bounds.Y+info.Bounds.H > 901 {
+			t.Fatalf("canvas tool %q outside canvas bounds %.2f..%.2f: %+v, %v",
+				label, canvasLeft, canvasRight, info.Bounds, ok)
+		}
+	}
+}
+
 func newState(t *testing.T, systemTag string) *app.State {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "PdmView", "preferences.json")
@@ -117,6 +191,16 @@ func splitterBounds(tt *ui.Tester) []ui.Rect {
 	var bounds []ui.Rect
 	for _, info := range tt.AccessAll() {
 		if info.Role == ui.RoleSplitter {
+			bounds = append(bounds, info.Bounds)
+		}
+	}
+	return bounds
+}
+
+func scrollAreas(tt *ui.Tester) []ui.Rect {
+	var bounds []ui.Rect
+	for _, info := range tt.AccessAll() {
+		if info.Role == ui.RoleScroll {
 			bounds = append(bounds, info.Bounds)
 		}
 	}
