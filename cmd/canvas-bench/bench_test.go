@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,14 +29,15 @@ func TestParseConfigDefaultsAndValidation(t *testing.T) {
 	cfg, err = ParseConfig([]string{
 		"-nodes", "50", "-density", "sparse", "-seed", "7",
 		"-width", "800", "-height", "600",
-		"-warmup", "500ms", "-sample", "3s",
+		"-warmup", "500ms", "-sample", "3s", "-always-on-top",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Nodes != 50 || cfg.Density != graph.DensitySparse || cfg.Seed != 7 ||
 		cfg.Width != 800 || cfg.Height != 600 ||
-		cfg.Warmup != 500*time.Millisecond || cfg.Sample != 3*time.Second {
+		cfg.Warmup != 500*time.Millisecond || cfg.Sample != 3*time.Second ||
+		!cfg.AlwaysOnTop {
 		t.Fatalf("parsed config = %+v", cfg)
 	}
 
@@ -48,6 +51,50 @@ func TestParseConfigDefaultsAndValidation(t *testing.T) {
 	} {
 		if _, err := ParseConfig(args); err == nil {
 			t.Fatalf("ParseConfig(%v) succeeded", args)
+		}
+	}
+}
+
+func TestProgressSnapshot(t *testing.T) {
+	scene, err := graph.GenerateDefault(50, graph.DensityDense)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := DefaultConfig()
+	cfg.AlwaysOnTop = true
+	bench := NewBench(cfg, scene, graph.NewSpatialIndex(scene), io.Discard, true, true)
+
+	progress := bench.Snapshot()
+	if !progress.StartedAt.IsZero() || progress.Frames != 0 || progress.Samples != 0 ||
+		progress.WindowHidden || !progress.AlwaysOnTop {
+		t.Fatalf("initial progress = %+v", progress)
+	}
+
+	bench.SetWindowHidden(true)
+	bench.SetWindowHidden(true)
+	progress = bench.Snapshot()
+	if !progress.WindowHidden || progress.HiddenChanges != 1 {
+		t.Fatalf("hidden progress = %+v", progress)
+	}
+	bench.SetWindowHidden(false)
+	progress = bench.Snapshot()
+	if progress.WindowHidden || progress.HiddenChanges != 2 {
+		t.Fatalf("shown progress = %+v", progress)
+	}
+
+	var out bytes.Buffer
+	PrintProgress(&out, progress)
+	for _, want := range []string{
+		"CANVAS_BENCH PROGRESS",
+		"frames=0",
+		"samples=0",
+		"window_hidden=false",
+		"hidden_changes=2",
+		"always_on_top=true",
+		"last_frame_age_ms=-1",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("progress line %q lacks %q", out.String(), want)
 		}
 	}
 }

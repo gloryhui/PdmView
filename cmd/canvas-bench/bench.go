@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"pdmview/internal/graph"
@@ -22,13 +23,14 @@ const (
 )
 
 type Config struct {
-	Nodes   int
-	Density graph.Density
-	Seed    uint64
-	Width   int
-	Height  int
-	Warmup  time.Duration
-	Sample  time.Duration
+	Nodes       int
+	Density     graph.Density
+	Seed        uint64
+	Width       int
+	Height      int
+	Warmup      time.Duration
+	Sample      time.Duration
+	AlwaysOnTop bool
 }
 
 func DefaultConfig() Config {
@@ -55,6 +57,7 @@ func ParseConfig(args []string) (Config, error) {
 	fs.IntVar(&cfg.Height, "height", cfg.Height, "content height in DIP")
 	fs.DurationVar(&cfg.Warmup, "warmup", cfg.Warmup, "warmup duration")
 	fs.DurationVar(&cfg.Sample, "sample", cfg.Sample, "measurement duration")
+	fs.BoolVar(&cfg.AlwaysOnTop, "always-on-top", cfg.AlwaysOnTop, "keep the benchmark window above other windows")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -216,6 +219,9 @@ type Bench struct {
 	began     bool
 	done      bool
 
+	diagMu sync.Mutex
+	diag   Progress
+
 	viewportW, viewportH     int
 	unexpectedW, unexpectedH int
 	gpu                      bool
@@ -237,6 +243,18 @@ type Bench struct {
 	unprepared  int
 }
 
+type Progress struct {
+	Frames        int
+	Samples       int
+	StartedAt     time.Time
+	LastFrame     time.Time
+	WindowHidden  bool
+	HiddenChanges int
+	AlwaysOnTop   bool
+	Warmup        time.Duration
+	Sample        time.Duration
+}
+
 func NewBench(cfg Config, scene graph.Scene, index graph.SpatialQuery, out io.Writer, native, pageNil bool) *Bench {
 	canvas := renderer.New(scene, index)
 	area := ui.Rect{W: float32(cfg.Width), H: float32(cfg.Height)}
@@ -256,6 +274,25 @@ func NewBench(cfg Config, scene graph.Scene, index graph.SpatialQuery, out io.Wr
 		edgesMin:  math.MaxInt,
 		lodCounts: map[renderer.LOD]int{renderer.Far: 0, renderer.Medium: 0, renderer.Near: 0},
 	}
+}
+
+func (b *Bench) SetWindowHidden(hidden bool) {
+	b.diagMu.Lock()
+	defer b.diagMu.Unlock()
+	if b.diag.WindowHidden != hidden {
+		b.diag.HiddenChanges++
+		b.diag.WindowHidden = hidden
+	}
+}
+
+func (b *Bench) Snapshot() Progress {
+	b.diagMu.Lock()
+	p := b.diag
+	b.diagMu.Unlock()
+	p.AlwaysOnTop = b.cfg.AlwaysOnTop
+	p.Warmup = b.cfg.Warmup
+	p.Sample = b.cfg.Sample
+	return p
 }
 
 // Frame draws and records one painter callback. It returns true once the
@@ -291,6 +328,16 @@ func (b *Bench) Frame(p *ui.Painter, area ui.Rect, camera *graph.Camera) bool {
 	applyMotion(camera, b.scene, area, start.Sub(b.started))
 	frame := b.renderer.Draw(p, area, camera, graph.Hit{Kind: graph.HitNone, Index: -1})
 	end := time.Now()
+	b.diagMu.Lock()
+	if b.diag.StartedAt.IsZero() {
+		b.diag.StartedAt = start
+	}
+	b.diag.LastFrame = end
+	b.diag.Frames++
+	if sampling {
+		b.diag.Samples++
+	}
+	b.diagMu.Unlock()
 
 	if sampling {
 		if !b.prevEnd.IsZero() {
@@ -417,13 +464,33 @@ func percentileDuration(values []time.Duration, p float64) time.Duration {
 
 func (b *Bench) printBegin() {
 	fmt.Fprintf(b.out,
-		"CANVAS_BENCH BEGIN nodes=%d density=%s seed=%d warmup_ms=%d sample_ms=%d viewport_dip=%dx%d viewport_px=%dx%d native=%t page_nil=%t gpu=%t hidpi=%t scale=%.2f\n",
+		"CANVAS_BENCH BEGIN nodes=%d density=%s seed=%d warmup_ms=%d sample_ms=%d viewport_dip=%dx%d viewport_px=%dx%d native=%t page_nil=%t gpu=%t hidpi=%t scale=%.2f always_on_top=%t\n",
 		b.cfg.Nodes, b.cfg.Density, b.cfg.Seed,
 		b.cfg.Warmup.Milliseconds(), b.cfg.Sample.Milliseconds(),
 		b.viewportW, b.viewportH,
 		int(math.Round(float64(b.viewportW)*float64(b.scale))),
 		int(math.Round(float64(b.viewportH)*float64(b.scale))),
 		b.native, b.pageNil, b.gpu, b.scale > 1.01, b.scale,
+		b.cfg.AlwaysOnTop,
+	)
+}
+
+func PrintProgress(out io.Writer, p Progress) {
+	now := time.Now()
+	elapsedMS, lastFrameMS := int64(-1), int64(-1)
+	if !p.StartedAt.IsZero() {
+		elapsedMS = now.Sub(p.StartedAt).Milliseconds()
+	}
+	if !p.LastFrame.IsZero() {
+		lastFrameMS = now.Sub(p.LastFrame).Milliseconds()
+	}
+	started := !p.StartedAt.IsZero()
+	sampling := started && !now.Before(p.StartedAt.Add(p.Warmup))
+	fmt.Fprintf(out,
+		"CANVAS_BENCH PROGRESS frames=%d samples=%d started=%t sampling=%t elapsed_ms=%d last_frame_age_ms=%d window_hidden=%t hidden_changes=%d always_on_top=%t warmup_ms=%d sample_ms=%d\n",
+		p.Frames, p.Samples, started, sampling,
+		elapsedMS, lastFrameMS, p.WindowHidden, p.HiddenChanges,
+		p.AlwaysOnTop, p.Warmup.Milliseconds(), p.Sample.Milliseconds(),
 	)
 }
 

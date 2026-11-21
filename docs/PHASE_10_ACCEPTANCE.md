@@ -30,11 +30,48 @@
 
 PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原生画布探针检测到 `Page()==nil`、GPU 绘制和 2× 比例。正式包的 `otool -L` 未列出 WebKit、Electron 或 Node，进程采样时没有子进程。`vmmap` 在正式包进程中观察到 AppKit、Metal 以及系统 WebKit 映射。核对 MyGo v0.10.0 源码后确认，`internal/darwin/objc.go` 的 `load` 会在启动时调用 `mustDlopen` 加载系统 WebKit。PdmView 的界面没有创建 WebView。Gate 5 若要求进程完全不依赖 WebKit，当前 macOS 构建无法满足该项。
 
+补查了 [MyGo v0.10.0](https://github.com/egoist/mygo/releases/tag/v0.10.0)、[官方主分支的 Darwin 初始化](https://github.com/egoist/mygo/blob/main/internal/darwin/objc.go)及 [原生窗口构建标签说明](https://mygo.run/docs/ui/windows#no-webview)。锁定版本与官方主分支均直接加载系统 WebKit。用 `go list` 比对，Darwin 在启用 `mygo_nowebview` 前后选中的源文件完全相同。
+
+在项目忽略的 `.out/phase10/followup/webkit-overlay.d4ffM1/` 下复制 MyGo v0.10.0，使用独立 `-modfile` 与 Go `-overlay`。实验副本去掉 WebKit 的启动 `dlopen`、`WKWebView` 子类和 scheme handler 的启动注册。该副本仅用于原生验证。`cmd/pdmview`、`internal/app`、`internal/ui` 定向测试通过。启动合成夹具后，原生 SQL 预览可双语切换，1,445 字节内容保持一致，并正常退出。
+
+| 运行对照 | dyld 实测结果 |
+|---|---|
+| 锁定的 MyGo | 直接 `dlopen` 系统 `WebKit.framework/WebKit` |
+| 隔离实验 | 上述直接调用消失。AppKit 在启动时加载 `WritingToolsUI`，其弱依赖 `GenerativeAssistantSettings` 又引入 WebKit。`vmmap` 仍显示 WebKit、WebCore、WebKitLegacy、AppKit 与 Metal。 |
+
+可在 MyGo 上游将框架和对应 Objective-C 类注册移到 Web 功能首次使用时，以消除框架自身的直接加载。该实验同时表明，延迟 MyGo 的加载不足以保证 macOS 进程没有 WebKit 映射。Apple 对 Writing Tools 的公开 API 调整的是具体视图的编辑行为。[Apple 的 API 说明](https://developer.apple.com/documentation/appkit/writing-tools)。目前未找到官方公开开关能阻止实测的 AppKit 加载链。实验改动留在本地，`go.mod`、`go.sum` 和发布包未变。
+
+dyld 日志位于 `.out/phase10/followup/loader-fixed-dyld.log` 和 `loader-overlay-dyld.log`，隔离版 UI 与 `vmmap` 证据位于实验目录。
+
 ### 原生画布与内存
 
 以正式 `renderer.Canvas` 运行 500 表、1,000 关系的密集场景，种子 `20261121`，窗口 1200×800 DIP。首次长测已显示原生 Metal 窗口，报告 `native=true page_nil=true gpu=true hidpi=true scale=2.00`。预热 5 秒后开始采样，180 秒场景未收到完成帧，200 秒 watchdog 退出，峰值 RSS 146.8 MiB。该次长测没有 FPS 结果，不能作为持续性能验收。日志和 RSS 样本位于 `.out/phase10/evidence/mac-500-dense-soak.log` 和 `mac-500-dense-rss.tsv`。
 
 启用逐帧日志并保持显示唤醒后复跑，日志记录到原生 GPU 绘制，本次同样由 200 秒 watchdog 结束，峰值 RSS 147.0 MiB。单独做 10 秒烟测也由 27 秒 watchdog 结束。帧调度停止的原因尚未确认。复跑和烟测日志位于 `.out/phase10/evidence/mac-500-dense-retry.log` 和 `mac-500-dense-smoke.log`。此前已完成的短时性能数据见 [Phase 6 正式渲染器基准](PHASE_6_ACCEPTANCE.md#正式渲染器性能)。
+
+### 长测超时复查
+
+在同一台 Mac 重新编译原基准入口。500 表密集图的 10 秒对照完成 598 帧，实测 59.79 FPS，帧间隔 P95 17.515 ms。随后不置顶的 180 秒对照再次触发 200 秒 watchdog，全程平均 CPU 用时不足单核的 1%，峰值 RSS 135.6 MiB。停帧时用 `sample` 查询基准进程，主线程在 `NSApplication` 事件循环的 `mach_msg` 中等待。测试窗口仍存在且未最小化，当时在其他窗口之后。MyGo 的 `holdFrame` 会在窗口被系统判为不可见时暂停绘制，显示后恢复。证据保存在 `.out/phase10/followup/baseline-10s.log`、`baseline-180s.log`、`baseline-180s-rss.tsv` 和 `stalled-sample.txt`。
+
+基准增加可选 `-always-on-top`，只影响基准窗口。watchdog 通过 MyGo 的 `Context.WindowHidden` 和最后一帧时间输出诊断。渲染器、显示节奏与既有测量口径保持一致。修改后不置顶的 10 秒对照完成 600 帧、60.00 FPS。置顶完成连续 180 秒采样，所有帧均由 Metal GPU 提交。
+
+受控对照在采样开始后最小化基准窗口，22 秒 watchdog 记录 `window_hidden=true`、1 次隐藏状态变化、130 个绘制回调和 10 个采样帧，最后一帧已过去 19.262 秒。这复现了系统隐藏窗口后暂停绘制所引发的同类超时。原有超时发生时尚未记录遮挡事件，不能逐次归因。
+
+| 场景 | 帧数 | FPS | 帧间隔 P95 | MyGo 帧 P95 | CPU（单核 100%） | 峰值 RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| 500 表 / 1,000 关系密集图，1200×800 DIP，2×，预热 5 秒，采样 180 秒 | 10,775 | 59.86 | 17.608 ms | 3.9 ms | 20.4% | 142.9 MiB |
+
+可见表和关系达到 500 / 1,000，三档 LOD 均触发，网格缓存命中 10,775/10,775，未准备可见表为 0。每 8 秒取一次 RSS，共 23 点，采样范围 93.8–138.0 MiB，前半与后半中位数分别为 137.2 和 131.2 MiB。该次 3 分钟工况未见持续内存增长。
+
+```sh
+mkdir -p .out/phase10/followup
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o .out/phase10/followup/canvas-bench-visible ./cmd/canvas-bench
+caffeinate -diu /usr/bin/time -lp env -u MYGO_UNCAPPED MYGO_FRAME_STATS=all \
+  .out/phase10/followup/canvas-bench-visible -nodes 500 -density dense -seed 20261121 \
+  -always-on-top -warmup 5s -sample 180s
+```
+
+原始数据在 `.out/phase10/followup/visible-180s.log`、`visible-180s-rss.tsv`、`non-top-occlusion.log` 和 `minimized-occlusion-retry.log`。
 
 ### 检查命令
 
@@ -56,4 +93,4 @@ PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原�
 - 重新验证最终 Mac 应用签名。通过 LaunchServices 启动含许可证的最终 `.app`，确认运行路径、隔离偏好的中文恢复和正常退出。最终 Windows EXE 的 SHA-256 与已核对的交叉构建一致。
 - `sh -n`、`make check`、e2e 标签 Go 测试、`go mod verify` 和 Windows x64 发布标签交叉 `go vet` 通过。本地真实样本 SHA-256 仍与 Phase 3 一致。
 
-发布文档和本地候选检查完成。Windows 桌面验收延期。macOS 的完整长期稳定性、物理触控板以及 MyGo 对系统 WebKit 的启动依赖仍影响 Gate 5。
+发布文档和本地候选检查完成。macOS 画布的 180 秒工况通过。物理触控板、macOS WebKit 启动加载与延期的 Windows 桌面验收仍影响 Gate 5。

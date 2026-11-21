@@ -63,5 +63,5 @@ Get-FileHash -Algorithm SHA256 .out\windows-local\PdmView.exe
 
 - PDM 输入为 UTF-8 XML。已用本地 PowerDesigner 16.5.0.3982 真实样本和公开 XML 导出验证结构。其他格式、外部模型引用及应用内布局对照见 [PDM 格式验证](docs/PDM_FORMAT.md)。
 - SQL 实测目标为 MySQL 8.0.46。类型映射白名单、阻断规则和限制见 [类型映射](docs/MYSQL_TYPE_MAPPING.md)，执行证据见 [Phase 9 验收](docs/PHASE_9_ACCEPTANCE.md)。
-- macOS 候选的最低系统版本为 13.0。PdmView 使用原生窗口，锁定的 MyGo v0.10.0 macOS 后端启动时会加载系统 WebKit。Windows 候选使用 `mygo_nowebview` 移除 WebView2 后端。
-- macOS 长时画布稳定性和物理触控板手势仍待验收。P4-03 PowerDesigner 应用内对照仍为 `BLOCKED`。
+- macOS 候选的最低系统版本为 13.0。PdmView 使用原生窗口，锁定的 MyGo v0.10.0 macOS 后端启动时会加载系统 WebKit。隔离实验取消 MyGo 直接加载后，macOS 15.8.1 的 AppKit 仍经 Writing Tools 间接加载 WebKit。Windows 候选使用 `mygo_nowebview` 移除 WebView2 后端。
+- macOS 的 500 表密集画布已通过 180 秒实测。物理触控板手势仍待验收。P4-03 PowerDesigner 应用内对照仍为 `BLOCKED`。

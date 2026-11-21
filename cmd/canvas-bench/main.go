@@ -40,9 +40,14 @@ func main() {
 			UseContentSize:  true,
 			DisableResize:   true,
 			DisableMaximize: true,
+			AlwaysOnTop:     cfg.AlwaysOnTop,
 			MinWidth:        320,
 			MinHeight:       240,
 			Content: ui.View(func(c *ui.Context) {
+				hidden := c.WindowHidden()
+				if bench != nil {
+					bench.SetWindowHidden(hidden)
+				}
 				ui.Box(c).Fill().Draw(func(p *ui.Painter, area ui.Rect) {
 					if stopping.Load() || bench == nil {
 						return
@@ -69,6 +74,7 @@ func main() {
 
 		watchdog = time.AfterFunc(cfg.Warmup+cfg.Sample+15*time.Second, func() {
 			if stopping.CompareAndSwap(false, true) {
+				PrintProgress(os.Stdout, bench.Snapshot())
 				fmt.Fprintf(os.Stdout, "CANVAS_BENCH END error=%q timeout_ms=%d\n",
 					"watchdog timeout", (cfg.Warmup + cfg.Sample + 15*time.Second).Milliseconds())
 				exitCode.Store(1)
