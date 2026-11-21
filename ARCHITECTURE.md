@@ -76,6 +76,12 @@ UI 只负责交互、状态展示和调用应用服务。不得直接解析 XML�
 ### `internal/ui`
 职责：主窗口、模型树、画布、详情、SQL 预览、搜索、工具栏。
 
+### 原生 UI 与平台运行时边界
+
+- PdmView 的主窗口、工作区、ER 画布、SQL 预览和应用提示全部使用 MyGo 原生 UI。应用窗口通过 `WindowOptions.Content` 和 `ui.View` 创建，ER 画布使用 MyGo Canvas/Painter，打开和保存使用系统原生文件面板。
+- 应用界面不使用 HTML、CSS 或 JavaScript，不创建 WebView，不加载网页内容，不引入浏览器前端运行时。SQL 预览在原生控件中显示文本。
+- macOS 启动时，锁定的 MyGo v0.10.0 会直接加载系统 `WebKit.framework`。在禁用该直接调用的本地隔离实验中，AppKit 仍经 `WritingToolsUI` 和 `GenerativeAssistantSettings` 间接加载 WebKit。系统框架加载作为平台运行时事实记录。原生 UI 验收检查应用的界面实现及 WebView 实例创建情况。实测证据见 [Phase 10 验收记录](docs/PHASE_10_ACCEPTANCE.md#原生-ui-与-webkit-加载)。
+
 ### 界面国际化与偏好
 
 - Phase 1 为正式应用建立统一的文案查询入口。随程序内置 `zh-CN`、`en` 两套资源，共用稳定的消息键和命名参数。单条简中文案缺失时回退到英文，测试检查两套资源键与参数一致。

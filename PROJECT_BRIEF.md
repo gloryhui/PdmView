@@ -39,7 +39,7 @@ PdmView 是一个轻量、原生、跨平台的 PowerDesigner PDM 文件只读�
 ## 4. 技术决策
 
 - Go + MyGo Native UI。
-- 仅使用 Native UI，禁止 WebView、Electron、Tauri、React/Vue 页面。
+- 应用界面完全使用原生 UI，不创建 WebView，不使用网页前端、Electron 或 Tauri。macOS 系统框架加载边界见 [架构规范](ARCHITECTURE.md#原生-ui-与平台运行时边界)。
 - Lobe MyGo 只在确认与当前 MyGo 版本兼容且能直接复用时引入；不得为使用组件库而引入 Web 技术。
 - XML 解析采用 Go 生态中经验证的 XML 库；先对真实 PDM 样本做可行性验证，再确定实现。
 - Graph Engine、PDM Domain Model、SQL Generator 不依赖 UI。

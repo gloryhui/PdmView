@@ -10,7 +10,7 @@
 - 鼠标滚轮、物理触控板双指捏合缩放。
 - 大模型画布性能。
 - 长时间使用内存稳定。
-- 使用原生 UI，应用流程不创建 WebView。记录 macOS 启动时系统 WebKit 的加载来源。
+- 按 [Gate 5](../QUALITY_GATES.md#gate-5跨平台和发布) 验证应用界面完全使用原生 UI 且未创建 WebView，记录 macOS 启动时系统 WebKit 的加载来源。
 
 ## P10-02 Windows x64
 验证：

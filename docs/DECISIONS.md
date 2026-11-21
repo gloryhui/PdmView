@@ -7,6 +7,7 @@
 - 项目模块使用 `pdmview`。项目尚无远端或可分配的发布模块路径。
 - MyGo 锁定官方 tag `v0.10.0`（`ebde9399baf2734b3361856a53f4036859973d1d`）。`go.mod` 声明依赖要求的 Go 1.27.3，验证使用工具链 Go 1.27.4。桌面构建以 `CGO_ENABLED=0` 为基准。
 - 所有窗口使用 `WindowOptions.Content` 和 `ui.View`。macOS arm64 作为实际验证平台，Windows x64 单独记录交叉构建与真实运行结果。
+- 界面全部使用原生 UI，应用不创建 WebView。系统 WebKit 的启动加载按 [平台运行时边界](../ARCHITECTURE.md#原生-ui-与平台运行时边界) 记录。
 - 选用 MyGo 原生控件开展后续工作。Lobe MyGo 与选定 MyGo 的兼容结果单独记录，Phase 0 只有探针所需的 MyGo 直接依赖。
 
 依据：[Go 版本历史](https://go.dev/doc/devel/release#go1.27.0)、[MyGo v0.10.0 的 go.mod](https://github.com/egoist/mygo/blob/v0.10.0/go.mod)、[MyGo 原生窗口](https://github.com/egoist/mygo/blob/v0.10.0/docs/ui/README.md)。

@@ -32,7 +32,9 @@
 
 ### 原生 UI 与 WebKit 加载
 
-本次按 Gate 5 的原生 UI 和应用流程未创建 WebView 口径验收，该项通过。PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原生画布探针记录 `native=true page_nil=true gpu=true hidpi=true scale=2.00`。正式包的 `otool -L` 未列出 WebKit、Electron 或 Node，进程采样时没有子进程。`vmmap` 在正式包进程中观察到 AppKit、Metal 以及系统 WebKit 映射。MyGo v0.10.0 源码的 `internal/darwin/objc.go` 在启动时调用 `mustDlopen` 加载系统 WebKit。
+**macOS 原生 UI 项通过。** 正式入口通过 `WindowOptions.Content` 和 `ui.View` 创建主窗口。工作区、ER 画布和 SQL 预览使用 MyGo 原生控件和绘制接口，打开和保存使用系统原生面板。应用验收流程未创建 WebView。原生画布探针记录 `native=true page_nil=true gpu=true hidpi=true scale=2.00`。验收口径见 [Gate 5](../QUALITY_GATES.md#gate-5跨平台和发布)。
+
+正式包的 `otool -L` 未列出 WebKit、Electron 或 Node，进程采样时没有子进程。`vmmap` 在正式包进程中观察到 AppKit、Metal 以及系统 WebKit 映射。MyGo v0.10.0 源码的 `internal/darwin/objc.go` 在启动时调用 `mustDlopen` 加载系统 WebKit。
 
 补查了 [MyGo v0.10.0](https://github.com/egoist/mygo/releases/tag/v0.10.0)、[官方主分支的 Darwin 初始化](https://github.com/egoist/mygo/blob/main/internal/darwin/objc.go)及 [原生窗口构建标签说明](https://mygo.run/docs/ui/windows#no-webview)。锁定版本与官方主分支均直接加载系统 WebKit。用 `go list` 比对，Darwin 在启用 `mygo_nowebview` 前后选中的源文件完全相同。
 
@@ -43,7 +45,7 @@
 | 锁定的 MyGo | 直接 `dlopen` 系统 `WebKit.framework/WebKit`，日志也记录了 AppKit 的间接加载链 |
 | 隔离实验 | 上述直接调用消失。AppKit 在启动时加载 `WritingToolsUI`，其弱依赖 `GenerativeAssistantSettings` 又引入 WebKit。`vmmap` 仍显示 WebKit、WebCore、WebKitLegacy、AppKit 与 Metal。 |
 
-可在 MyGo 上游将框架和对应 Objective-C 类注册移到 Web 功能首次使用时，以消除框架自身的直接加载。该实验同时表明，延迟 MyGo 的加载不足以保证 macOS 进程没有 WebKit 映射。Apple 对 Writing Tools 的公开 API 调整的是具体视图的编辑行为。[Apple 的 API 说明](https://developer.apple.com/documentation/appkit/writing-tools)。目前未找到官方公开开关能阻止实测的 AppKit 加载链。实验改动留在本地，`go.mod`、`go.sum` 和发布包未变。
+两条加载路径均记入平台运行时记录。按 [架构边界](../ARCHITECTURE.md#原生-ui-与平台运行时边界)，原生 UI 项允许系统 WebKit 映射，依据应用界面实现及 WebView 实例创建情况判定。隔离实验仅用于核对加载来源，`go.mod`、`go.sum` 和发布包均沿用锁定的 MyGo v0.10.0。
 
 dyld 日志位于 `.out/phase10/followup/loader-fixed-dyld.log` 和 `loader-overlay-dyld.log`，隔离版 UI 与 `vmmap` 证据位于实验目录。
 

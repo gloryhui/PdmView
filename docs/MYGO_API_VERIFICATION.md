@@ -42,6 +42,8 @@ MyGo v0.10.0 的官方要求是 macOS 12+ 或 Windows 10/11 x64、arm64。原生
 
 在 Apple M4 桌面会话，独立本地验证程序通过 `WindowOptions.Content` 创建窗口。实际检查 `NativeHandle() != 0`、`Page() == nil`，首帧日志报告 GPU 提交。
 
+原生窗口和 WebView 创建按上述探针结果验收。macOS 系统 WebKit 的启动加载见 [Phase 10 运行记录](PHASE_10_ACCEPTANCE.md#原生-ui-与-webkit-加载)。
+
 - 调用 `Dialog.Open`，设置 `.pdm` 文件过滤。通过 MyGo 官方 macOS 测试钩子观察系统面板在屏幕上出现，触发取消，API 返回零个路径且无错误。自动发送方向键和回车的文件选择尝试未得到选中结果，选中文件返回路径仍需验证。
 - 系统剪贴板写入并读回包含中文的合成文本，字节相同。正式探针通过本地 automation 实际触发按钮，状态显示 Unicode 与专用格式往返成功，原剪贴板内容已恢复。恢复前核对专用标记，极短时间内的外部并发写仍存在竞态。
 

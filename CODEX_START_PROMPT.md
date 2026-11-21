@@ -36,7 +36,7 @@
 # 技术路线
 
 - Go + MyGo Native UI。
-- Native UI，不使用 WebView。
+- 应用界面完全使用原生 UI，不创建 WebView。macOS 系统框架加载按 [架构规范](ARCHITECTURE.md#原生-ui-与平台运行时边界) 记录。
 - Lobe MyGo 仅在确认与当前 MyGo Native UI 兼容后复用，不得引入 Web 前端运行时。
 - PDM Parser、Domain Model、Graph Engine、Renderer、SQL Generator、UI 必须分层。
 - 真实 PDM 原始 Diagram 布局优先；缺失时才 fallback 自动布局。
@@ -71,7 +71,7 @@
 - 环境检查结果。
 - Go/MyGo/Lobe MyGo 的实际版本。
 - 官方 API 证据和最小程序验证结果。
-- 是否确认 Native UI 无 WebView。
+- 是否实测窗口使用原生 UI 且未创建 WebView。
 - 真实 PDM 样本是否可用。
 - 项目骨架文件清单。
 - 测试结果。

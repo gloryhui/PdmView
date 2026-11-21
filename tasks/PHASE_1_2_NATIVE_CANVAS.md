@@ -5,10 +5,10 @@
 1. 使用官方当前 API 创建原生窗口。
 2. 设置窗口标题、最小尺寸、关闭生命周期。
 3. 验证 macOS Apple Silicon 启动。
-4. 确认进程未启动 WebView/Chromium。
+4. 确认原生窗口句柄有效、`Window.Page() == nil`，应用未创建 WebView。
 5. 记录窗口截图和启动方式。
 
-验收：本机真实启动，关闭正常，无网页运行时。
+验收以本机真实启动、原生 UI、未创建 WebView 和正常关闭为准。系统框架加载按 [架构规范](../ARCHITECTURE.md#原生-ui-与平台运行时边界) 记录。
 
 ## P1-02 Painter/Canvas 验证
 步骤：
