@@ -19,16 +19,20 @@
 | 启动和退出 | 通过 LaunchServices 启动正式 `.app`，关闭窗口后进程退出。修正最低系统版本后的包再次启动、恢复偏好并正常退出。 |
 | 双语切换 | 系统首选 `zh-Hans-CN`，隔离目录没有偏好时默认简体中文。原生菜单双向即时切换并显示当前语言的勾选。保存 `zh-CN` 后退出，重启恢复中文。应用配置目录通过测试进程的 `HOME` 隔离。 |
 | 原生打开、详情与搜索 | 打开面板可取消。选中合成 PDM 后显示画板和详情，搜索 `alpha` 定位到两条匹配。打开损坏的 PDM 显示中文应用错误提示，并保留当前合成模型及选中表。 |
-| Retina 与最小窗口 | 请求 500×400 后系统限制为 800×600 点，观察到 1600×1200 像素窗口。画板和详情的中文及拉丁文字均可辨认，详情滚轮生效。最小窗口的英文详情中，长连续注释有右侧截断。此次未实测物理触控板捏合。 |
+| Retina 与最小窗口 | 请求 500×400 后系统限制为 800×600 点，观察到 1600×1200 像素窗口。画板和详情的中文及拉丁文字均可辨认，详情滚轮生效。最小窗口的英文详情中，长连续注释有右侧截断。 |
 | 原生 SQL 保存 | 面板建议名 `phase8_fixture.sql`，支持取消。中英文各保存一份 1,445 字节文件，逐字节与 Phase 9 合成基准一致。对本次合成文件再次保存时显示系统替换确认，确认后的文件仍与基准一致。 |
 | 系统剪贴板 | 正式包的中文复制显示成功，随后剪贴板版本变化中止了字节对照，未确认当次恢复。重新构建同源的 `e2e` 原生程序并复核，两种语言的完整表信息 3,058 字节、全库 SQL 1,445 字节、单表 SQL 944 字节分别逐字节一致。全库 SQL 与合成基准文件一致。两轮均确认原剪贴板恢复。 |
 | 测试覆盖界限 | 正式桌面流程使用合成夹具，真实样本仅通过本地摘要和校验和复核。 |
 
 界面文案检查覆盖菜单与工具标签、搜索、详情、预览、保存和错误反馈。错误提示保留，供打开失败时识别结果。正式包的两份合成导出保存在 `.out/phase10/evidence/mac-export-en/` 和 `mac-export-zh/`。两份的 SHA-256 均为 `b66f80149784f02376c887fc1baf23c483d983214e0fc9483c331de1b77f2fa1`。
 
-### 运行时依赖
+### 物理触控板捏合
 
-PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原生画布探针检测到 `Page()==nil`、GPU 绘制和 2× 比例。正式包的 `otool -L` 未列出 WebKit、Electron 或 Node，进程采样时没有子进程。`vmmap` 在正式包进程中观察到 AppKit、Metal 以及系统 WebKit 映射。核对 MyGo v0.10.0 源码后确认，`internal/darwin/objc.go` 的 `load` 会在启动时调用 `mustDlopen` 加载系统 WebKit。PdmView 的界面没有创建 WebView。Gate 5 若要求进程完全不依赖 WebKit，当前 macOS 构建无法满足该项。
+2026-11-21 在 Apple M4 Mac mini 上通过 `hidutil list`、`ioreg` 和 `system_profiler` 核对本机输入设备。HID 枚举可见 USB 鼠标和键盘，未识别到物理触控板。本轮没有实测手指捏合，P10-01 因缺少设备保留 `BLOCKED`。接入触控板后，在正式应用包中打开合成 PDM，将指针置于画布表节点上，分别双指张开和捏合，记录放大、缩小及指针锚点表现。
+
+### 原生 UI 与 WebKit 加载
+
+本次按 Gate 5 的原生 UI 和应用流程未创建 WebView 口径验收，该项通过。PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原生画布探针记录 `native=true page_nil=true gpu=true hidpi=true scale=2.00`。正式包的 `otool -L` 未列出 WebKit、Electron 或 Node，进程采样时没有子进程。`vmmap` 在正式包进程中观察到 AppKit、Metal 以及系统 WebKit 映射。MyGo v0.10.0 源码的 `internal/darwin/objc.go` 在启动时调用 `mustDlopen` 加载系统 WebKit。
 
 补查了 [MyGo v0.10.0](https://github.com/egoist/mygo/releases/tag/v0.10.0)、[官方主分支的 Darwin 初始化](https://github.com/egoist/mygo/blob/main/internal/darwin/objc.go)及 [原生窗口构建标签说明](https://mygo.run/docs/ui/windows#no-webview)。锁定版本与官方主分支均直接加载系统 WebKit。用 `go list` 比对，Darwin 在启用 `mygo_nowebview` 前后选中的源文件完全相同。
 
@@ -36,7 +40,7 @@ PdmView 主窗口通过 `WindowOptions.Content` 使用 MyGo 原生控件。原�
 
 | 运行对照 | dyld 实测结果 |
 |---|---|
-| 锁定的 MyGo | 直接 `dlopen` 系统 `WebKit.framework/WebKit` |
+| 锁定的 MyGo | 直接 `dlopen` 系统 `WebKit.framework/WebKit`，日志也记录了 AppKit 的间接加载链 |
 | 隔离实验 | 上述直接调用消失。AppKit 在启动时加载 `WritingToolsUI`，其弱依赖 `GenerativeAssistantSettings` 又引入 WebKit。`vmmap` 仍显示 WebKit、WebCore、WebKitLegacy、AppKit 与 Metal。 |
 
 可在 MyGo 上游将框架和对应 Objective-C 类注册移到 Web 功能首次使用时，以消除框架自身的直接加载。该实验同时表明，延迟 MyGo 的加载不足以保证 macOS 进程没有 WebKit 映射。Apple 对 Writing Tools 的公开 API 调整的是具体视图的编辑行为。[Apple 的 API 说明](https://developer.apple.com/documentation/appkit/writing-tools)。目前未找到官方公开开关能阻止实测的 AppKit 加载链。实验改动留在本地，`go.mod`、`go.sum` 和发布包未变。
@@ -79,6 +83,7 @@ caffeinate -diu /usr/bin/time -lp env -u MYGO_UNCAPPED MYGO_FRAME_STATS=all \
 - `CGO_ENABLED=0 go test -mod=readonly -count=1 -tags e2e ./...` 通过。
 - `go mod verify` 通过。
 - `shasum -a 256 -c .local/phase3/sample.sha256` 通过。
+- 本轮复核中，`CGO_ENABLED=0 go test -mod=readonly -count=1 -v ./cmd/pdmview ./internal/ui ./internal/graph -run '^Test(WindowOptions|CanvasSelectionPanZoomAndFit|CameraZoomAnchorAndClamp)$'` 三项通过，分别覆盖窗口配置、画布交互和相机缩放锚点。
 
 ## P10-02 Windows x64
 
@@ -93,4 +98,4 @@ caffeinate -diu /usr/bin/time -lp env -u MYGO_UNCAPPED MYGO_FRAME_STATS=all \
 - 重新验证最终 Mac 应用签名。通过 LaunchServices 启动含许可证的最终 `.app`，确认运行路径、隔离偏好的中文恢复和正常退出。最终 Windows EXE 的 SHA-256 与已核对的交叉构建一致。
 - `sh -n`、`make check`、e2e 标签 Go 测试、`go mod verify` 和 Windows x64 发布标签交叉 `go vet` 通过。本地真实样本 SHA-256 仍与 Phase 3 一致。
 
-发布文档和本地候选检查完成。macOS 画布的 180 秒工况通过。物理触控板、macOS WebKit 启动加载与延期的 Windows 桌面验收仍影响 Gate 5。
+发布文档和本地候选检查完成。macOS 画布的 180 秒工况和原生 UI 检查通过。Gate 5 待 P10-01 物理触控板捏合及 P10-02 Windows 本机验收。
