@@ -18,3 +18,20 @@
 - 四份静态 SQL 文件固定一份完整脚本和三份单表语句。完整脚本 1,317 字节，覆盖复合主键、候选唯一键、降序前缀、跨 Package 循环与自引用。每份单表语句须在全库中逐字节出现一次，重复生成或调换 Package 与外键集合顺序均保持一致。
 - 夹具覆盖空字符串、数值、SQL `NULL`、`CURRENT_TIMESTAMP(6)`、`JSON_ARRAY()`、多语言注释、反引号、反斜杠和换行转义。测试只读静态期望值，业务样本未纳入夹具。
 - `go test -count=1 -run Golden -v ./internal/sqlgen`、`go vet ./internal/sqlgen`、格式检查通过。
+
+## P9-04 MySQL 8.0 实际执行
+
+- 2026-11-21 使用本机 MySQL 8.0.46（macOS arm64）。测试各自初始化独立数据目录，查询确认所连接实例使用本次创建的 Unix socket 与数据目录，并禁用 TCP、MySQL X Protocol 和二进制日志。测试结束后两个实例均已关闭，临时目录由测试框架清理。
+- Golden 脚本执行成功。`information_schema` 核对了 1 个库的字符集和排序规则、3 张 InnoDB 表、14 个字段、10 条索引列记录及 9 条键列记录。降序索引的前缀长度和注释、3 个外键的引用目标和动作均匹配。插入测试核对自增、空字符串、换行与反斜杠、时间、JSON、数值和 `NULL` 默认值。缺失父行的插入返回 MySQL 错误 1452。
+- 本地业务样本生成 SQL 并执行成功。独立 XML 读取程序逐项核对 13 张表、149 个字段的名称、顺序、类型、NULL 和默认值、13 个主键及其主索引记录、68 条表或字段注释。源样本中没有显式二级索引或外键。另执行 P9-02 原生导出的合成脚本，2 个循环外键的 4 个有序列映射和 `RESTRICT` / `CASCADE` 动作核对通过。
+- 可复跑合成测试。`PDMVIEW_MYSQL80_BIN` 指向本机 MySQL 8.0 的 `bin` 目录。`TMPDIR` 指向项目已忽略且路径足够短的目录。业务样本独立对照脚本和 overlay 位于本机 `.local/phase9/`。
+
+```sh
+TMPDIR="$PWD/.local" PDMVIEW_MYSQL80_BIN=/opt/homebrew/opt/mysql@8.0/bin CGO_ENABLED=0 \
+  go test -count=1 -run '^TestMySQL80$' -v ./internal/sqlgen
+```
+
+## Phase 9 集成验收
+
+- Gate 4 在上述 MySQL 8.0.46 实例及测试配置下通过。`make check`、`CGO_ENABLED=0 go test -tags e2e ./cmd/pdmview`、`git diff --check` 和本地样本 SHA-256 复查通过。
+- 业务样本仅在本机读取和验证。P4-03 的 PowerDesigner 应用内对照保留 `BLOCKED`。Windows 原生保存验收归 P10。

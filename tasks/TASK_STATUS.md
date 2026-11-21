@@ -12,7 +12,9 @@ Phase 6 五项任务已于 2026-11-21 完成，见 [原生画布验收](../docs/
 
 Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验收](../docs/PHASE_7_ACCEPTANCE.md#phase-7-集成验收)。Gate 3 的 SQL 一致性随 Phase 8 和 Phase 9 验收。
 
-Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../docs/PHASE_8_ACCEPTANCE.md#phase-8-集成验收)。Gate 4 的 MySQL 8.0 执行与元数据核对待 P9-04。
+Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../docs/PHASE_8_ACCEPTANCE.md#phase-8-集成验收)。
+
+Phase 9 四项任务已于 2026-11-21 完成。[原生预览、复制与导出和 MySQL 验收](../docs/PHASE_9_ACCEPTANCE.md)通过，Gate 4 以隔离的 MySQL 8.0.46 执行结果验收。
 
 | ID | 任务 | 状态 | 负责人 | 提交/证据 | 遗留问题 |
 |---|---|---|---|---|---|
@@ -61,7 +63,7 @@ Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../d
 | P9-01 | 原生双语 SQL 预览 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-01-原生双语-sql-预览)。800×600 DIP 原生高亮、滚动、只读、双语切换和 1,445 字节一致性通过。错误和过期结果测试通过 | |
 | P9-02 | SQL 复制与文件导出 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-02-sql-复制与文件导出)。双语剪贴板与两次保存的全库 1,445 字节一致，单表 944 字节一致，取消无文件，建议名只有一个 `.sql` 后缀 | Windows 原生保存随 P10 |
 | P9-03 | Golden Tests | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-03-golden-tests)。一份 1,317 字节全库脚本与三份单表 SQL，静态逐字节断言、循环、自引用、默认值、转义和索引测试通过 | |
-| P9-04 | MySQL 8.0 集成测试 | IN_PROGRESS | GPT | | |
+| P9-04 | MySQL 8.0 集成测试 | DONE | GPT | [实测](../docs/PHASE_9_ACCEPTANCE.md#p9-04-mysql-80-实际执行)。隔离的 MySQL 8.0.46 执行 Golden、原生导出和本地样本，13 表、149 字段、13 主键、68 注释与 XML 一致，另核对索引、默认值、循环外键与动作 | |
 | P10-01 | macOS 验收与打包 | TODO | GPT | | |
 | P10-02 | Windows x64 验收 | TODO | GPT | | |
 | P10-03 | 文档与发布检查 | TODO | GPT | | |

@@ -38,4 +38,4 @@
 
 - 2026-11-21 使用 Go 1.27.4、macOS arm64 和 `CGO_ENABLED=0`。`go test -count=1 ./internal/sqlgen ./internal/pdm`、`make check`（格式、全项目测试与 vet）和 `git diff --check` 通过。
 - 本地业务样本仅由本机验证程序读取。`shasum -a 256 -c .local/phase3/sample.sha256` 通过。验收程序和业务样本均在 Git 忽略范围内。
-- P9-04 MySQL 8.0 实际执行为 **NOT RUN**。Gate 4 的执行及元数据核对待 P9-04，包括排序规则可用性、索引字节限制以及目标实例的 SQL 模式。P4-03 的 PowerDesigner 应用内对照继续为 **BLOCKED**。
+- Phase 8 收尾时 MySQL 8.0 实际执行为 **NOT RUN**。后续 Gate 4 的执行和元数据核对见 [P9-04 验收记录](PHASE_9_ACCEPTANCE.md#p9-04-mysql-80-实际执行)。P4-03 的 PowerDesigner 应用内对照继续为 **BLOCKED**。
