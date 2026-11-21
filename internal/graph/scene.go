@@ -1,5 +1,7 @@
 package graph
 
+import "pdmview/internal/pdm"
+
 // Field is one displayable field of a node.
 type Field struct {
 	Name       string
@@ -10,11 +12,28 @@ type Field struct {
 
 // Node is one table node. IDs are stable zero-based indexes in its Scene.
 type Node struct {
-	ID     int
-	Bounds Rect
-	Name   string
-	Code   string
-	Fields []Field
+	ID           int
+	Bounds       Rect
+	Name         string
+	Code         string
+	Fields       []Field
+	Presentation *TablePresentation
+}
+
+type TablePresentation struct {
+	Style      pdm.TableAppearance
+	Title      string
+	Stereotype string
+	Comment    string
+	Columns    []ColumnPresentation
+}
+
+type ColumnPresentation struct {
+	Name       string
+	DataType   string
+	Indicators string
+	PrimaryKey bool
+	ForeignKey bool
 }
 
 // Edge is one directed relationship. From and To are Node IDs or -1 for an

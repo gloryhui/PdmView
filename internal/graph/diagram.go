@@ -1,6 +1,10 @@
 package graph
 
-import "pdmview/internal/pdm"
+import (
+	"strings"
+
+	"pdmview/internal/pdm"
+)
 
 // DiagramGraph is the graph projection of one selected PDM diagram.
 type DiagramGraph struct {
@@ -64,7 +68,7 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 		if model == nil {
 			return result
 		}
-		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(orderedTables, decorations)
+		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(orderedTables, decorations, pdm.TableAppearance{})
 		result.Scene.Bounds = sceneBounds(result.Scene.Nodes, nil)
 		return result
 	}
@@ -75,7 +79,7 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 			symbolNodes(diagram.TableSymbols, tables, decorations)
 	} else if contents, ok := ownerContents(model, diagram.OwnerID); ok {
 		result.Scene.Nodes, result.NodeSources, result.AutoLayout =
-			fallbackNodes(contents.Tables, decorations)
+			fallbackNodes(contents.Tables, decorations, diagram.TableAppearance)
 	}
 
 	symbolIndex := uniqueSymbolNodeIndex(diagram.TableSymbols)
@@ -136,6 +140,7 @@ func symbolNodes(
 			node.Code = table.Code
 			node.Fields = tableFields(table, decorations[table.ID])
 		}
+		node.Presentation = presentTable(node, table, symbol.Appearance)
 		nodes = append(nodes, node)
 		sources = append(sources, DiagramNodeSource{
 			SymbolID: symbol.ID,
@@ -146,20 +151,98 @@ func symbolNodes(
 	return nodes, sources, autoCount > 0
 }
 
+func presentTable(node Node, table pdm.Table, appearance pdm.TableAppearance) *TablePresentation {
+	if appearance == (pdm.TableAppearance{}) {
+		return nil
+	}
+	display := pdm.TableDisplay{ShowName: true, ShowColumns: true, ShowDataType: true, ShowKeyIndicator: true}
+	if appearance.Display != nil {
+		display = *appearance.Display
+	}
+	presentation := &TablePresentation{Style: appearance}
+	if display.ShowName {
+		presentation.Title = node.Name
+	}
+	if display.ShowStereotype {
+		presentation.Stereotype, _ = table.Raw.Property("Stereotype")
+	}
+	if display.ShowComment {
+		presentation.Comment = table.Comment.Value
+	}
+	if !display.ShowColumns {
+		return presentation
+	}
+	keyColumns := make(map[string]bool)
+	if display.ColumnFilter == pdm.ColumnFilterKey || display.ShowKeyIndicator {
+		for _, key := range table.Keys {
+			if key.ID != table.PrimaryKeyID {
+				for _, columnID := range key.ColumnIDs {
+					keyColumns[columnID] = true
+				}
+			}
+		}
+	}
+	for offset, field := range node.Fields {
+		column := table.Columns[offset]
+		alternate := keyColumns[column.ID]
+		if (display.ColumnFilter == pdm.ColumnFilterPrimary && !field.PrimaryKey) ||
+			(display.ColumnFilter == pdm.ColumnFilterKey && !field.PrimaryKey && !field.ForeignKey && !alternate) {
+			continue
+		}
+		row := ColumnPresentation{Name: field.Name, PrimaryKey: field.PrimaryKey, ForeignKey: field.ForeignKey}
+		if display.ShowColumnStereotype {
+			if stereotype, _ := column.Raw.Property("Stereotype"); stereotype != "" {
+				row.Name = "«" + stereotype + "» " + row.Name
+			}
+		}
+		if display.ShowDataType {
+			row.DataType = field.DataType
+		}
+		var indicators []string
+		if display.ShowKeyIndicator {
+			if field.PrimaryKey {
+				indicators = append(indicators, "<pk>")
+			}
+			if field.ForeignKey {
+				indicators = append(indicators, "<fk>")
+			}
+			if alternate {
+				indicators = append(indicators, "<ak>")
+			}
+		}
+		if display.ShowNullStatus {
+			if column.Mandatory != nil && *column.Mandatory {
+				indicators = append(indicators, "not null")
+			} else {
+				indicators = append(indicators, "null")
+			}
+		}
+		row.Indicators = strings.Join(indicators, " ")
+		presentation.Columns = append(presentation.Columns, row)
+		if display.ColumnLimit > 0 && len(presentation.Columns) == display.ColumnLimit {
+			break
+		}
+	}
+	return presentation
+}
+
 func fallbackNodes(
 	tables []pdm.Table,
 	decorations map[string]tableDecoration,
+	appearance pdm.TableAppearance,
 ) ([]Node, []DiagramNodeSource, bool) {
 	nodes := make([]Node, 0, len(tables))
 	sources := make([]DiagramNodeSource, 0, len(tables))
 	for _, table := range tables {
-		nodes = append(nodes, Node{
+		node := Node{
 			ID:     len(nodes),
 			Bounds: autoBounds(len(nodes), 0, 0),
 			Name:   tableDisplayName(table),
 			Code:   table.Code,
 			Fields: tableFields(table, decorations[table.ID]),
-		})
+		}
+		node.Presentation = presentTable(node, table, appearance)
+		nodes = append(nodes, node)
 		sources = append(sources, DiagramNodeSource{TableID: table.ID})
 	}
 	return nodes, sources, len(nodes) > 0

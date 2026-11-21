@@ -164,6 +164,54 @@ func TestMapDiagramMirrorsPDMYCoordinates(t *testing.T) {
 	}
 }
 
+func TestMapDiagramProjectsEachSymbolPresentation(t *testing.T) {
+	table := mappingTable("table", "Table Name", "TABLE_CODE",
+		pdm.Column{Metadata: pdm.Metadata{ID: "nonkey", Name: "First"}},
+		pdm.Column{Metadata: pdm.Metadata{ID: "primary", Name: "Second", Code: "SECOND"}, DataType: pdm.OptionalText{Value: "int"}},
+		pdm.Column{Metadata: pdm.Metadata{ID: "alternate", Name: "Third", Code: "THIRD"}},
+	)
+	table.PrimaryKeyID = "pk"
+	table.Keys = []pdm.Key{
+		{Metadata: pdm.Metadata{ID: "pk"}, ColumnIDs: []string{"primary"}},
+		{Metadata: pdm.Metadata{ID: "ak"}, ColumnIDs: []string{"alternate"}},
+	}
+	model := &pdm.Model{Contents: pdm.Contents{Tables: []pdm.Table{table}}}
+	yellow := &pdm.RGBColor{R: 255, G: 255}
+	diagram := &pdm.Diagram{TableSymbols: []pdm.TableSymbol{
+		{
+			TableID: table.ID, Rect: mappingRect(0, 0, 200, 100),
+			Appearance: pdm.TableAppearance{Fill: yellow, Display: &pdm.TableDisplay{
+				ShowName: true, ShowColumns: true, ShowDataType: true, ShowKeyIndicator: true,
+				ColumnFilter: pdm.ColumnFilterKey, ColumnLimit: 2,
+			}},
+		},
+		{
+			TableID: table.ID, Rect: mappingRect(300, 0, 500, 100),
+			Appearance: pdm.TableAppearance{Display: &pdm.TableDisplay{ShowName: true}},
+		},
+	}}
+
+	scene := MapDiagram(model, diagram).Scene
+	first, second := scene.Nodes[0], scene.Nodes[1]
+	if len(first.Fields) != 3 || len(second.Fields) != 3 || first.Name != "Table Name" {
+		t.Fatal("presentation modified the underlying table data")
+	}
+	actual := first.Presentation
+	if actual.Style.Fill != yellow || actual.Title != "Table Name" {
+		t.Fatalf("first symbol appearance = %+v", actual)
+	}
+	want := []ColumnPresentation{
+		{Name: "Second", DataType: "int", Indicators: "<pk>", PrimaryKey: true},
+		{Name: "Third", Indicators: "<ak>"},
+	}
+	if !reflect.DeepEqual(actual.Columns, want) {
+		t.Fatalf("filtered columns = %+v, want %+v", actual.Columns, want)
+	}
+	if second.Presentation.Title != "Table Name" || len(second.Presentation.Columns) != 0 {
+		t.Fatalf("the second instance ignored its own display settings: %+v", second.Presentation)
+	}
+}
+
 func TestMapDiagramMultipleDiagramsAndSameTableSymbols(t *testing.T) {
 	model := &pdm.Model{
 		Metadata: pdm.Metadata{ID: "model"},

@@ -2,15 +2,47 @@ package renderer
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"pdmview/internal/graph"
+	"pdmview/internal/pdm"
 
 	"github.com/egoist/mygo/ui"
 )
+
+func TestSavedTableStyleAndMoreThanFiveFieldsAtMediumZoom(t *testing.T) {
+	savedFill := &pdm.RGBColor{R: 255, G: 255, B: 127}
+	savedBorder := &pdm.RGBColor{R: 64, G: 96, B: 192}
+	presentation := &graph.TablePresentation{
+		Style: pdm.TableAppearance{Fill: savedFill, Border: savedBorder},
+		Title: "Saved Table",
+	}
+	for field := range 12 {
+		presentation.Columns = append(presentation.Columns, graph.ColumnPresentation{
+			Name: fmt.Sprintf("Field %d", field+1), DataType: "varchar(100)",
+		})
+	}
+	scene := graph.Scene{Nodes: []graph.Node{{
+		Bounds:       graph.Rect{Min: graph.Point{X: 10, Y: 10}, Max: graph.Point{X: 246, Y: 310}},
+		Presentation: presentation,
+	}}}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 300, Y: 300}})
+	setScale(camera, 0.65)
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	stats := FrameStats{}
+	tester := host(renderer, camera, graph.Hit{Kind: graph.HitNode, Index: 0}, 300, 300, &stats)
+	if stats.LOD != Medium || stats.FieldRows != 12 {
+		t.Fatalf("style preview ignored saved rows at fit zoom: %+v", stats)
+	}
+	image := tester.Image()
+	if fill := image.RGBAAt(50, 190); fill != (color.RGBA{R: 255, G: 255, B: 127, A: 255}) {
+		t.Fatalf("saved fill was replaced in selection: %+v", fill)
+	}
+}
 
 func TestRendererVisibleEdgesUseExactViewportCrossings(t *testing.T) {
 	scene := graph.Scene{

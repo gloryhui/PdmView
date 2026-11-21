@@ -100,6 +100,7 @@ type nodeVisual struct {
 	code        labelVisual
 	fieldLabels []labelVisual
 	fieldTop    float32
+	table       *tableVisual
 }
 
 type labelKey struct {
@@ -214,6 +215,11 @@ func (c *Canvas) PrepareNode(offset int) bool {
 		delete(c.nodes, oldest)
 	}
 	node := c.scene.Nodes[offset]
+	if node.Presentation != nil {
+		c.nodes[offset] = &nodeVisual{table: c.prepareTable(node)}
+		c.nodeOrder = append(c.nodeOrder, offset)
+		return true
+	}
 	titleFont := ui.Font{Size: 11.5, Weight: 650}
 	codeFont := ui.Font{Size: 9.5, Weight: 500}
 	fieldFont := ui.Font{Size: 9.5, Weight: 400}
@@ -708,6 +714,12 @@ func (c *Canvas) drawNode(
 		Y: float32(screenMin.Y),
 		W: float32(screenMax.X - screenMin.X),
 		H: float32(screenMax.Y - screenMin.Y),
+	}
+	if node.Presentation != nil {
+		return c.drawTable(p, rect, node, c.nodeVisual(offset), t, lod, camera,
+			selected.Kind == graph.HitNode && selected.Index == offset,
+			hovered.Kind == graph.HitNode && hovered.Index == offset,
+		)
 	}
 	fill, border, width := nodeCardStyle(
 		t,
