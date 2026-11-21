@@ -30,8 +30,8 @@ Phase 4 的领域模型冻结、映射及 XML 对照已完成。P4-03 的 PowerD
 | P4-01 | Domain Model 冻结 | DONE | GPT | `8f479ce`，ADR-004 按本地样本和公开导出冻结现有 `internal/pdm` 模型及映射契约。`go test -count=1 ./internal/pdm`、样本 SHA-256 及忽略规则复核通过 | |
 | P4-02 | Diagram 到 Graph 映射 | DONE | DeepSeek / GPT | `c8dcfe1`，`MapDiagram` 保留图元身份、字段顺序、原始矩形和有序路径。`go test -count=1 ./internal/graph ./internal/pdm`、两包 `go vet` 和格式检查通过，覆盖重复表图元、跨包、端点解析和混合布局 | 缺失路径的自动路由留待 P5-05 |
 | P4-03 | 原始布局核对 | BLOCKED | GPT | [验收记录](../docs/PHASE_4_ACCEPTANCE.md)。本地样本 8/8 图元的 X/Y、宽高和 90/90 字段顺序一致。三份公开 XML 的 23 条关系和 56 个路径点逐项一致。`make check`、实样本对照及 SHA-256 复核通过 | 缺可用的本地 PowerDesigner Windows 客户端，应用内对照与单位标定待验收。状态标志 `AutoLayout` 已交付，界面显示待接入正式画布 |
-| P5-01 | Graph Node/Edge | TODO | DeepSeek | | |
-| P5-02 | World/View/Screen 变换 | TODO | DeepSeek | | |
+| P5-01 | Graph Node/Edge | DONE | DeepSeek / GPT | ADR-005。正式场景与合成数据分离，节点和边可按偏移追溯 Diagram、图元、模型对象和原始几何。Graph/PDM 定向测试及 vet 通过 | |
+| P5-02 | World/View/Screen 变换 | IN_PROGRESS | DeepSeek / GPT | 保留原型相机约束，补足真实 PDM 图的适应范围 | |
 | P5-03 | R-Tree/空间查询 | TODO | DeepSeek | | |
 | P5-04 | 命中测试 | TODO | DeepSeek | | |
 | P5-05 | 关系线几何与 fallback | TODO | DeepSeek | | |

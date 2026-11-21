@@ -43,3 +43,12 @@
 - `DiagramNodeSource` 包含 `SymbolID string`、`TableID string`、`Rect *pdm.Rect`；`DiagramEdgeSource` 包含 `SymbolID`、`ReferenceID`、`SourceSymbolID`、`DestinationSymbolID`（均为 `string`），以及 `Rect *pdm.Rect`、`Points` 和 `ControlPoints`（均为 `[]pdm.Point`）。来源数组与 `Scene` 节点、边按偏移一一对应。几何副本保留精确整数，互不共享可变数据。`Scene` 是浮点世界坐标，直接投影原始 X/Y，暂未标定与 DIP 的比例。`Scene.Bounds` 是节点及非空显示路径的并集。
 - 显式画板按图元原序生成节点。节点和边的整数 `ID` 为各自画板内的切片偏移。标题和字段使用已解析的模型名称及字段原序（名称为空时取编码）；外部或未解析图元保留来源及位置，显示可用引用 ID。关系的 `From`、`To` 只从本画板的图元 ID 解析，未解析端点用 `-1`。保存有序原始路径和独立的控制点，不连缀两者；缺少路径时保持空 `Edge.Points`，自动路由留待 P5-05。
 - 有表图元时只映射画板内的表图元。无表图元的显式画板回退至其归属 `Contents` 直接持有的表。缺失、反向或零尺寸矩形只对受影响的节点执行确定性网格布局。混合布局将自动放置的节点排在有效矩形联合范围右侧，使用同一坐标系，有效位置与尺寸原样保留。全回退采用独立的网格坐标。`AutoLayout` 在至少一个节点采用自动位置时为真，由后续正式画布呈现本地化的“自动布局”状态。
+
+## ADR-005 正式图引擎与关系路由
+
+- 日期：2026-11-21
+- 状态：已采纳，Phase 5
+- `Scene` 的交互索引是切片偏移。`DiagramGraph.NodeSource` 和 `EdgeSource` 用同一偏移读取原始对象和图元的来源视图，返回的矩形与点切片按只读数据使用。原始几何继续由 ADR-004 的来源数据保留。执行路径从 `BuildDiagramGraph` 开始，先调用 `MapDiagram`，再为已有关系但缺失路径的边计算显示几何。Phase 4 的 `MapDiagram` 保持纯映射。
+- `Camera` 统一使用世界坐标、视口局部 DIP 和窗口 DIP。`ViewportBounds` 返回窗口内视口，`VisibleWorld` 返回其世界范围，`FitBounds` 适应世界边界。原 Phase 2 的 `NewCamera` 保留缩放约束，`NewDiagramCamera` 允许对跨度更大的 PDM 原始坐标缩小。比例仍为当前视图的 DIP/世界单位，物理单位标定等待 PowerDesigner 对照。
+- 复用 Phase 2 的 BVH 精确查询。`SpatialIndex.ReplaceScene` 从同一份新场景批量重建边和节点快照，支持移动、增删或重新排序后的偏移映射。引擎按场景快照使用索引，更新、删除触发重建，指针移动只查询索引。`SpatialIndex.QueryPoint` 查询点覆盖的节点。`DiagramGraph.HitTest` 以窗口 DIP 和配套索引查询，复用节点优先及边距离规则，并返回原始表、关系及图元 ID；缺少索引时返回空命中。
+- 已保存的关系路径优先，点序及控制点均保留。自动路由只使用已确认的关系和本画板端点；显式画板中的可见关系由关系图元决定。在无表图元而使用表定义的布局中，可为已解析且两端均可见的逻辑关系建立待路由边。路由为确定性正交路径，可绕行表矩形，处理共端点、关系交叉及自环。端点无法解析或在搜索范围内无避障路径时，边保留来源信息和空显示路径。关系基数仍以 PDM 为准。

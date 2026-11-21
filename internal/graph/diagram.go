@@ -11,6 +11,22 @@ type DiagramGraph struct {
 	AutoLayout  bool
 }
 
+// NodeSource returns the source aligned with Scene.Nodes[offset].
+func (d DiagramGraph) NodeSource(offset int) (DiagramNodeSource, bool) {
+	if offset < 0 || offset >= len(d.Scene.Nodes) || offset >= len(d.NodeSources) {
+		return DiagramNodeSource{}, false
+	}
+	return d.NodeSources[offset], true
+}
+
+// EdgeSource returns the source aligned with Scene.Edges[offset].
+func (d DiagramGraph) EdgeSource(offset int) (DiagramEdgeSource, bool) {
+	if offset < 0 || offset >= len(d.Scene.Edges) || offset >= len(d.EdgeSources) {
+		return DiagramEdgeSource{}, false
+	}
+	return d.EdgeSources[offset], true
+}
+
 // DiagramNodeSource preserves one diagram symbol's exact source geometry.
 type DiagramNodeSource struct {
 	SymbolID string
