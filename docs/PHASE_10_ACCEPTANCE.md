@@ -26,9 +26,17 @@
 
 界面文案检查覆盖菜单与工具标签、搜索、详情、预览、保存和错误反馈。错误提示保留，供打开失败时识别结果。正式包的两份合成导出保存在 `.out/phase10/evidence/mac-export-en/` 和 `mac-export-zh/`。两份的 SHA-256 均为 `b66f80149784f02376c887fc1baf23c483d983214e0fc9483c331de1b77f2fa1`。
 
-### 物理触控板捏合
+### 鼠标滚轮缩放
 
-2026-11-21 在 Apple M4 Mac mini 上通过 `hidutil list`、`ioreg` 和 `system_profiler` 核对本机输入设备。HID 枚举可见 USB 鼠标和键盘，未识别到物理触控板。本轮没有实测手指捏合，P10-01 因缺少设备保留 `BLOCKED`。接入触控板后，在正式应用包中打开合成 PDM，将指针置于画布表节点上，分别双指张开和捏合，记录放大、缩小及指针锚点表现。
+2026-11-21 在 Apple M4 Mac mini、macOS 15.8.1 和 2× 显示器上，使用同源 `e2e` 原生构建打开 Phase 7 合成夹具。以合成的逐格滚轮 `NSEvent` 调用 `MyGoSurfaceView.scrollWheel:`，核对日志中的坐标、滚动方向及 Ctrl 标记，再测量原生画布截图。按用户确认的验收范围，P10-01 的输入项以鼠标滚轮为准。
+
+| 检查 | 实测结果 |
+|---|---|
+| Ctrl 加滚轮放大 | 一格后表节点宽度约为原来的 1.428 倍。以偏离画布中心的指针为锚点，横纵两轴的截图边界均在预测位置 5 像素以内。 |
+| Ctrl 加滚轮缩小 | 反向一格恢复原比例，表节点四边与初始边界相差不超过 2 像素。 |
+| 普通滚轮平移 | 一格纵向平移 40 DIP（80 像素），表节点高度保持一致。 |
+
+窗口配置、画布交互和相机锚点的 3 项定向 Go 测试通过。日志和截图位于 `.out/phase10/mouse-test/`，其中 `application.log` 记录 AppKit 输入，`results-appkit.log` 记录像素对照。P10-01 验收通过。
 
 ### 原生 UI 与 WebKit 加载
 
@@ -100,4 +108,4 @@ caffeinate -diu /usr/bin/time -lp env -u MYGO_UNCAPPED MYGO_FRAME_STATS=all \
 - 重新验证最终 Mac 应用签名。通过 LaunchServices 启动含许可证的最终 `.app`，确认运行路径、隔离偏好的中文恢复和正常退出。最终 Windows EXE 的 SHA-256 与已核对的交叉构建一致。
 - `sh -n`、`make check`、e2e 标签 Go 测试、`go mod verify` 和 Windows x64 发布标签交叉 `go vet` 通过。本地真实样本 SHA-256 仍与 Phase 3 一致。
 
-发布文档和本地候选检查完成。macOS 画布的 180 秒工况和原生 UI 检查通过。Gate 5 待 P10-01 物理触控板捏合及 P10-02 Windows 本机验收。
+发布文档和本地候选检查完成。macOS 画布的 180 秒工况、原生 UI 和鼠标滚轮检查通过。Gate 5 待 P10-02 Windows 本机验收。
