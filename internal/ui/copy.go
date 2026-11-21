@@ -7,11 +7,13 @@ import (
 	"pdmview/internal/app"
 	"pdmview/internal/i18n"
 	"pdmview/internal/pdm"
+	"pdmview/internal/sqlgen"
 )
 
 const (
-	CopyTableKey  = "pdmview.workspace.copy-table"
-	CopyStatusKey = "pdmview.workspace.copy-status"
+	CopyTableKey       = "pdmview.workspace.copy-table"
+	CopyCreateTableKey = "pdmview.workspace.copy-create-table"
+	CopyStatusKey      = "pdmview.workspace.copy-status"
 )
 
 type copyFeedback uint8
@@ -31,8 +33,37 @@ func (w *Workspace) copySelectedTable() {
 		w.tableDetail.ID != w.selectedTableID {
 		return
 	}
+	w.copySelectedTableText(tableCopyText(w.tableDetail))
+}
+
+func (w *Workspace) copySelectedCreateTable() {
+	if w.selectedTableID == "" || !w.hasTableDetail ||
+		w.tableDetail.ID != w.selectedTableID || w.detailIndex == nil {
+		w.setSelectedCopyFailure("")
+		return
+	}
+	table, ok := w.detailIndex.tables[w.selectedTableID]
+	if !ok {
+		w.setSelectedCopyFailure("")
+		return
+	}
+	result := sqlgen.GenerateTable(*table)
+	if result.HasErrors() || result.SQL == "" {
+		code := ""
+		for _, diagnostic := range result.Diagnostics {
+			if diagnostic.Severity == sqlgen.SeverityError {
+				code = diagnostic.Code
+				break
+			}
+		}
+		w.setSelectedCopyFailure(code)
+		return
+	}
+	w.copySelectedTableText(result.SQL)
+}
+
+func (w *Workspace) copySelectedTableText(text string) {
 	tableID := w.selectedTableID
-	text := tableCopyText(w.tableDetail)
 	w.copyToken++
 	token := w.copyToken
 	writer := w.clipboardWriter
@@ -40,6 +71,7 @@ func (w *Workspace) copySelectedTable() {
 		if token == w.copyToken && w.selectedTableID == tableID {
 			w.copyFeedback = copyFeedbackFailed
 			w.copyFeedbackTable = tableID
+			w.copyDiagnosticCode = ""
 			w.notifyChanged()
 		}
 		return
@@ -49,6 +81,16 @@ func (w *Workspace) copySelectedTable() {
 	}
 	w.copyFeedback = copyFeedbackSucceeded
 	w.copyFeedbackTable = tableID
+	w.copyDiagnosticCode = ""
+	w.notifyChanged()
+}
+
+func (w *Workspace) setSelectedCopyFailure(diagnosticCode string) {
+	tableID := w.selectedTableID
+	w.copyToken++
+	w.copyFeedback = copyFeedbackFailed
+	w.copyFeedbackTable = tableID
+	w.copyDiagnosticCode = diagnosticCode
 	w.notifyChanged()
 }
 
@@ -60,6 +102,12 @@ func (w *Workspace) copyFeedbackText(state *app.State) (string, bool) {
 	case copyFeedbackSucceeded:
 		return state.Text(i18n.KeyCopySucceeded, nil), false
 	case copyFeedbackFailed:
+		if w.copyDiagnosticCode != "" {
+			return state.Text(i18n.KeyCopyCreateTableFailed, map[string]string{
+				"category": state.Text(previewDiagnosticCategory(w.copyDiagnosticCode), nil),
+				"code":     w.copyDiagnosticCode,
+			}), true
+		}
 		return state.Text(i18n.KeyCopyFailed, nil), true
 	default:
 		return "", false
@@ -70,6 +118,7 @@ func (w *Workspace) clearCopyFeedback() {
 	w.copyToken++
 	w.copyFeedback = copyFeedbackNone
 	w.copyFeedbackTable = ""
+	w.copyDiagnosticCode = ""
 }
 
 func (w *Workspace) clearCopyFeedbackUnless(tableID string) {

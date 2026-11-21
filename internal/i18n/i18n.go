@@ -98,6 +98,17 @@ const (
 	KeyPreviewForeignKeyIssue   Key = "preview.issue.foreign_key"
 	KeyPreviewParserIssue       Key = "preview.issue.parser"
 	KeyPreviewDatabaseIssue     Key = "preview.issue.database"
+	KeyPreviewCopySQL           Key = "preview.copy_sql"
+	KeyPreviewExportSQL         Key = "preview.export_sql"
+	KeyPreviewExporting         Key = "preview.exporting"
+	KeyPreviewSQLCopied         Key = "preview.sql_copied"
+	KeyPreviewSQLCopyFailed     Key = "preview.sql_copy_failed"
+	KeyPreviewSQLExported       Key = "preview.sql_exported"
+	KeyPreviewSQLExportFailed   Key = "preview.sql_export_failed"
+	KeyPreviewSaveTitle         Key = "preview.save_title"
+	KeyPreviewSaveFilter        Key = "preview.save_filter"
+	KeyCopyCreateTable          Key = "copy.create_table"
+	KeyCopyCreateTableFailed    Key = "copy.create_table_failed"
 )
 
 type message struct {
@@ -193,6 +204,17 @@ var resources = map[Locale]map[Key]message{
 		KeyPreviewForeignKeyIssue:   {text: "Foreign keys"},
 		KeyPreviewParserIssue:       {text: "Source parsing"},
 		KeyPreviewDatabaseIssue:     {text: "Database options"},
+		KeyPreviewCopySQL:           {text: "Copy SQL"},
+		KeyPreviewExportSQL:         {text: "Export .sql"},
+		KeyPreviewExporting:         {text: "Exporting SQL…"},
+		KeyPreviewSQLCopied:         {text: "SQL copied"},
+		KeyPreviewSQLCopyFailed:     {text: "SQL copy failed"},
+		KeyPreviewSQLExported:       {text: "SQL exported"},
+		KeyPreviewSQLExportFailed:   {text: "SQL export failed"},
+		KeyPreviewSaveTitle:         {text: "Export database SQL"},
+		KeyPreviewSaveFilter:        {text: "SQL file"},
+		KeyCopyCreateTable:          {text: "Copy CREATE TABLE"},
+		KeyCopyCreateTableFailed:    {text: "CREATE TABLE copy failed: {category} ({code})", params: []string{"category", "code"}},
 	},
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
@@ -281,6 +303,17 @@ var resources = map[Locale]map[Key]message{
 		KeyPreviewForeignKeyIssue:   {text: "外键"},
 		KeyPreviewParserIssue:       {text: "源解析"},
 		KeyPreviewDatabaseIssue:     {text: "数据库选项"},
+		KeyPreviewCopySQL:           {text: "复制 SQL"},
+		KeyPreviewExportSQL:         {text: "导出 .sql"},
+		KeyPreviewExporting:         {text: "正在导出 SQL…"},
+		KeyPreviewSQLCopied:         {text: "SQL 已复制"},
+		KeyPreviewSQLCopyFailed:     {text: "SQL 复制失败"},
+		KeyPreviewSQLExported:       {text: "SQL 已导出"},
+		KeyPreviewSQLExportFailed:   {text: "SQL 导出失败"},
+		KeyPreviewSaveTitle:         {text: "导出数据库 SQL"},
+		KeyPreviewSaveFilter:        {text: "SQL 文件"},
+		KeyCopyCreateTable:          {text: "复制建表 SQL"},
+		KeyCopyCreateTableFailed:    {text: "建表 SQL 复制失败：{category}（{code}）", params: []string{"category", "code"}},
 	},
 }
 

@@ -3,6 +3,7 @@ package appui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"pdmview/internal/app"
 	"pdmview/internal/i18n"
@@ -19,6 +20,8 @@ const (
 	DatabasePreviewBackKey        = "pdmview.workspace.database-preview.back"
 	DatabasePreviewSQLKey         = "pdmview.workspace.database-preview.sql"
 	DatabasePreviewDiagnosticsKey = "pdmview.workspace.database-preview.diagnostics"
+	DatabasePreviewCopySQLKey     = "pdmview.workspace.database-preview.copy-sql"
+	DatabasePreviewExportSQLKey   = "pdmview.workspace.database-preview.export-sql"
 )
 
 type databasePreviewStats struct {
@@ -36,7 +39,20 @@ type databasePreviewState struct {
 	stats             databasePreviewStats
 	editor            *editor.State
 	diagnosticsScroll ui.ScrollState
+	actionFeedback    previewActionFeedback
+	actionToken       uint64
+	exporting         bool
 }
+
+type previewActionFeedback uint8
+
+const (
+	previewActionNone previewActionFeedback = iota
+	previewActionCopied
+	previewActionCopyFailed
+	previewActionExported
+	previewActionExportFailed
+)
 
 // DatabasePreviewRequest is one background generation for a frozen document.
 type DatabasePreviewRequest struct {
@@ -55,6 +71,10 @@ func (w *Workspace) SetDatabasePreviewStarter(starter func(DatabasePreviewReques
 	w.previewStarter = starter
 }
 
+func (w *Workspace) SetSQLExportStarter(starter func(SQLExportRequest)) {
+	w.exportStarter = starter
+}
+
 func (w *Workspace) BeginDatabasePreview() (DatabasePreviewRequest, bool) {
 	if !w.hasModel || w.document == nil || w.loading {
 		return DatabasePreviewRequest{}, false
@@ -64,6 +84,9 @@ func (w *Workspace) BeginDatabasePreview() (DatabasePreviewRequest, bool) {
 	w.preview.loading = true
 	w.preview.result = sqlgen.Result{}
 	w.preview.editor = nil
+	w.preview.actionFeedback = previewActionNone
+	w.preview.actionToken++
+	w.preview.exporting = false
 	w.preview.stats = countDatabasePreview(w.document)
 	w.preview.diagnosticsScroll.ScrollTo(0, 0, ui.Animation{})
 	request := DatabasePreviewRequest{
@@ -84,6 +107,9 @@ func (w *Workspace) PublishDatabasePreview(request DatabasePreviewRequest, resul
 		return false
 	}
 	w.preview.loading = false
+	w.preview.actionFeedback = previewActionNone
+	w.preview.actionToken++
+	w.preview.exporting = false
 	w.preview.result = sqlgen.Result{
 		SQL:         result.SQL,
 		Diagnostics: append([]sqlgen.Diagnostic(nil), result.Diagnostics...),
@@ -117,6 +143,9 @@ func (w *Workspace) invalidateDatabasePreview() {
 	w.preview.result = sqlgen.Result{}
 	w.preview.stats = databasePreviewStats{}
 	w.preview.editor = nil
+	w.preview.actionFeedback = previewActionNone
+	w.preview.actionToken++
+	w.preview.exporting = false
 	w.preview.diagnosticsScroll.ScrollTo(0, 0, ui.Animation{})
 }
 
@@ -130,6 +159,121 @@ func (w *Workspace) openDatabasePreview() {
 		return
 	}
 	w.PublishDatabasePreview(request, request.Run())
+}
+
+// SQLExportRequest carries immutable SQL bytes and a UI-safe default filename.
+type SQLExportRequest struct {
+	workspace    *Workspace
+	previewToken uint64
+	loadToken    uint64
+	actionToken  uint64
+	sql          string
+	defaultPath  string
+	title        string
+	filterName   string
+}
+
+func (request SQLExportRequest) SQL() string         { return request.sql }
+func (request SQLExportRequest) DefaultPath() string { return request.defaultPath }
+func (request SQLExportRequest) Title() string       { return request.title }
+func (request SQLExportRequest) FilterName() string  { return request.filterName }
+
+func (w *Workspace) BeginSQLExport(state *app.State) (SQLExportRequest, bool) {
+	if !w.previewActionsAvailable() || w.preview.exporting {
+		return SQLExportRequest{}, false
+	}
+	w.preview.actionToken++
+	w.preview.exporting = true
+	w.preview.actionFeedback = previewActionNone
+	request := SQLExportRequest{
+		workspace:    w,
+		previewToken: w.preview.token,
+		loadToken:    w.loadToken,
+		actionToken:  w.preview.actionToken,
+		sql:          w.preview.result.SQL,
+		defaultPath:  suggestedSQLFilename(w.document),
+		title:        state.Text(i18n.KeyPreviewSaveTitle, nil),
+		filterName:   state.Text(i18n.KeyPreviewSaveFilter, nil),
+	}
+	w.notifyChanged()
+	return request, true
+}
+
+func (w *Workspace) PublishSQLExportCanceled(request SQLExportRequest) bool {
+	return w.finishSQLExport(request, previewActionNone)
+}
+
+func (w *Workspace) PublishSQLExportSucceeded(request SQLExportRequest) bool {
+	return w.finishSQLExport(request, previewActionExported)
+}
+
+func (w *Workspace) PublishSQLExportFailed(request SQLExportRequest) bool {
+	return w.finishSQLExport(request, previewActionExportFailed)
+}
+
+func (w *Workspace) SQLExportCurrent(request SQLExportRequest) bool {
+	return request.workspace == w &&
+		request.previewToken == w.preview.token &&
+		request.loadToken == w.loadToken &&
+		request.actionToken == w.preview.actionToken &&
+		w.preview.open && w.preview.exporting &&
+		request.sql == w.preview.result.SQL
+}
+
+func (w *Workspace) finishSQLExport(
+	request SQLExportRequest,
+	feedback previewActionFeedback,
+) bool {
+	if !w.SQLExportCurrent(request) {
+		return false
+	}
+	w.preview.exporting = false
+	w.preview.actionFeedback = feedback
+	w.notifyChanged()
+	return true
+}
+
+func (w *Workspace) copyPreviewSQL() {
+	if !w.previewActionsAvailable() || w.preview.exporting {
+		return
+	}
+	text := w.preview.result.SQL
+	w.preview.actionToken++
+	token := w.preview.actionToken
+	previewToken, loadToken := w.preview.token, w.loadToken
+	writer := w.clipboardWriter
+	if writer == nil || writer(text) != nil {
+		if token == w.preview.actionToken && previewToken == w.preview.token &&
+			loadToken == w.loadToken && w.preview.open &&
+			w.preview.result.SQL == text {
+			w.preview.actionFeedback = previewActionCopyFailed
+			w.notifyChanged()
+		}
+		return
+	}
+	if token != w.preview.actionToken || previewToken != w.preview.token ||
+		loadToken != w.loadToken || !w.preview.open || w.preview.result.SQL != text {
+		return
+	}
+	w.preview.actionFeedback = previewActionCopied
+	w.notifyChanged()
+}
+
+func (w *Workspace) exportPreviewSQL(state *app.State) {
+	request, ok := w.BeginSQLExport(state)
+	if !ok {
+		return
+	}
+	if w.exportStarter != nil {
+		w.exportStarter(request)
+		return
+	}
+	w.PublishSQLExportFailed(request)
+}
+
+func (w *Workspace) previewActionsAvailable() bool {
+	return w.preview.open && !w.preview.loading &&
+		!w.preview.result.HasErrors() && w.preview.result.SQL != ""
 }
 
 func (w *Workspace) databasePreviewView(
@@ -161,6 +305,7 @@ func (w *Workspace) databasePreviewView(
 				ui.Text(c, state.Text(i18n.KeyPreviewKeys, countParam(w.preview.stats.foreignKeys))).
 					FontSize(11).TextColor(theme.TextMuted).Lang(lang)
 			})
+			w.databasePreviewActions(c, state, theme, lang)
 			w.databasePreviewDiagnostics(c, state, theme, lang)
 			if w.preview.editor != nil {
 				w.preview.editor.Label = state.Text(i18n.KeyPreviewSQL, nil)
@@ -169,6 +314,48 @@ func (w *Workspace) databasePreviewView(
 			}
 		})
 	})
+}
+
+func (w *Workspace) databasePreviewActions(
+	c *ui.Context,
+	state *app.State,
+	theme *ui.Theme,
+	lang string,
+) {
+	enabled := w.previewActionsAvailable() && !w.preview.exporting
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+		copyLabel := state.Text(i18n.KeyPreviewCopySQL, nil)
+		ui.Button(c, copyLabel).Key(DatabasePreviewCopySQLKey).
+			Label(copyLabel).Lang(lang).Disabled(!enabled).OnClick(w.copyPreviewSQL)
+		exportLabel := state.Text(i18n.KeyPreviewExportSQL, nil)
+		ui.Button(c, exportLabel).Key(DatabasePreviewExportSQLKey).
+			Label(exportLabel).Lang(lang).Disabled(!enabled).
+			OnClick(func() { w.exportPreviewSQL(state) })
+		if feedback, color, role := w.previewActionStatus(state, theme); feedback != "" {
+			ui.Text(c, feedback).Grow(1).FontSize(11).TextColor(color).Lang(lang).Role(role)
+		}
+	})
+}
+
+func (w *Workspace) previewActionStatus(
+	state *app.State,
+	theme *ui.Theme,
+) (string, ui.Color, ui.Role) {
+	if w.preview.exporting {
+		return state.Text(i18n.KeyPreviewExporting, nil), theme.TextMuted, ui.RoleStatus
+	}
+	switch w.preview.actionFeedback {
+	case previewActionCopied:
+		return state.Text(i18n.KeyPreviewSQLCopied, nil), theme.Success, ui.RoleStatus
+	case previewActionCopyFailed:
+		return state.Text(i18n.KeyPreviewSQLCopyFailed, nil), theme.Danger, ui.RoleAlert
+	case previewActionExported:
+		return state.Text(i18n.KeyPreviewSQLExported, nil), theme.Success, ui.RoleStatus
+	case previewActionExportFailed:
+		return state.Text(i18n.KeyPreviewSQLExportFailed, nil), theme.Danger, ui.RoleAlert
+	default:
+		return "", theme.TextMuted, ui.RoleStatus
+	}
 }
 
 func (w *Workspace) databasePreviewStatus(
@@ -298,4 +485,41 @@ func previewDiagnosticCounts(diagnostics []sqlgen.Diagnostic) (int, int) {
 		}
 	}
 	return errors, warnings
+}
+
+func suggestedSQLFilename(document *pdm.Document) string {
+	name := "database"
+	if document != nil {
+		if document.Model.Code != "" {
+			name = document.Model.Code
+		} else if document.Model.Name != "" {
+			name = document.Model.Name
+		}
+	}
+	var sanitized strings.Builder
+	for _, current := range name {
+		if unicode.IsControl(current) || strings.ContainsRune(`/\:*?"<>|`, current) {
+			sanitized.WriteByte('_')
+		} else {
+			sanitized.WriteRune(current)
+		}
+	}
+	name = strings.Trim(sanitized.String(), " .")
+	if name == "" {
+		name = "database"
+	}
+	runes := []rune(name)
+	if len(runes) > 96 {
+		name = string(runes[:96])
+	}
+	stem, _, _ := strings.Cut(strings.ToUpper(name), ".")
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³":
+		name = "_" + name
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".sql") {
+		name += ".sql"
+	}
+	return name
 }

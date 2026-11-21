@@ -7,6 +7,7 @@ import (
 
 	"pdmview/internal/i18n"
 	"pdmview/internal/pdm"
+	"pdmview/internal/sqlgen"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -212,6 +213,64 @@ func TestTableCopyBytesStayLocaleInvariant(t *testing.T) {
 	}
 	if strings.Contains(writes[1], "复制") || strings.Contains(writes[1], "已") {
 		t.Fatal("localized UI text leaked into the copied table")
+	}
+}
+
+func TestCopyCreateTableUsesFrozenTableAndReportsBlocker(t *testing.T) {
+	state := newState(t, "en-US")
+	document := previewDocument()
+	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(document))
+	var written string
+	workspace.SetClipboardWriter(func(text string) error {
+		written = text
+		return nil
+	})
+	tester := ui.NewTester(View(state, workspace), 800, 600)
+	workspace.LocateTable("customers")
+	tester.Frame()
+
+	info, ok := tester.AccessByRole(ui.RoleButton, "Copy CREATE TABLE")
+	if !ok || info.Bounds.X < 0 || info.Bounds.Y < 0 {
+		t.Fatalf("copy CREATE TABLE button = %+v, %v", info, ok)
+	}
+	table := workspace.detailIndex.tables["customers"]
+	if table == nil {
+		t.Fatal("frozen table is missing")
+	}
+	want := sqlgen.GenerateTable(*table)
+	if want.HasErrors() {
+		t.Fatalf("fixture CREATE TABLE errors: %+v", want.Diagnostics)
+	}
+	if err := tester.Click("Copy CREATE TABLE"); err != nil {
+		t.Fatal(err)
+	}
+	if written != want.SQL || !tester.HasText("Copied") {
+		t.Fatalf("copied CREATE TABLE = %q words=%q", written, tester.Texts())
+	}
+	state.SelectLanguage(i18n.ZHCN)
+	tester.Frame()
+	if !tester.HasText("复制建表 SQL") {
+		t.Fatalf("localized CREATE copy missing: %q", tester.Texts())
+	}
+
+	blocked := previewDocument()
+	blocked.Model.Contents.Tables[0].Columns[1].DataType =
+		pdm.OptionalText{Value: "NUMBER", Present: true}
+	workspace = NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(blocked))
+	written = ""
+	tester = ui.NewTester(View(state, workspace), 800, 600)
+	workspace.LocateTable("customers")
+	tester.Frame()
+	if err := tester.Click("复制建表 SQL"); err != nil {
+		t.Fatal(err)
+	}
+	if written != "" {
+		t.Fatal("blocked CREATE TABLE was copied")
+	}
+	if !tester.HasText("建表 SQL 复制失败：字段与类型（unknown-column-type）") {
+		t.Fatalf("blocked CREATE feedback missing: %q", tester.Texts())
 	}
 }
 

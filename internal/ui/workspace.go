@@ -73,6 +73,7 @@ type Workspace struct {
 	boardSelector        func(int)
 	searchStarter        func(SearchRequest)
 	previewStarter       func(DatabasePreviewRequest)
+	exportStarter        func(SQLExportRequest)
 	preview              databasePreviewState
 	searchIndex          *searchIndex
 	searchQuery          string
@@ -85,6 +86,7 @@ type Workspace struct {
 	clipboardWriter      func(string) error
 	copyFeedback         copyFeedback
 	copyFeedbackTable    string
+	copyDiagnosticCode   string
 	copyToken            uint64
 	onChanged            func()
 }
@@ -820,9 +822,14 @@ func (w *Workspace) detailsCopyButton(c *ui.Context, state *app.State, lang stri
 		w.tableDetail.ID != w.selectedTableID {
 		return
 	}
-	label := state.Text(i18n.KeyCopyTable, nil)
-	ui.Button(c, label).Key(CopyTableKey).Label(label).
-		Lang(lang).OnClick(w.copySelectedTable)
+	ui.Column(c).Gap(4).AlignItems(ui.End).Children(func() {
+		label := state.Text(i18n.KeyCopyTable, nil)
+		ui.Button(c, label).Key(CopyTableKey).Label(label).
+			Lang(lang).OnClick(w.copySelectedTable)
+		createLabel := state.Text(i18n.KeyCopyCreateTable, nil)
+		ui.Button(c, createLabel).Key(CopyCreateTableKey).Label(createLabel).
+			Lang(lang).OnClick(w.copySelectedCreateTable)
+	})
 }
 
 func paneHeading(c *ui.Context, text string, t *ui.Theme, lang string) ui.Element {

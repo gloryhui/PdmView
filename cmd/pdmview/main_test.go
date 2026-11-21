@@ -107,3 +107,114 @@ func TestLoadBoardSetRejectsDirectoryBeforeReading(t *testing.T) {
 		t.Fatal("temporary directory check failed")
 	}
 }
+
+func TestWriteExportedSQLExactBytesSuffixAndOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	text := "CREATE TABLE `客户` (`id` INT);\n"
+	path := filepath.Join(dir, "database.SQL")
+	wrote, err := writeExportedSQL(path, text)
+	if err != nil || !wrote {
+		t.Fatalf("write = %v, %v", wrote, err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != text {
+		t.Fatalf("written bytes = %q, %v", got, err)
+	}
+
+	replacement := "SELECT 1;\n"
+	if wrote, err := writeExportedSQL(path, replacement); err != nil || !wrote {
+		t.Fatalf("overwrite = %v, %v", wrote, err)
+	}
+	got, err = os.ReadFile(path)
+	if err != nil || string(got) != replacement {
+		t.Fatalf("overwritten bytes = %q, %v", got, err)
+	}
+
+	noSuffix := filepath.Join(dir, "database")
+	before, _ := os.ReadFile(path)
+	if wrote, err := writeExportedSQL(noSuffix, "SELECT 2;\n"); err == nil || wrote {
+		t.Fatal("path without .sql was accepted")
+	}
+	if _, err := os.Stat(noSuffix); !os.IsNotExist(err) {
+		t.Fatal("path without .sql was created")
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatal("invalid suffix changed another file")
+	}
+}
+
+func TestWriteExportedSQLRejectsLinksDirectoriesAndPreservesOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.sql")
+	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.sql")
+	if err := os.Symlink(target, link); err == nil {
+		if wrote, err := writeExportedSQL(link, "replace"); err == nil || wrote {
+			t.Fatal("symlink was accepted")
+		}
+		if data, err := os.ReadFile(target); err != nil || string(data) != "keep" {
+			t.Fatalf("symlink target changed: %q, %v", data, err)
+		}
+	}
+	dirPath := filepath.Join(dir, "folder.sql")
+	if err := os.Mkdir(dirPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if wrote, err := writeExportedSQL(dirPath, "replace"); err == nil || wrote {
+		t.Fatal("directory was accepted")
+	}
+
+	locked := filepath.Join(dir, "locked")
+	if err := os.Mkdir(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lockedFile := filepath.Join(locked, "keep.sql")
+	if err := os.WriteFile(lockedFile, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	if wrote, err := writeExportedSQL(lockedFile, "replacement"); err == nil || wrote {
+		t.Fatal("write in a read-only directory succeeded")
+	}
+	if data, err := os.ReadFile(lockedFile); err != nil || string(data) != "original" {
+		t.Fatalf("failed overwrite changed existing content: %q, %v", data, err)
+	}
+}
+
+func TestWriteExportedSQLCancelAndValidation(t *testing.T) {
+	if wrote, err := writeExportedSQL("", "SQL"); err != nil || wrote {
+		t.Fatal("empty selected path was not a cancel")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.sql")
+	if wrote, err := writeExportedSQL(path, ""); err == nil || wrote {
+		t.Fatal("empty SQL was accepted")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("empty SQL created a file")
+	}
+	relative := "relative.sql"
+	if wrote, err := writeExportedSQL(relative, "SQL"); err == nil || wrote {
+		t.Fatal("relative path was accepted")
+	}
+}
+
+func TestWriteExportedSQLKeepsSelectedSuffix(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "already.sql")
+	if wrote, err := writeExportedSQL(path, "SQL"); err != nil || !wrote {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path + ".sql"); !os.IsNotExist(err) {
+		t.Fatal("write appended a second extension")
+	}
+}

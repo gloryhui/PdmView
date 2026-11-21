@@ -59,8 +59,8 @@ Phase 8 五项任务已于 2026-11-21 完成并通过 [SQL 生成器验收](../d
 | P8-04 | 全库依赖与外键策略 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-04-全库依赖和外键策略)。本地 13 表计划无阻断，合成跨 Package 循环的 2 条外键与 4 个列映射一致。冲突、缺失引用和多库边界测试通过 | |
 | P8-05 | 全库初始化 SQL | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-05-全库初始化-sql)。本地 13 表的建表语句与单表输出逐字节一致。合成 2 表循环的外键均在建表后。重复生成一致，阻断返回空 SQL。`make check`、样本 SHA-256 复核通过 | 排序规则可用性与实际执行随 P9-04 |
 | P9-01 | 原生双语 SQL 预览 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-01-原生双语-sql-预览)。800×600 DIP 原生高亮、滚动、只读、双语切换和 1,445 字节一致性通过。错误和过期结果测试通过 | |
-| P9-02 | SQL 复制与文件导出 | IN_PROGRESS | DeepSeek / GPT | | |
-| P9-03 | Golden Tests | TODO | DeepSeek | | |
+| P9-02 | SQL 复制与文件导出 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_9_ACCEPTANCE.md#p9-02-sql-复制与文件导出)。双语剪贴板与两次保存的全库 1,445 字节一致，单表 944 字节一致，取消无文件，建议名只有一个 `.sql` 后缀 | Windows 原生保存随 P10 |
+| P9-03 | Golden Tests | IN_PROGRESS | DeepSeek / GPT | | |
 | P9-04 | MySQL 8.0 集成测试 | TODO | GPT | NOT RUN | Gate 4 执行及元数据核对待验收 |
 | P10-01 | macOS 验收与打包 | TODO | GPT | | |
 | P10-02 | Windows x64 验收 | TODO | GPT | | |

@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"pdmview/internal/app"
@@ -16,6 +19,7 @@ import (
 )
 
 var pdmChooserOpen atomic.Bool
+var sqlSaveDialogOpen atomic.Bool
 
 const (
 	appName       = "PdmView"
@@ -89,6 +93,9 @@ func showMainWindow() {
 	})
 	workspace.SetDatabasePreviewStarter(func(request appui.DatabasePreviewRequest) {
 		startDatabasePreview(win, workspace, request)
+	})
+	workspace.SetSQLExportStarter(func(request appui.SQLExportRequest) {
+		startSQLExport(win, workspace, request)
 	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
 		startBoardLoad(win, workspace, path)
@@ -229,6 +236,115 @@ func startDatabasePreview(
 			workspace.PublishDatabasePreview(request, result)
 		})
 	}()
+}
+
+func startSQLExport(
+	win *mygo.Window,
+	workspace *appui.Workspace,
+	request appui.SQLExportRequest,
+) {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return
+	}
+	if !sqlSaveDialogOpen.CompareAndSwap(false, true) {
+		workspace.PublishSQLExportFailed(request)
+		return
+	}
+	go func() {
+		defer sqlSaveDialogOpen.Store(false)
+		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
+			Parent:      win,
+			Title:       request.Title(),
+			DefaultPath: sqlSaveDialogDefaultPath(request.DefaultPath()),
+			Filters: []mygo.FileFilter{{
+				Name:       request.FilterName(),
+				Extensions: []string{"sql"},
+			}},
+		})
+		current := false
+		mygo.RunOnMain(func() {
+			current = !win.IsDestroyed() && workspace.SQLExportCurrent(request)
+		})
+		if !current {
+			return
+		}
+		if err != nil {
+			mygo.RunOnMain(func() {
+				workspace.PublishSQLExportFailed(request)
+			})
+			return
+		}
+		if path == "" {
+			mygo.RunOnMain(func() {
+				workspace.PublishSQLExportCanceled(request)
+			})
+			return
+		}
+		if _, err := writeExportedSQL(path, request.SQL()); err != nil {
+			mygo.RunOnMain(func() {
+				workspace.PublishSQLExportFailed(request)
+			})
+			return
+		}
+		mygo.RunOnMain(func() {
+			if win.IsDestroyed() {
+				return
+			}
+			workspace.PublishSQLExportSucceeded(request)
+		})
+	}()
+}
+
+func sqlSaveDialogDefaultPath(filename string) string {
+	if runtime.GOOS == "darwin" && strings.EqualFold(filepath.Ext(filename), ".sql") {
+		return filename[:len(filename)-len(".sql")]
+	}
+	return filename
+}
+
+func writeExportedSQL(path, text string) (bool, error) {
+	if path == "" {
+		return false, nil
+	}
+	if text == "" {
+		return false, fmt.Errorf("pdmview: SQL is empty")
+	}
+	if !filepath.IsAbs(path) {
+		return false, fmt.Errorf("pdmview: save path is not absolute")
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".sql") {
+		return false, fmt.Errorf("pdmview: save path must end in .sql")
+	}
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return false, fmt.Errorf("pdmview: save path must be a regular file")
+		}
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".pdmview-sql-*")
+	if err != nil {
+		return false, err
+	}
+	tempPath := temp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if _, err := temp.WriteString(text); err != nil {
+		_ = temp.Close()
+		return false, err
+	}
+	if err := temp.Close(); err != nil {
+		return false, err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return false, err
+	}
+	committed = true
+	return true, nil
 }
 
 type windowLifecycle interface {
