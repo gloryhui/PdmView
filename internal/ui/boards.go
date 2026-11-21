@@ -31,6 +31,7 @@ type BoardSet struct {
 	Prepared PreparedBoard
 	Catalog  *modelCatalog
 	Details  *tableDetailIndex
+	Search   *searchIndex
 }
 
 // BuildBoardSet enumerates diagram descriptors and prepares only the selected
@@ -52,6 +53,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 			Prepared: PrepareBoard(board),
 			Catalog:  buildModelCatalog(model, ""),
 			Details:  buildTableDetailIndex(model),
+			Search:   buildSearchIndex(model),
 		}
 	}
 
@@ -70,6 +72,7 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 	set.Prepared = PrepareBoard(set.Boards[set.Default])
 	set.Catalog = buildModelCatalog(model, "")
 	set.Details = buildTableDetailIndex(model)
+	set.Search = buildSearchIndex(model)
 	return set
 }
 

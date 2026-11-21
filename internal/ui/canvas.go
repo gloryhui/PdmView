@@ -18,7 +18,17 @@ const (
 	zoomOutKey    = "pdmview.canvas.zoom-out"
 	ResetViewKey  = "pdmview.canvas.reset"
 	canvasPadding = 24
+
+	searchCameraMotionKey = "pdmview.canvas.search-motion"
 )
+
+type cameraTween struct {
+	fromOrigin graph.Point
+	fromScale  float64
+	toOrigin   graph.Point
+	toScale    float64
+	started    bool
+}
 
 type canvasView struct {
 	scene            graph.Scene
@@ -35,6 +45,7 @@ type canvasView struct {
 	demo             bool
 	initialFit       bool
 	prepareAfterFit  bool
+	cameraTween      *cameraTween
 	onTableSelection func(string)
 }
 
@@ -71,6 +82,7 @@ func (view *canvasView) activatePrepared(prepared PreparedBoard) {
 	view.pointerDown = false
 	view.dragging = false
 	view.lastPointer = graph.Point{}
+	view.cameraTween = nil
 	view.initialFit = viewport.Width() <= 0 || viewport.Height() <= 0
 	view.prepareAfterFit = false
 	if !view.initialFit {
@@ -109,6 +121,7 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 			})
 		canvas := ui.Box(c).Grow(1).FillWidth().Clip().Key(CanvasKey).Label(heading).
 			HandleInput(view.handleInput).Draw(view.draw)
+		view.animateCamera(canvas)
 		if !canvas.Hovered() && !view.pointerDown {
 			view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
 		}
@@ -153,23 +166,37 @@ func (view *canvasView) selectTableNode(offset int) {
 	if offset < 0 || offset >= len(view.scene.Nodes) {
 		return
 	}
+	view.cameraTween = nil
 	view.selection = graph.Hit{Kind: graph.HitNode, Index: offset}
 	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
 	view.camera.FitBounds(view.scene.Nodes[offset].Bounds, canvasPadding)
 	view.prepareVisible()
 }
 
+func (view *canvasView) selectTableNodeSmooth(offset int) {
+	if offset < 0 || offset >= len(view.scene.Nodes) {
+		return
+	}
+	view.selection = graph.Hit{Kind: graph.HitNode, Index: offset}
+	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
+	view.beginCameraTween(view.scene.Nodes[offset].Bounds)
+	view.prepareVisible()
+}
+
 func (view *canvasView) clearSelection() {
+	view.cameraTween = nil
 	view.selection = graph.Hit{Kind: graph.HitNone, Index: -1}
 	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
 }
 
 func (view *canvasView) zoomCentered(factor float64) {
+	view.cameraTween = nil
 	view.camera.ZoomAt(graph.Point{X: view.viewport.Width() / 2, Y: view.viewport.Height() / 2}, factor)
 	view.prepareVisible()
 }
 
 func (view *canvasView) fitSelection() {
+	view.cameraTween = nil
 	switch view.selection.Kind {
 	case graph.HitNode:
 		view.camera.FitBounds(view.scene.Nodes[view.selection.Index].Bounds, canvasPadding)
@@ -180,11 +207,13 @@ func (view *canvasView) fitSelection() {
 }
 
 func (view *canvasView) showAll() {
+	view.cameraTween = nil
 	view.camera.FitBounds(view.scene.Bounds, canvasPadding)
 	view.prepareVisible()
 }
 
 func (view *canvasView) resetView() {
+	view.cameraTween = nil
 	view.camera.FitBounds(view.scene.Bounds, canvasPadding)
 	view.clearSelection()
 	view.pointerDown = false
@@ -209,6 +238,7 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		if event.Button != 0 {
 			return false
 		}
+		view.cameraTween = nil
 		view.pointerDown, view.dragging, view.lastPointer = true, false, pointer
 	case ui.InputPointerMove:
 		if !view.pointerDown {
@@ -217,6 +247,7 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		}
 		delta := graph.Point{X: view.lastPointer.X - pointer.X, Y: view.lastPointer.Y - pointer.Y}
 		if view.dragging || math.Hypot(delta.X, delta.Y) >= 4 {
+			view.cameraTween = nil
 			view.camera.Pan(delta)
 			view.lastPointer, view.dragging = pointer, true
 			view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
@@ -238,6 +269,7 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 			view.prepareVisible()
 		}
 	case ui.InputScroll:
+		view.cameraTween = nil
 		if event.Mods&ui.Ctrl != 0 {
 			view.camera.ZoomAt(pointer, math.Exp(-float64(event.DY)*0.009))
 		} else {
@@ -246,6 +278,7 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		view.hovered = view.hitTest(pointer)
 		view.prepareVisible()
 	case ui.InputZoom:
+		view.cameraTween = nil
 		view.camera.ZoomAt(pointer, float64(event.Scale))
 		view.hovered = view.hitTest(pointer)
 		view.prepareVisible()
@@ -253,6 +286,62 @@ func (view *canvasView) handleInput(event ui.InputEvent) bool {
 		return false
 	}
 	return true
+}
+
+func (view *canvasView) beginCameraTween(bounds graph.Rect) {
+	if view.camera == nil {
+		return
+	}
+	from := view.camera.VisibleWorld()
+	target := graph.NewDiagramCamera(view.camera.ViewportBounds())
+	target.FitBounds(bounds, canvasPadding)
+	to := target.VisibleWorld()
+	view.cameraTween = &cameraTween{
+		fromOrigin: from.Min,
+		fromScale:  view.camera.Scale(),
+		toOrigin:   to.Min,
+		toScale:    target.Scale(),
+	}
+}
+
+func (view *canvasView) animateCamera(canvas ui.Element) {
+	tween := view.cameraTween
+	if tween == nil {
+		return
+	}
+	if !tween.started {
+		canvas.Jump(searchCameraMotionKey, 0)
+		tween.started = true
+	}
+	progress := float64(canvas.AnimateTo(searchCameraMotionKey, 1, ui.Smooth))
+	view.setCameraPose(
+		graph.Point{
+			X: tween.fromOrigin.X + (tween.toOrigin.X-tween.fromOrigin.X)*progress,
+			Y: tween.fromOrigin.Y + (tween.toOrigin.Y-tween.fromOrigin.Y)*progress,
+		},
+		tween.fromScale+(tween.toScale-tween.fromScale)*progress,
+	)
+	view.prepareVisible()
+	if progress == 1 {
+		view.cameraTween = nil
+	}
+}
+
+func (view *canvasView) setCameraPose(origin graph.Point, scale float64) {
+	if view.camera == nil || scale <= 0 {
+		return
+	}
+	if current := view.camera.Scale(); current > 0 && current != scale {
+		view.camera.ZoomAt(
+			graph.Point{X: view.viewport.Width() / 2, Y: view.viewport.Height() / 2},
+			scale/current,
+		)
+	}
+	visible := view.camera.VisibleWorld().Min
+	view.camera.Pan(graph.Point{
+		X: (origin.X - visible.X) * view.camera.Scale(),
+		Y: (origin.Y - visible.Y) * view.camera.Scale(),
+	})
 }
 
 func (view *canvasView) reportTableSelection() {

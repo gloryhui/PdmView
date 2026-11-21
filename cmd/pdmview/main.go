@@ -80,6 +80,9 @@ func showMainWindow() {
 	workspace.SetBoardSelector(func(index int) {
 		startBoardSwitch(win, workspace, index)
 	})
+	workspace.SetSearchStarter(func(request appui.SearchRequest) {
+		startWorkspaceSearch(win, workspace, request)
+	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
 		startBoardLoad(win, workspace, path)
 	}
@@ -183,6 +186,21 @@ func startBoardSwitch(win *mygo.Window, workspace *appui.Workspace, index int) {
 				return
 			}
 			workspace.PublishPreparedBoard(token, prepared)
+		})
+	}()
+}
+
+func startWorkspaceSearch(win *mygo.Window, workspace *appui.Workspace, request appui.SearchRequest) {
+	if win == nil || win.IsDestroyed() || workspace == nil {
+		return
+	}
+	go func() {
+		results := request.Run()
+		mygo.RunOnMain(func() {
+			if win.IsDestroyed() {
+				return
+			}
+			workspace.PublishSearchResults(request, results)
 		})
 	}()
 }

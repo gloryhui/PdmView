@@ -34,40 +34,51 @@ func DiagramButtonKey(index int) string {
 }
 
 type Workspace struct {
-	NavigationPercent float32
-	CanvasPercent     float32
-	canvas            *canvasView
-	boards            []DiagramBoard
-	activeBoard       int
-	loadToken         uint64
-	boardToken        uint64
-	hasModel          bool
-	loading           bool
-	switching         bool
-	loadFailed        bool
-	activeFallback    bool
-	activeAutoLayout  bool
-	pendingBoard      int
-	catalog           *modelCatalog
-	outline           ui.OutlineState[string]
-	navChosen         ui.Selection[string]
-	navSelected       int
-	selectedNavKey    string
-	rowClickedKey     string
-	openBefore        map[string]struct{}
-	selectedTableID   string
-	selectedTableName string
-	detailIndex       *tableDetailIndex
-	detailsScroll     ui.ScrollState
-	tableDetail       TableDetail
-	hasTableDetail    bool
-	unplacedTable     bool
-	requestedTableID  string
-	pendingTableID    string
-	pendingTableToken uint64
-	openHandler       func()
-	boardSelector     func(int)
-	onChanged         func()
+	NavigationPercent    float32
+	CanvasPercent        float32
+	canvas               *canvasView
+	boards               []DiagramBoard
+	activeBoard          int
+	loadToken            uint64
+	boardToken           uint64
+	hasModel             bool
+	loading              bool
+	switching            bool
+	loadFailed           bool
+	activeFallback       bool
+	activeAutoLayout     bool
+	pendingBoard         int
+	catalog              *modelCatalog
+	outline              ui.OutlineState[string]
+	navChosen            ui.Selection[string]
+	navSelected          int
+	selectedNavKey       string
+	rowClickedKey        string
+	openBefore           map[string]struct{}
+	selectedTableID      string
+	selectedTableName    string
+	detailIndex          *tableDetailIndex
+	detailsScroll        ui.ScrollState
+	tableDetail          TableDetail
+	hasTableDetail       bool
+	unplacedTable        bool
+	requestedTableID     string
+	pendingTableID       string
+	pendingTableToken    uint64
+	pendingSmoothTable   bool
+	requestedSmoothTable bool
+	openHandler          func()
+	boardSelector        func(int)
+	searchStarter        func(SearchRequest)
+	searchIndex          *searchIndex
+	searchQuery          string
+	searchResults        []SearchResult
+	searchFinished       bool
+	searchToken          uint64
+	searchCancel         func()
+	searchSelected       int
+	searchList           ui.ListState
+	onChanged            func()
 }
 
 func NewWorkspace() *Workspace {
@@ -104,6 +115,7 @@ func (w *Workspace) SetBoardSelector(selector func(int)) {
 func (w *Workspace) BeginOpen() uint64 {
 	w.loadToken++
 	w.cancelPendingSwitch()
+	w.resetSearch()
 	w.loading = true
 	w.switching = false
 	w.loadFailed = false
@@ -132,6 +144,8 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.pendingBoard = -1
 	w.catalog = set.Catalog
 	w.detailIndex = set.Details
+	w.searchIndex = set.Search
+	w.resetSearch()
 	w.outline = ui.OutlineState[string]{}
 	w.outline.Open.Add(ModelRootKey)
 	w.outline.List.Selected = &w.navSelected
@@ -147,6 +161,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.requestedTableID = ""
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
+	w.pendingSmoothTable = false
 	w.canvas.activatePrepared(set.Prepared)
 	w.notifyChanged()
 	return true
@@ -215,11 +230,14 @@ func (w *Workspace) BeginBoardSwitch(index int) (uint64, bool) {
 	w.pendingBoard = index
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
+	w.pendingSmoothTable = false
 	if w.requestedTableID != "" {
 		w.pendingTableID = w.requestedTableID
 		w.pendingTableToken = w.boardToken
+		w.pendingSmoothTable = w.requestedSmoothTable
 	}
 	w.requestedTableID = ""
+	w.requestedSmoothTable = false
 	w.notifyChanged()
 	return w.boardToken, true
 }
@@ -240,12 +258,18 @@ func (w *Workspace) PublishPreparedBoard(token uint64, prepared PreparedBoard) b
 	if w.pendingTableToken == token {
 		locateTableID = w.pendingTableID
 	}
+	smoothTable := w.pendingSmoothTable && w.pendingTableToken == token
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
+	w.pendingSmoothTable = false
 	w.canvas.activatePrepared(prepared)
 	if locateTableID != "" {
 		if offset, ok := w.canvas.tableNodeOffset(locateTableID); ok {
-			w.canvas.selectTableNode(offset)
+			if smoothTable {
+				w.canvas.selectTableNodeSmooth(offset)
+			} else {
+				w.canvas.selectTableNode(offset)
+			}
 			w.unplacedTable = false
 		} else {
 			w.canvas.clearSelection()
@@ -271,6 +295,16 @@ func (w *Workspace) BoardCount() int {
 // whose actual prepared graph contains it. Cross-board navigation uses the
 // existing tokenized switch path.
 func (w *Workspace) LocateTable(tableID string) bool {
+	return w.locateTable(tableID, false)
+}
+
+// LocateSearchResult locates tableID and gives the camera a smooth,
+// interruptible transition to the table.
+func (w *Workspace) LocateSearchResult(tableID string) bool {
+	return w.locateTable(tableID, true)
+}
+
+func (w *Workspace) locateTable(tableID string, smooth bool) bool {
 	if tableID == "" || !w.hasModel {
 		return false
 	}
@@ -280,12 +314,17 @@ func (w *Workspace) LocateTable(tableID string) bool {
 	if w.catalog != nil {
 		w.selectedTableName = w.catalog.tableName(tableID)
 	}
+	w.syncSearchSelected()
 	w.refreshSelectedDetail()
 	w.unplacedTable = false
 	w.revealTable(tableID)
 
 	if offset, ok := w.canvas.tableNodeOffset(tableID); ok {
-		w.canvas.selectTableNode(offset)
+		if smooth {
+			w.canvas.selectTableNodeSmooth(offset)
+		} else {
+			w.canvas.selectTableNode(offset)
+		}
 		w.notifyChanged()
 		return true
 	}
@@ -295,13 +334,16 @@ func (w *Workspace) LocateTable(tableID string) bool {
 		}
 		w.canvas.clearSelection()
 		w.requestedTableID = tableID
+		w.requestedSmoothTable = smooth
 		if w.boardSelector != nil {
 			w.boardSelector(index)
 			w.requestedTableID = ""
+			w.requestedSmoothTable = false
 			return true
 		}
 		token, ok := w.BeginBoardSwitch(index)
 		w.requestedTableID = ""
+		w.requestedSmoothTable = false
 		if !ok {
 			return false
 		}
@@ -326,6 +368,7 @@ func (w *Workspace) syncCanvasTableSelection(tableID string) {
 	if w.catalog != nil {
 		w.selectedTableName = w.catalog.tableName(tableID)
 	}
+	w.syncSearchSelected()
 	w.refreshSelectedDetail()
 	w.unplacedTable = false
 	w.revealTable(tableID)
@@ -351,6 +394,7 @@ func (w *Workspace) revealTable(tableID string) {
 func (w *Workspace) clearTableSelection() {
 	w.selectedTableID = ""
 	w.selectedTableName = ""
+	w.searchSelected = -1
 	w.tableDetail = TableDetail{}
 	w.hasTableDetail = false
 	w.unplacedTable = false
@@ -400,6 +444,7 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 		w.canvas.clearSelection()
 		w.selectedTableID = ""
 		w.selectedTableName = ""
+		w.searchSelected = -1
 		w.tableDetail = TableDetail{}
 		w.hasTableDetail = false
 		w.unplacedTable = false
@@ -424,6 +469,7 @@ func (w *Workspace) reconcileOutlineSelection(openChanged bool) {
 	w.canvas.clearSelection()
 	w.selectedTableID = ""
 	w.selectedTableName = ""
+	w.searchSelected = -1
 	w.tableDetail = TableDetail{}
 	w.hasTableDetail = false
 	w.unplacedTable = false
@@ -476,7 +522,9 @@ func (w *Workspace) cancelPendingSwitch() {
 	w.pendingBoard = -1
 	w.pendingTableID = ""
 	w.pendingTableToken = 0
+	w.pendingSmoothTable = false
 	w.requestedTableID = ""
+	w.requestedSmoothTable = false
 }
 
 func (w *Workspace) finishPendingOutlineSelection() {
@@ -575,6 +623,14 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
 	ui.Button(c, state.Text(i18n.KeyOpenPDM, nil)).Key(OpenPDMKey).
 		FillWidth().Disabled(w.loading).OnClick(w.openHandler)
+	search := state.Text(i18n.KeySearch, nil)
+	c.Key(SearchKey)
+	field := ui.SearchField(c, &w.searchQuery).
+		FillWidth().Placeholder(search).Label(search).
+		Disabled(w.loading)
+	if field.Changed() {
+		w.requestSearch()
+	}
 	paneHeading(c, state.Text(i18n.KeyDiagramsHeading, nil), t, lang)
 	ui.Scroll(c.Key(DiagramListKey)).FillWidth().Height(96).KeepScrollbars(true).Children(func() {
 		ui.Column(c).Role(ui.RoleTabList).Gap(4).Children(func() {
@@ -600,26 +656,57 @@ func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.The
 			}
 		})
 	})
-	if w.catalog != nil {
-		w.captureOpen()
-		ui.Outline(c.Key(ModelTreeKey), &w.outline, []string{ModelRootKey}, w.catalog.children,
-			func(key string) {
-				node := w.catalog.nodes[key]
-				label := node.label
-				if key == ModelRootKey && label == "" {
-					label = state.Text(i18n.KeyModelRoot, nil)
-				}
-				if ui.Text(c, label).SingleLine().Ellipsis("…").Lang(lang).RowClicked() {
-					w.rowClickedKey = key
-				}
-			}).Grow(1).FillWidth()
-		w.reconcileOutlineSelection(w.openChanged())
-		w.finishPendingOutlineSelection()
+	if w.searchActive() {
+		w.searchNavigation(c, state, t, lang)
+	} else {
+		w.modelNavigation(c, state, lang)
 	}
 	if status := w.statusText(state); status != "" {
 		ui.Text(c, status).Key(LoadStatusKey).
 			FillWidth().Wrap().MaxLines(3).Ellipsis("…").
 			FontSize(11).TextColor(t.TextMuted).Lang(lang)
+	}
+}
+
+func (w *Workspace) modelNavigation(c *ui.Context, state *app.State, lang string) {
+	if w.catalog == nil {
+		return
+	}
+	w.captureOpen()
+	ui.Outline(c.Key(ModelTreeKey), &w.outline, []string{ModelRootKey}, w.catalog.children,
+		func(key string) {
+			node := w.catalog.nodes[key]
+			label := node.label
+			if key == ModelRootKey && label == "" {
+				label = state.Text(i18n.KeyModelRoot, nil)
+			}
+			if ui.Text(c, label).SingleLine().Ellipsis("…").Lang(lang).RowClicked() {
+				w.rowClickedKey = key
+			}
+		}).Grow(1).FillWidth()
+	w.reconcileOutlineSelection(w.openChanged())
+	w.finishPendingOutlineSelection()
+}
+
+func (w *Workspace) searchNavigation(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
+	w.searchList.Key = func(offset int) any { return w.searchResults[offset].TableID }
+	w.searchList.Label = func(offset int) string { return w.searchResults[offset].Name }
+	w.searchList.Selected = &w.searchSelected
+	list := ui.List(c.Key(SearchResultsKey), &w.searchList, len(w.searchResults), func(offset int) {
+		result := w.searchResults[offset]
+		c.Key(SearchResultKey(result.TableID))
+		ui.Row(c).FillWidth().Padding(4, 6).Label(result.Name).Role(ui.RoleOption).
+			AccessSelected(offset == w.searchSelected).Children(func() {
+			ui.Text(c, result.Name).SingleLine().Ellipsis("…").Lang(lang)
+		})
+	}).FillWidth().Grow(1).Label(state.Text(i18n.KeySearchResults, nil))
+	if list.Changed() && w.searchSelected >= 0 && w.searchSelected < len(w.searchResults) {
+		w.LocateSearchResult(w.searchResults[w.searchSelected].TableID)
+	}
+	if w.searchFinished && len(w.searchResults) == 0 {
+		ui.Text(c, state.Text(i18n.KeySearchNoResults, nil)).
+			FillWidth().FontSize(11).TextColor(t.TextMuted).
+			Lang(lang).Role(ui.RoleStatus)
 	}
 }
 

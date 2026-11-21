@@ -26,6 +26,9 @@ const (
 	KeyCanvasHeading     Key = "workspace.canvas"
 	KeyDetailsHeading    Key = "workspace.details"
 	KeyOpenPDM           Key = "workspace.open_pdm"
+	KeySearch            Key = "workspace.search"
+	KeySearchResults     Key = "workspace.search_results"
+	KeySearchNoResults   Key = "workspace.search_no_results"
 	KeyDiagramsHeading   Key = "workspace.diagrams"
 	KeyModelRoot         Key = "workspace.model_root"
 	KeyDiagramFallback   Key = "workspace.diagram_fallback"
@@ -94,6 +97,9 @@ var resources = map[Locale]map[Key]message{
 		KeyCanvasHeading:     {text: "Diagram canvas"},
 		KeyDetailsHeading:    {text: "Details"},
 		KeyOpenPDM:           {text: "Open PDM…"},
+		KeySearch:            {text: "Search"},
+		KeySearchResults:     {text: "Search results"},
+		KeySearchNoResults:   {text: "No results"},
 		KeyDiagramsHeading:   {text: "Diagrams"},
 		KeyModelRoot:         {text: "Model"},
 		KeyDiagramFallback:   {text: "Diagram {index}", params: []string{"index"}},
@@ -155,6 +161,9 @@ var resources = map[Locale]map[Key]message{
 		KeyCanvasHeading:     {text: "图表画布"},
 		KeyDetailsHeading:    {text: "详情"},
 		KeyOpenPDM:           {text: "打开 PDM…"},
+		KeySearch:            {text: "搜索"},
+		KeySearchResults:     {text: "搜索结果"},
+		KeySearchNoResults:   {text: "无结果"},
 		KeyDiagramsHeading:   {text: "画板"},
 		KeyModelRoot:         {text: "模型"},
 		KeyDiagramFallback:   {text: "画板 {index}", params: []string{"index"}},
