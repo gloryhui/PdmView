@@ -39,6 +39,8 @@ type Workspace struct {
 	CanvasPercent     float32
 	canvas            *canvasView
 	document          *pdm.Document
+	sourcePath        string
+	sourceXML         []byte
 	boards            []DiagramBoard
 	activeBoard       int
 	loadToken         uint64
@@ -65,8 +67,9 @@ type Workspace struct {
 	hasTableDetail    bool
 	tableProperties   tablePropertiesState
 
-	tableOpen  func(string)
-	tableClose func()
+	tableOpen      func(string)
+	tableClose     func()
+	pdmCopyStarter func(*PDMCopyRequest)
 
 	unplacedTable        bool
 	requestedTableID     string
@@ -165,6 +168,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	}
 	w.boards = append([]DiagramBoard(nil), set.Boards...)
 	w.document = set.Document
+	w.sourcePath, w.sourceXML = set.SourcePath, set.SourceXML
 	w.boardToken++
 	w.hasModel = true
 	w.loading = false

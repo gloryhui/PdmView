@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,7 +21,7 @@ import (
 )
 
 var pdmChooserOpen atomic.Bool
-var sqlSaveDialogOpen atomic.Bool
+var saveDialogOpen atomic.Bool
 
 const (
 	appName       = "PdmView"
@@ -97,6 +99,9 @@ func showMainWindow() {
 		if properties != nil && !properties.IsDestroyed() {
 			properties.Close()
 		}
+	})
+	workspace.SetPDMCopyStarter(func(request *appui.PDMCopyRequest) {
+		startPDMCopy(properties, workspace, state, request)
 	})
 	workspace.SetOpenHandler(func() {
 		openPDMDialog(win, workspace, state)
@@ -235,6 +240,10 @@ func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, path string) {
 }
 
 func loadBoardSet(path string) (appui.BoardSet, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return appui.BoardSet{}, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return appui.BoardSet{}, err
@@ -247,11 +256,15 @@ func loadBoardSet(path string) (appui.BoardSet, error) {
 		return appui.BoardSet{}, err
 	}
 	defer file.Close()
-	document, err := pdm.Parse(file)
+	var source bytes.Buffer
+	document, err := pdm.Parse(io.TeeReader(file, &source))
 	if err != nil {
 		return appui.BoardSet{}, err
 	}
-	return appui.BuildBoardSet(document), nil
+	set := appui.BuildBoardSet(document)
+	set.SourcePath = path
+	set.SourceXML = source.Bytes()
+	return set, nil
 }
 
 func startBoardSwitch(win *mygo.Window, workspace *appui.Workspace, index int) {
@@ -319,12 +332,12 @@ func startSQLExport(
 	if win == nil || win.IsDestroyed() || workspace == nil {
 		return
 	}
-	if !sqlSaveDialogOpen.CompareAndSwap(false, true) {
+	if !saveDialogOpen.CompareAndSwap(false, true) {
 		workspace.PublishSQLExportFailed(request)
 		return
 	}
 	go func() {
-		defer sqlSaveDialogOpen.Store(false)
+		defer saveDialogOpen.Store(false)
 		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 			Parent:      win,
 			Title:       request.Title(),

@@ -27,6 +27,7 @@ const (
 	TablePropertiesCopyStatusKey  = "pdmview.table-properties.preview.status"
 	TablePropertiesDiagnosticsKey = "pdmview.table-properties.preview.diagnostics"
 	TablePropertiesCloseKey       = "pdmview.table-properties.close"
+	TablePropertiesSaveCopyKey    = "pdmview.table-properties.save-copy"
 	tablePropertiesPadding        = 12
 )
 
@@ -75,6 +76,8 @@ func TablePropertiesKeyMemberFieldKey(id string, ordinal int, field string) stri
 }
 
 type tablePropertiesState struct {
+	copyRequest       *PDMCopyRequest
+	copyStatus        i18n.Key
 	open              bool
 	tableID           string
 	detail            TableDetail
@@ -308,6 +311,12 @@ func (w *Workspace) renderTableProperties(
 			ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
 					TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
+				if w.pdmCopyStarter != nil && w.sourcePath != "" {
+					saveLabel := state.Text(i18n.KeyPDMCopySave, nil)
+					ui.Button(c, saveLabel).Key(TablePropertiesSaveCopyKey).Label(saveLabel).
+						Lang(lang).Disabled(w.tableProperties.copyRequest != nil).
+						OnClick(w.savePDMCopy)
+				}
 				closeLabel := state.Text(i18n.KeyTablePropertiesClose, nil)
 				ui.Button(c, closeLabel).Key(TablePropertiesCloseKey).Label(closeLabel).
 					Lang(lang).OnClick(w.CloseTableProperties)
@@ -348,6 +357,18 @@ func (w *Workspace) renderTableProperties(
 					w.tablePropertiesPreview(c, state, theme, lang, detail)
 				}
 			})
+			if status := w.tableProperties.copyStatus; status != "" {
+				color, role := theme.TextMuted, ui.RoleStatus
+				switch status {
+				case i18n.KeyPDMCopyInvalidEdit, i18n.KeyPDMCopyExists, i18n.KeyPDMCopyFailed:
+					color, role = theme.Danger, ui.RoleAlert
+				}
+				ui.Text(c, state.Text(status, nil)).FillWidth().FontSize(12).
+					TextColor(color).Lang(lang).Role(role)
+			} else if w.pdmCopyStarter != nil && w.sourcePath != "" {
+				ui.Text(c, state.Text(i18n.KeyPDMCopyScope, nil)).FillWidth().FontSize(12).
+					TextColor(theme.TextMuted).Lang(lang)
+			}
 		})
 	})
 }

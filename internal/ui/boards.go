@@ -26,13 +26,15 @@ type PreparedBoard struct {
 
 // BoardSet is the ordered source catalog and its prepared default.
 type BoardSet struct {
-	Document *pdm.Document
-	Boards   []DiagramBoard
-	Default  int
-	Prepared PreparedBoard
-	Catalog  *modelCatalog
-	Details  *tableDetailIndex
-	Search   *searchIndex
+	Document   *pdm.Document
+	SourcePath string
+	SourceXML  []byte
+	Boards     []DiagramBoard
+	Default    int
+	Prepared   PreparedBoard
+	Catalog    *modelCatalog
+	Details    *tableDetailIndex
+	Search     *searchIndex
 }
 
 // BuildBoardSet enumerates diagram descriptors and prepares only the selected
