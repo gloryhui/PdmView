@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"testing"
 
 	"pdmview/internal/graph"
@@ -320,6 +321,120 @@ func TestDrawWithHoverMatchesStatsAndRetainsLayouts(t *testing.T) {
 	}
 }
 
+func TestEdgeScreenProjectionUsesWorldToScreenAndFloat64Intermediate(t *testing.T) {
+	camera := graph.NewCamera(graph.Rect{Min: graph.Point{X: 100, Y: 50}, Max: graph.Point{X: 900, Y: 650}})
+	camera.ZoomAt(graph.Point{}, 2)
+	points := edgeScreenPoints(nil, camera, []graph.Point{{X: 10, Y: 20}, {X: 15, Y: 25}})
+	if len(points) != 2 || points[0] != [2]float32{120, 90} ||
+		points[1] != [2]float32{130, 100} {
+		t.Fatalf("screen projection = %+v", points)
+	}
+
+	largeCamera := graph.NewDiagramCamera(graph.Rect{Min: graph.Point{X: 100, Y: 50}, Max: graph.Point{X: 900, Y: 650}})
+	largeBounds := graph.Rect{
+		Min: graph.Point{X: 9_000_000_000_000, Y: -9_000_000_000_000},
+		Max: graph.Point{X: 9_000_000_001_000, Y: -8_999_999_999_000},
+	}
+	largeCamera.FitBounds(largeBounds, 40)
+	largePoints := edgeScreenPoints(points[:0], largeCamera, []graph.Point{largeBounds.Min, largeBounds.Max})
+	if len(largePoints) != 2 {
+		t.Fatalf("large projection length = %d", len(largePoints))
+	}
+	for _, point := range largePoints {
+		if math.IsNaN(float64(point[0])) || math.IsInf(float64(point[0]), 0) ||
+			math.IsNaN(float64(point[1])) || math.IsInf(float64(point[1]), 0) {
+			t.Fatalf("large projection is not finite: %+v", point)
+		}
+	}
+	if &largePoints[0] != &points[0] {
+		t.Fatal("edge screen projection did not reuse scratch")
+	}
+}
+
+func TestEdgeArrowRequiresUsableTerminalTangentAndClampsLength(t *testing.T) {
+	arrow := edgeArrow(nil, [][2]float32{{0, 0}, {10, 0}})
+	if len(arrow) != 3 || arrow[1] != [2]float32{10, 0} {
+		t.Fatalf("terminal arrow = %+v", arrow)
+	}
+	if !near32(arrow[0][0], 3) || !near32(arrow[0][1], 3.5) ||
+		!near32(arrow[2][0], 3) || !near32(arrow[2][1], -3.5) {
+		t.Fatalf("arrow V = %+v", arrow)
+	}
+	if got := edgeArrow(nil, [][2]float32{{0, 0}, {5, 0}}); len(got) != 0 {
+		t.Fatalf("too-short terminal segment made arrow: %+v", got)
+	}
+	if got := edgeArrow(nil, [][2]float32{{0, 0}, {10, 0}, {10, 4}}); len(got) != 0 {
+		t.Fatalf("short final bend reused earlier tangent: %+v", got)
+	}
+	if got := edgeArrow(nil, [][2]float32{{0, 0}, {10, 0}, {10, 0}}); len(got) != 3 {
+		t.Fatalf("duplicate endpoint skipped valid tangent: %+v", got)
+	}
+	clamped := edgeArrow(nil, [][2]float32{{0, 0}, {6, 0}})
+	if len(clamped) != 3 || clamped[0][0] < 0 || clamped[0][0] >= 6 {
+		t.Fatalf("short segment arrow was not clamped: %+v", clamped)
+	}
+}
+
+func TestEdgeHighlightPolicyAndBoundedWidths(t *testing.T) {
+	edge := graph.Edge{From: 0, To: 1}
+	if !edgeHighlighted(edge, 2, graph.Hit{Kind: graph.HitEdge, Index: 2}) ||
+		edgeHighlighted(edge, 2, graph.Hit{Kind: graph.HitEdge, Index: 1}) {
+		t.Fatal("selected edge highlighting is not offset-specific")
+	}
+	if !edgeHighlighted(edge, 2, graph.Hit{Kind: graph.HitNode, Index: 0}) ||
+		!edgeHighlighted(edge, 2, graph.Hit{Kind: graph.HitNode, Index: 1}) ||
+		edgeHighlighted(edge, 2, graph.Hit{Kind: graph.HitNode, Index: 3}) {
+		t.Fatal("adjacent table highlighting is incorrect")
+	}
+	for _, lod := range []LOD{Far, Medium, Near} {
+		width := edgeLineWidth(lod, false)
+		if width <= 0 || !finite32(width) || width > edgeStrokeWidth {
+			t.Fatalf("LOD %q width = %v", lod, width)
+		}
+		if edgeLineWidth(lod, true) != selectedLineWidth {
+			t.Fatalf("highlighted LOD %q width = %v", lod, edgeLineWidth(lod, true))
+		}
+	}
+	wantArrowEnvelope := math.Hypot(arrowLengthDIP, arrowHalfWidthDIP) + arrowLineWidthDIP/2
+	if got := edgeCullPaddingDIP(Near); got < wantArrowEnvelope ||
+		got < float64(selectedLineWidth)/2 {
+		t.Fatalf("arrow cull padding = %v, want at least %v", got, wantArrowEnvelope)
+	}
+}
+
+func TestRendererArrowLODAndEndpointCulling(t *testing.T) {
+	scene := graph.Scene{Edges: []graph.Edge{{
+		ID:       0,
+		Directed: true,
+		Points:   []graph.Point{{X: 50, Y: -2}, {X: 150, Y: -2}},
+	}}}
+	camera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 200, Y: 100}})
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	var stats FrameStats
+	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 200, 100, &stats)
+	if stats.VisibleEdges != 1 || stats.Arrows != 1 {
+		t.Fatalf("arrow-envelope culling stats = %+v", stats)
+	}
+
+	setScale(camera, 0.30)
+	stats = FrameStats{}
+	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 200, 100, &stats)
+	if stats.LOD != Far || stats.Arrows != 0 || stats.VisibleEdges != 1 {
+		t.Fatalf("far LOD arrow stats = %+v", stats)
+	}
+
+	undirected := scene
+	undirected.Edges = append([]graph.Edge(nil), scene.Edges...)
+	undirected.Edges[0].Directed = false
+	nearRenderer := New(undirected, graph.NewSpatialIndex(undirected))
+	nearCamera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 200, Y: 100}})
+	stats = FrameStats{}
+	host(nearRenderer, nearCamera, graph.Hit{Kind: graph.HitNone, Index: -1}, 200, 100, &stats)
+	if stats.Arrows != 0 {
+		t.Fatalf("undirected edge drew arrow: %+v", stats)
+	}
+}
+
 func host(canvas *Canvas, camera *graph.Camera, selected graph.Hit, width, height int, stats *FrameStats) *ui.Tester {
 	return ui.NewTester(func(c *ui.Context) {
 		ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {
@@ -354,4 +469,12 @@ func hostWithHover(
 
 func setScale(camera *graph.Camera, scale float64) {
 	camera.ZoomAt(graph.Point{}, scale/camera.Scale())
+}
+
+func near32(a, b float32) bool {
+	return math.Abs(float64(a-b)) <= 1e-5
+}
+
+func finite32(v float32) bool {
+	return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0)
 }

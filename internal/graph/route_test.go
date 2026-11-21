@@ -292,6 +292,12 @@ func TestBuildDiagramGraphFallbackAddsUniqueLogicalReferences(t *testing.T) {
 		t.Fatalf("logical reference direction = %+v, want child %d -> parent %d",
 			result.Scene.Edges[1], two, one)
 	}
+	if !result.Scene.Edges[1].Directed {
+		t.Fatal("resolved fallback child-to-parent edge is not directed")
+	}
+	if result.Scene.Edges[0].Directed {
+		t.Fatal("unresolved reference-symbol edge became directed")
+	}
 
 	nilDiagram := BuildDiagramGraph(model, nil)
 	if len(nilDiagram.EdgeSources) != 2 ||
@@ -300,6 +306,55 @@ func TestBuildDiagramGraphFallbackAddsUniqueLogicalReferences(t *testing.T) {
 			[]string{"covered", "added"},
 		) {
 		t.Fatalf("nil diagram fallback = %+v", nilDiagram.EdgeSources)
+	}
+}
+
+func TestBuildDiagramGraphArrowsRequireUniqueResolvedForwardReference(t *testing.T) {
+	model := &pdm.Model{
+		Metadata: pdm.Metadata{ID: "model"},
+		Contents: pdm.Contents{
+			Tables: []pdm.Table{
+				mappingTable("table-a", "A", "A"),
+				mappingTable("table-b", "B", "B"),
+			},
+			References: []pdm.Reference{
+				{Metadata: pdm.Metadata{ID: "forward"}, ChildTableID: "table-a", ParentTableID: "table-b"},
+				{Metadata: pdm.Metadata{ID: "missing"}, ChildTableID: "table-a", ParentTableID: "missing"},
+				{Metadata: pdm.Metadata{ID: "ambiguous"}, ChildTableID: "table-a", ParentTableID: "table-b"},
+				{Metadata: pdm.Metadata{ID: "ambiguous"}, ChildTableID: "table-a", ParentTableID: "table-b"},
+				{Metadata: pdm.Metadata{ID: "external"}, ChildTableID: "external-table", ParentTableID: "table-b"},
+			},
+		},
+	}
+	diagram := &pdm.Diagram{
+		Metadata: pdm.Metadata{ID: "direction"},
+		OwnerID:  "model",
+		TableSymbols: []pdm.TableSymbol{
+			{Metadata: pdm.Metadata{ID: "symbol-a"}, TableID: "table-a", Rect: mappingRect(0, 0, 100, 100)},
+			{Metadata: pdm.Metadata{ID: "symbol-b"}, TableID: "table-b", Rect: mappingRect(200, 0, 300, 100)},
+			{Metadata: pdm.Metadata{ID: "symbol-external"}, TableID: "external-table", Rect: mappingRect(400, 0, 500, 100)},
+		},
+		ReferenceSymbols: []pdm.ReferenceSymbol{
+			{Metadata: pdm.Metadata{ID: "forward-edge"}, ReferenceID: "forward", SourceSymbolID: "symbol-a", DestinationSymbolID: "symbol-b"},
+			{Metadata: pdm.Metadata{ID: "reverse-edge"}, ReferenceID: "forward", SourceSymbolID: "symbol-b", DestinationSymbolID: "symbol-a"},
+			{Metadata: pdm.Metadata{ID: "missing-edge"}, ReferenceID: "missing", SourceSymbolID: "symbol-a", DestinationSymbolID: "symbol-b"},
+			{Metadata: pdm.Metadata{ID: "ambiguous-edge"}, ReferenceID: "ambiguous", SourceSymbolID: "symbol-a", DestinationSymbolID: "symbol-b"},
+			{Metadata: pdm.Metadata{ID: "shortcut-edge"}, ReferenceID: "external", SourceSymbolID: "symbol-external", DestinationSymbolID: "symbol-b"},
+			{Metadata: pdm.Metadata{ID: "no-reference-edge"}, SourceSymbolID: "symbol-a", DestinationSymbolID: "symbol-b"},
+		},
+	}
+
+	result := BuildDiagramGraph(model, diagram)
+	if len(result.Scene.Edges) != 6 {
+		t.Fatalf("direction edge count = %d", len(result.Scene.Edges))
+	}
+	want := []bool{true, false, false, false, false, false}
+	got := make([]bool, len(result.Scene.Edges))
+	for offset, edge := range result.Scene.Edges {
+		got[offset] = edge.Directed
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("directed edges = %v, want %v", got, want)
 	}
 }
 

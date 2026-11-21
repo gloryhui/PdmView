@@ -9,9 +9,57 @@ func BuildDiagramGraph(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 	if model != nil && (diagram == nil || len(diagram.TableSymbols) == 0) {
 		addLogicalReferenceEdges(&result, logicalReferences(model, diagram))
 	}
+	assignEdgeDirections(&result, model)
 	routeMissingEdges(&result.Scene)
 	result.Scene.Bounds = sceneBounds(result.Scene.Nodes, result.Scene.Edges)
 	return result
+}
+
+func assignEdgeDirections(result *DiagramGraph, model *pdm.Model) {
+	if result == nil || model == nil {
+		return
+	}
+	tables, _ := collectDiagramTables(model)
+	references := make(map[string][]pdm.Reference)
+	collectReferenceIndex(model.Contents, references)
+	for offset := range result.Scene.Edges {
+		edge := &result.Scene.Edges[offset]
+		edge.Directed = false
+		source, ok := result.EdgeSource(offset)
+		if !ok || source.ReferenceID == "" {
+			continue
+		}
+		candidates := references[source.ReferenceID]
+		if len(candidates) != 1 {
+			continue
+		}
+		reference := candidates[0]
+		if _, resolved := tables[reference.ChildTableID]; !resolved {
+			continue
+		}
+		if _, resolved := tables[reference.ParentTableID]; !resolved {
+			continue
+		}
+		from, fromOK := result.NodeSource(edge.From)
+		to, toOK := result.NodeSource(edge.To)
+		if !fromOK || !toOK ||
+			from.TableID != reference.ChildTableID ||
+			to.TableID != reference.ParentTableID {
+			continue
+		}
+		edge.Directed = true
+	}
+}
+
+func collectReferenceIndex(contents pdm.Contents, references map[string][]pdm.Reference) {
+	for _, reference := range contents.References {
+		if reference.ID != "" {
+			references[reference.ID] = append(references[reference.ID], reference)
+		}
+	}
+	for _, pkg := range contents.Packages {
+		collectReferenceIndex(pkg.Contents, references)
+	}
 }
 
 func logicalReferences(model *pdm.Model, diagram *pdm.Diagram) []pdm.Reference {

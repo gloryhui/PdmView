@@ -20,10 +20,11 @@ type Node struct {
 // Edge is one directed relationship. From and To are Node IDs or -1 for an
 // unresolved endpoint. Points holds the display path when available.
 type Edge struct {
-	ID     int
-	From   int
-	To     int
-	Points []Point
+	ID       int
+	From     int
+	To       int
+	Directed bool
+	Points   []Point
 }
 
 // Bounds returns the axis-aligned bounds of the edge's sampled path.

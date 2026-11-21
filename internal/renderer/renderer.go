@@ -20,23 +20,27 @@ const (
 )
 
 const (
-	farScale          = 0.36
-	mediumEnterScale  = 0.44
-	nearEnterScale    = 0.85
-	nearExitScale     = 0.75
-	gridTileDIP       = 64.0
-	gridPixelMin      = 32
-	gridPixelMax      = 256
-	edgeStrokeWidth   = 1.5
-	selectedLineWidth = 2.5
-	hoverLineWidth    = 2.0
-	titleTop          = 5.0
-	codeTop           = 19.0
-	fieldTopNoCode    = 23.0
-	fieldTopWithCode  = 33.0
-	fieldRowHeight    = 16.0
-	maxFieldRows      = 5
-	labelInset        = 8
+	farScale           = 0.36
+	mediumEnterScale   = 0.44
+	nearEnterScale     = 0.85
+	nearExitScale      = 0.75
+	gridTileDIP        = 64.0
+	gridPixelMin       = 32
+	gridPixelMax       = 256
+	edgeStrokeWidth    = 1.5
+	selectedLineWidth  = 2.5
+	arrowLengthDIP     = 7.0
+	arrowHalfWidthDIP  = 3.5
+	arrowLineWidthDIP  = 1.4
+	arrowMinSegmentDIP = 6.0
+	hoverLineWidth     = 2.0
+	titleTop           = 5.0
+	codeTop            = 19.0
+	fieldTopNoCode     = 23.0
+	fieldTopWithCode   = 33.0
+	fieldRowHeight     = 16.0
+	maxFieldRows       = 5
+	labelInset         = 8
 )
 
 // FrameStats describes one Draw call. CacheHits and CacheMisses count only
@@ -45,6 +49,7 @@ const (
 type FrameStats struct {
 	VisibleNodes int
 	VisibleEdges int
+	Arrows       int
 	FieldRows    int
 	CacheHits    int
 	CacheMisses  int
@@ -89,10 +94,6 @@ type nodeVisual struct {
 	fieldTop    float32
 }
 
-type edgeVisual struct {
-	points [][2]float32
-}
-
 type gridKey struct {
 	scaleBits uint32
 	dark      bool
@@ -106,15 +107,16 @@ type Canvas struct {
 	scene         graph.Scene
 	index         graph.SpatialQuery
 	nodes         []nodeVisual
-	edges         []edgeVisual
 	lod           LOD
 	grid          *ui.Canvas
 	gridKey       gridKey
 	hasGrid       bool
 	lastGridTiles int
 
-	nodeOffsets []int
-	edgeOffsets []int
+	nodeOffsets  []int
+	edgeOffsets  []int
+	edgeScratch  [][2]float32
+	arrowScratch [][2]float32
 }
 
 // New builds retained layouts and converted polyline data. index may be nil,
@@ -127,7 +129,6 @@ func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 		scene: scene,
 		index: index,
 		nodes: make([]nodeVisual, len(scene.Nodes)),
-		edges: make([]edgeVisual, len(scene.Edges)),
 	}
 	titleFont := ui.Font{Size: 11.5, Weight: 650}
 	codeFont := ui.Font{Size: 9.5, Weight: 500}
@@ -156,13 +157,6 @@ func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 		if code.full != nil {
 			canvas.nodes[i].fieldTop = fieldTopWithCode
 		}
-	}
-	for i, edge := range scene.Edges {
-		points := make([][2]float32, len(edge.Points))
-		for j, point := range edge.Points {
-			points[j] = [2]float32{float32(point.X), float32(point.Y)}
-		}
-		canvas.edges[i] = edgeVisual{points: points}
 	}
 	return canvas
 }
@@ -293,12 +287,11 @@ func (c *Canvas) DrawWithHover(
 	stats.LOD = c.updateLOD(camera.Scale())
 	t := p.Theme()
 	visible := camera.VisibleWorld()
-	screenOrigin := camera.ViewportToScreen(graph.Point{})
 
 	p.Clip(area, 0, func() {
 		p.Fill(area, t.Background, 0)
 		c.drawGrid(p, area, t, &stats)
-		edgePadding := selectedLineWidth / 2 / camera.Scale()
+		edgePadding := edgeCullPaddingDIP(stats.LOD) / camera.Scale()
 		edgeArea := graph.Rect{
 			Min: graph.Point{X: visible.Min.X - edgePadding, Y: visible.Min.Y - edgePadding},
 			Max: graph.Point{X: visible.Max.X + edgePadding, Y: visible.Max.Y + edgePadding},
@@ -308,17 +301,14 @@ func (c *Canvas) DrawWithHover(
 		stats.VisibleEdges = len(c.edgeOffsets)
 		stats.VisibleNodes = len(c.nodeOffsets)
 
-		transform := ui.Translation(float32(-visible.Min.X), float32(-visible.Min.Y)).
-			Then(ui.Scaling(float32(camera.Scale()), float32(camera.Scale()))).
-			Then(ui.Translation(float32(screenOrigin.X), float32(screenOrigin.Y)))
-		p.Transform(transform, 0, 0, func() {
-			for _, offset := range c.edgeOffsets {
-				if offset < 0 || offset >= len(c.scene.Edges) {
-					continue
-				}
-				c.drawEdge(p, offset, selected, t)
+		for _, offset := range c.edgeOffsets {
+			if offset < 0 || offset >= len(c.scene.Edges) {
+				continue
 			}
-		})
+			if c.drawEdge(p, offset, selected, camera, stats.LOD, t) {
+				stats.Arrows++
+			}
+		}
 		for _, offset := range c.nodeOffsets {
 			if offset < 0 || offset >= len(c.scene.Nodes) {
 				continue
@@ -396,12 +386,113 @@ func (c *Canvas) drawGrid(p *ui.Painter, area ui.Rect, t *ui.Theme, stats *Frame
 	}
 }
 
-func (c *Canvas) drawEdge(p *ui.Painter, offset int, selected graph.Hit, t *ui.Theme) {
-	width, color := float32(edgeStrokeWidth), t.Border
-	if selected.Kind == graph.HitEdge && selected.Index == offset {
-		width, color = selectedLineWidth, t.Accent
+func (c *Canvas) drawEdge(
+	p *ui.Painter,
+	offset int,
+	selected graph.Hit,
+	camera *graph.Camera,
+	lod LOD,
+	t *ui.Theme,
+) bool {
+	edge := c.scene.Edges[offset]
+	points := edgeScreenPoints(c.edgeScratch[:0], camera, edge.Points)
+	c.edgeScratch = points
+	highlighted := edgeHighlighted(edge, offset, selected)
+	width := edgeLineWidth(lod, highlighted)
+	color := t.Border
+	if highlighted {
+		color = t.Accent
 	}
-	p.StrokePolyline(c.edges[offset].points, width, color)
+	p.StrokePolyline(points, width, color)
+
+	if lod == Far || !edge.Directed {
+		return false
+	}
+	arrow := edgeArrow(c.arrowScratch[:0], points)
+	c.arrowScratch = arrow
+	if len(arrow) == 3 {
+		p.StrokePolyline(arrow, min(width, float32(arrowLineWidthDIP)), color)
+		return true
+	}
+	return false
+}
+
+func edgeScreenPoints(dst [][2]float32, camera *graph.Camera, points []graph.Point) [][2]float32 {
+	if camera == nil {
+		return dst
+	}
+	for _, point := range points {
+		screen := camera.WorldToScreen(point)
+		dst = append(dst, [2]float32{float32(screen.X), float32(screen.Y)})
+	}
+	return dst
+}
+
+func edgeHighlighted(edge graph.Edge, offset int, selected graph.Hit) bool {
+	switch selected.Kind {
+	case graph.HitEdge:
+		return selected.Index == offset
+	case graph.HitNode:
+		return edge.From == selected.Index || edge.To == selected.Index
+	default:
+		return false
+	}
+}
+
+func edgeLineWidth(lod LOD, highlighted bool) float32 {
+	if highlighted {
+		return selectedLineWidth
+	}
+	switch lod {
+	case Far:
+		return 1
+	case Medium:
+		return 1.25
+	default:
+		return edgeStrokeWidth
+	}
+}
+
+func edgeCullPaddingDIP(lod LOD) float64 {
+	padding := float64(max(selectedLineWidth, edgeLineWidth(lod, false))) / 2
+	if lod != Far {
+		padding = max(
+			padding,
+			math.Hypot(arrowLengthDIP, arrowHalfWidthDIP)+arrowLineWidthDIP/2,
+		)
+	}
+	return padding
+}
+
+func edgeArrow(dst [][2]float32, points [][2]float32) [][2]float32 {
+	if len(points) < 2 {
+		return dst
+	}
+	end := points[len(points)-1]
+	start := end
+	for offset := len(points) - 2; offset >= 0; offset-- {
+		if points[offset] != end {
+			start = points[offset]
+			break
+		}
+	}
+	if start == end {
+		return dst
+	}
+	dx, dy := float64(end[0]-start[0]), float64(end[1]-start[1])
+	length := math.Hypot(dx, dy)
+	if length < arrowMinSegmentDIP {
+		return dst
+	}
+	ux, uy := float32(dx/length), float32(dy/length)
+	nx, ny := -uy, ux
+	arrowLength := min(float32(arrowLengthDIP), float32(length)*0.8)
+	baseX, baseY := end[0]-ux*arrowLength, end[1]-uy*arrowLength
+	return append(dst,
+		[2]float32{baseX + nx*arrowHalfWidthDIP, baseY + ny*arrowHalfWidthDIP},
+		end,
+		[2]float32{baseX - nx*arrowHalfWidthDIP, baseY - ny*arrowHalfWidthDIP},
+	)
 }
 
 func (c *Canvas) drawNode(
