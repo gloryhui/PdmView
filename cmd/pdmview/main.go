@@ -4,36 +4,35 @@ import (
 	"fmt"
 	"os"
 
+	"pdmview/internal/app"
+	"pdmview/internal/i18n"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
 const (
 	appName       = "PdmView"
-	appBrand      = "PdmView"
 	appRootKey    = "pdmview.app.root"
+	appStatusKey  = "pdmview.app.status"
 	defaultWidth  = 1200
 	defaultHeight = 800
 	minWidth      = 800
 	minHeight     = 600
 )
 
-type appState struct {
-	locale string
+func view(state *app.State) func(*ui.Context) {
+	return func(c *ui.Context) {
+		t := c.Theme()
+		lang := string(state.Locale())
+		ui.Column(c.Key(appRootKey)).Fill().Center().Gap(12).Background(t.Background).Children(func() {
+			ui.Text(c, state.Text(i18n.KeyAppBrand, nil)).FontSize(32).Bold().Lang(lang)
+			ui.Text(c, state.StatusText()).Key(appStatusKey).FontSize(15).TextColor(t.TextMuted).Lang(lang)
+		})
+	}
 }
 
-func newAppState() *appState {
-	return &appState{}
-}
-
-func (s *appState) view(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c.Key(appRootKey)).Fill().Center().Background(t.Background).Children(func() {
-		ui.Text(c, appBrand).FontSize(32).Bold().Lang(s.locale)
-	})
-}
-
-func windowOptions(state *appState) mygo.WindowOptions {
+func windowOptions(state *app.State) mygo.WindowOptions {
 	return mygo.WindowOptions{
 		Title:          appName,
 		Width:          defaultWidth,
@@ -41,18 +40,40 @@ func windowOptions(state *appState) mygo.WindowOptions {
 		UseContentSize: true,
 		MinWidth:       minWidth,
 		MinHeight:      minHeight,
-		Content:        ui.View(state.view),
+		Content:        ui.View(view(state)),
 	}
 }
 
 func main() {
-	state := newAppState()
 	mygo.App.SetName(appName)
-	mygo.App.WhenReady(func() {
-		mygo.NewWindow(windowOptions(state))
-	})
+	mygo.App.WhenReady(showMainWindow)
 	if err := mygo.App.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "pdmview:", err)
 		os.Exit(1)
 	}
+}
+
+func showMainWindow() {
+	preferred := mygo.App.PreferredLanguages()
+	systemTag := ""
+	if len(preferred) > 0 {
+		systemTag = preferred[0]
+	}
+
+	path, err := app.PreferencesPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pdmview: preferences:", err)
+	}
+	state := app.New(app.NewStore(path), systemTag)
+
+	var win *mygo.Window
+	var refresh func()
+	refresh = func() {
+		mygo.App.SetMenu(state.Menu(refresh))
+		if win != nil {
+			win.Invalidate()
+		}
+	}
+	refresh()
+	win = mygo.NewWindow(windowOptions(state))
 }
