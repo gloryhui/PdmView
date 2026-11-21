@@ -157,7 +157,7 @@ func checkSampleDiagram(t *testing.T, source sampleDiagram, mapped DiagramGraph,
 			counts.shortcuts++
 		}
 		rect := sampleRect(t, symbol.Rect)
-		minimum, maximum := sampleWorldPoint(rect.Min), sampleWorldPoint(rect.Max)
+		minimum, maximum := sampleWorldRect(rect)
 		width, height := maximum.X-minimum.X, maximum.Y-minimum.Y
 		if origin.SymbolID != symbol.ID || origin.TableID != tableID || node.ID != index ||
 			!reflect.DeepEqual(origin.Rect, rect) || node.Bounds != (Rect{Min: minimum, Max: maximum}) ||
@@ -247,5 +247,10 @@ func samplePoints(t *testing.T, text string) []pdm.Point {
 }
 
 func sampleWorldPoint(point pdm.Point) Point {
-	return Point{X: float64(point.X), Y: float64(point.Y)}
+	return Point{X: float64(point.X), Y: -float64(point.Y)}
+}
+
+func sampleWorldRect(rect *pdm.Rect) (Point, Point) {
+	return Point{X: float64(rect.Min.X), Y: -float64(rect.Max.Y)},
+		Point{X: float64(rect.Max.X), Y: -float64(rect.Min.Y)}
 }

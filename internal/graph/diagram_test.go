@@ -61,7 +61,7 @@ func TestMapDiagramPreservesOrderGeometryPathsAndBounds(t *testing.T) {
 	first := result.Scene.Nodes[0]
 	if first.ID != 0 || first.Name != "Table B" || len(first.Fields) != 1 ||
 		first.Fields[0].Name != "B1" ||
-		first.Bounds != (Rect{Min: Point{X: -100, Y: -80}, Max: Point{X: -20, Y: 0}}) {
+		first.Bounds != (Rect{Min: Point{X: -100, Y: 0}, Max: Point{X: -20, Y: 80}}) {
 		t.Fatalf("first node = %+v", first)
 	}
 	second := result.Scene.Nodes[1]
@@ -86,7 +86,7 @@ func TestMapDiagramPreservesOrderGeometryPathsAndBounds(t *testing.T) {
 
 	edge := result.Scene.Edges[0]
 	if edge.ID != 0 || edge.From != 0 || edge.To != 1 ||
-		!reflect.DeepEqual(edge.Points, []Point{{X: -150, Y: -100}, {X: 0, Y: 0}, {X: 300, Y: 100}}) {
+		!reflect.DeepEqual(edge.Points, []Point{{X: -150, Y: 100}, {X: 0, Y: 0}, {X: 300, Y: -100}}) {
 		t.Fatalf("first edge = %+v", edge)
 	}
 	if result.EdgeSources[0].SymbolID != "r-one" ||
@@ -101,9 +101,66 @@ func TestMapDiagramPreservesOrderGeometryPathsAndBounds(t *testing.T) {
 		t.Fatalf("unresolved/empty edge = %+v", result.Scene.Edges[1])
 	}
 
-	wantBounds := Rect{Min: Point{X: -150, Y: -100}, Max: Point{X: 300, Y: 240}}
+	wantBounds := Rect{Min: Point{X: -150, Y: -240}, Max: Point{X: 300, Y: 100}}
 	if result.Scene.Bounds != wantBounds {
 		t.Fatalf("bounds = %+v, want %+v", result.Scene.Bounds, wantBounds)
+	}
+}
+
+func TestMapDiagramMirrorsPDMYCoordinates(t *testing.T) {
+	model := &pdm.Model{
+		Metadata: pdm.Metadata{ID: "model"},
+		Contents: pdm.Contents{Tables: []pdm.Table{
+			mappingTable("a", "A", "A"),
+			mappingTable("b", "B", "B"),
+		}},
+	}
+	diagram := &pdm.Diagram{
+		Metadata: pdm.Metadata{ID: "mirror"},
+		OwnerID:  "model",
+		TableSymbols: []pdm.TableSymbol{
+			{Metadata: pdm.Metadata{ID: "a-symbol"}, TableID: "a", Rect: mappingRect(10, 100, 110, 160)},
+			{Metadata: pdm.Metadata{ID: "b-symbol"}, TableID: "b", Rect: mappingRect(300, 20, 400, 80)},
+		},
+		ReferenceSymbols: []pdm.ReferenceSymbol{{
+			Metadata:            pdm.Metadata{ID: "edge"},
+			ReferenceID:         "reference",
+			SourceSymbolID:      "a-symbol",
+			DestinationSymbolID: "b-symbol",
+			Rect:                mappingRect(10, 20, 400, 160),
+			Points:              []pdm.Point{{X: 10, Y: 100}, {X: 10, Y: 160}, {X: 300, Y: 80}},
+			ControlPoints:       []pdm.Point{{X: 200, Y: 100}},
+		}},
+	}
+
+	result := MapDiagram(model, diagram)
+	upper, lower := result.Scene.Nodes[0].Bounds, result.Scene.Nodes[1].Bounds
+	if upper != (Rect{Min: Point{X: 10, Y: -160}, Max: Point{X: 110, Y: -100}}) ||
+		lower != (Rect{Min: Point{X: 300, Y: -80}, Max: Point{X: 400, Y: -20}}) {
+		t.Fatalf("projected upper/lower bounds = %+v / %+v", upper, lower)
+	}
+	if result.NodeSources[0].Rect == nil ||
+		*result.NodeSources[0].Rect != *diagram.TableSymbols[0].Rect ||
+		result.NodeSources[0].Rect == diagram.TableSymbols[0].Rect {
+		t.Fatalf("raw node rectangle was not preserved: %+v", result.NodeSources[0].Rect)
+	}
+	if want := []Point{{X: 10, Y: -100}, {X: 10, Y: -160}, {X: 300, Y: -80}}; !reflect.DeepEqual(result.Scene.Edges[0].Points, want) {
+		t.Fatalf("mirrored path = %+v, want %+v", result.Scene.Edges[0].Points, want)
+	}
+	if want := []pdm.Point{{X: 10, Y: 100}, {X: 10, Y: 160}, {X: 300, Y: 80}}; !reflect.DeepEqual(result.EdgeSources[0].Points, want) {
+		t.Fatalf("raw path = %+v, want %+v", result.EdgeSources[0].Points, want)
+	}
+
+	index := NewSpatialIndex(result.Scene)
+	camera := NewDiagramCamera(Rect{Max: Point{X: 500, Y: 300}})
+	camera.FitBounds(result.Scene.Bounds, 0)
+	nodeHit := HitTest(result.Scene, index, camera, camera.WorldToScreen(rectMiddle(upper)), 3)
+	if nodeHit != (Hit{Kind: HitNode, Index: 0}) {
+		t.Fatalf("mirrored node hit = %+v", nodeHit)
+	}
+	edgeHit := HitTest(result.Scene, index, camera, camera.WorldToScreen(Point{X: 155, Y: -120}), 3)
+	if edgeHit != (Hit{Kind: HitEdge, Index: 0}) {
+		t.Fatalf("mirrored edge hit = %+v", edgeHit)
 	}
 }
 
@@ -386,12 +443,12 @@ func TestMapDiagramAutoLayoutDeterministicMixedAndFullFallback(t *testing.T) {
 	if !first.AutoLayout {
 		t.Fatal("mixed auto layout flag is false")
 	}
-	if first.Scene.Nodes[0].Bounds != (Rect{Min: Point{X: -200, Y: -100}, Max: Point{X: -50, Y: 20}}) {
+	if first.Scene.Nodes[0].Bounds != (Rect{Min: Point{X: -200, Y: -20}, Max: Point{X: -50, Y: 100}}) {
 		t.Fatalf("valid geometry changed: %+v", first.Scene.Nodes[0].Bounds)
 	}
 	previous := first.Scene.Nodes[0].Bounds
 	for offset, node := range first.Scene.Nodes[1:] {
-		if node.Bounds.Min.X <= previous.Max.X || node.Bounds.Min.Y != -100 ||
+		if node.Bounds.Min.X <= previous.Max.X || node.Bounds.Min.Y != -20 ||
 			node.Bounds.Width() != 236 || node.Bounds.Height() != 144 {
 			t.Fatalf("auto node %d overlaps or has unexpected bounds: %+v", offset+1, node.Bounds)
 		}

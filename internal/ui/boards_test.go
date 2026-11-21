@@ -73,7 +73,9 @@ func TestWorkspacePublishesRealBoardsAndStaleSwitchCompletion(t *testing.T) {
 	if workspace.BoardCount() != 1 || workspace.ActiveBoard() != 0 {
 		t.Fatal("workspace did not start with only the demo")
 	}
-	set := BuildBoardSet(testBoardDocument())
+	document := testBoardDocument()
+	document.Model.Contents.Diagrams[0].TableSymbols[1].Rect = boardRect(200, 200, 300, 300)
+	set := BuildBoardSet(document)
 	token := workspace.BeginOpen()
 	if !workspace.PublishBoards(token, set) {
 		t.Fatal("published board set was rejected")
@@ -96,8 +98,15 @@ func TestWorkspacePublishesRealBoardsAndStaleSwitchCompletion(t *testing.T) {
 		t.Fatal("demo remained in the catalog after opening a model")
 	}
 
-	world := graph.Point{X: 50, Y: 50}
-	screen := view.camera.WorldToScreen(world)
+	screen := view.camera.WorldToScreen(graph.Point{X: 50, Y: -50})
+	upper := view.camera.WorldToScreen(graph.Point{X: 250, Y: -250})
+	if upper.Y >= screen.Y {
+		t.Fatalf("higher PDM symbol did not project above the first table: upper=%+v first=%+v", upper, screen)
+	}
+	tester.ClickAt(float32(upper.X), float32(upper.Y))
+	if view.selection.Kind != graph.HitNode || view.selection.Index != 1 {
+		t.Fatalf("selection of upper PDM symbol = %+v", view.selection)
+	}
 	local := view.camera.ScreenToViewport(screen)
 	view.handleInput(ui.InputEvent{Kind: ui.InputPointerMove, X: float32(local.X), Y: float32(local.Y)})
 	if view.hovered.Kind != graph.HitNode || view.hovered.Index != 0 {

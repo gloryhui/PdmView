@@ -235,8 +235,8 @@ func autoBounds(offset int, startX, startY float64) Rect {
 
 func graphRect(rect pdm.Rect) Rect {
 	return Rect{
-		Min: Point{X: float64(rect.Min.X), Y: float64(rect.Min.Y)},
-		Max: Point{X: float64(rect.Max.X), Y: float64(rect.Max.Y)},
+		Min: Point{X: float64(rect.Min.X), Y: -float64(rect.Max.Y)},
+		Max: Point{X: float64(rect.Max.X), Y: -float64(rect.Min.Y)},
 	}
 }
 
@@ -246,7 +246,7 @@ func graphPoints(points []pdm.Point) []Point {
 	}
 	result := make([]Point, len(points))
 	for offset, point := range points {
-		result[offset] = Point{X: float64(point.X), Y: float64(point.Y)}
+		result[offset] = Point{X: float64(point.X), Y: -float64(point.Y)}
 	}
 	return result
 }

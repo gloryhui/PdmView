@@ -41,9 +41,9 @@
 ### P4-02 接口
 
 - `graph.MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph` 生成一份画板结果。`DiagramGraph` 提供 `DiagramID string`、`Scene Scene`、`NodeSources []DiagramNodeSource`、`EdgeSources []DiagramEdgeSource`、`AutoLayout bool`。调用者负责选择 `Diagram`。`nil` 画板时使用模型及其嵌套 Package 中的表。空输入产生空图。
-- `DiagramNodeSource` 包含 `SymbolID string`、`TableID string`、`Rect *pdm.Rect`；`DiagramEdgeSource` 包含 `SymbolID`、`ReferenceID`、`SourceSymbolID`、`DestinationSymbolID`（均为 `string`），以及 `Rect *pdm.Rect`、`Points` 和 `ControlPoints`（均为 `[]pdm.Point`）。来源数组与 `Scene` 节点、边按偏移一一对应。几何副本保留精确整数，互不共享可变数据。`Scene` 是浮点世界坐标，直接投影原始 X/Y，暂未标定与 DIP 的比例。`Scene.Bounds` 是节点及非空显示路径的并集。
+- `DiagramNodeSource` 包含 `SymbolID string`、`TableID string`、`Rect *pdm.Rect`；`DiagramEdgeSource` 包含 `SymbolID`、`ReferenceID`、`SourceSymbolID`、`DestinationSymbolID`（均为 `string`），以及 `Rect *pdm.Rect`、`Points` 和 `ControlPoints`（均为 `[]pdm.Point`）。来源数组与 `Scene` 节点、边按偏移一一对应。几何副本保留精确整数，互不共享可变数据。`Scene` 使用浮点世界坐标，按 [ADR-007](#adr-007-画板纵轴投影) 投影原始 X/Y，暂未标定与 DIP 的比例。`Scene.Bounds` 是节点及非空显示路径的并集。
 - 显式画板按图元原序生成节点。节点和边的整数 `ID` 为各自画板内的切片偏移。标题和字段使用已解析的模型名称及字段原序（名称为空时取编码）；外部或未解析图元保留来源及位置，显示可用引用 ID。关系的 `From`、`To` 只从本画板的图元 ID 解析，未解析端点用 `-1`。保存有序原始路径和独立的控制点，不连缀两者；缺少路径时保持空 `Edge.Points`，自动路由留待 P5-05。
-- 有表图元时只映射画板内的表图元。无表图元的显式画板回退至其归属 `Contents` 直接持有的表。缺失、反向或零尺寸矩形只对受影响的节点执行确定性网格布局。混合布局将自动放置的节点排在有效矩形联合范围右侧，使用同一坐标系，有效位置与尺寸原样保留。全回退采用独立的网格坐标。`AutoLayout` 在至少一个节点采用自动位置时为真，由后续正式画布呈现本地化的“自动布局”状态。
+- 有表图元时只映射画板内的表图元。无表图元的显式画板回退至其归属 `Contents` 直接持有的表。缺失、反向或零尺寸矩形只对受影响的节点执行确定性网格布局。混合布局将自动放置的节点排在有效矩形投影的联合范围右侧。全回退采用独立的网格坐标。`AutoLayout` 在至少一个节点采用自动位置时为真，由后续正式画布呈现本地化的“自动布局”状态。
 
 ## ADR-005 正式图引擎与关系路由
 
@@ -58,8 +58,16 @@
 
 - 日期：2026-11-21
 - 状态：已采纳，Phase 6
-- PDM 经 `BuildDiagramGraph` 和配套 BVH 生成场景。图投影补充表编码、字段原始类型及有来源依据的 PK/FK 标记。Renderer 只使用图场景、索引、相机和交互状态。通过相机用 `float64` 计算世界坐标到窗口 DIP 的位置，再交给 MyGo。字体、线宽和端点标记使用 DIP，画板布局继续保留原始坐标。
+- PDM 经 `BuildDiagramGraph` 和配套 BVH 生成场景。图投影补充表编码、字段原始类型及有来源依据的 PK/FK 标记。Renderer 只使用图场景、索引、相机和交互状态。通过相机用 `float64` 计算世界坐标到窗口 DIP 的位置，再交给 MyGo。字体、线宽和端点标记使用 DIP。
 - 关系仍使用有序原始或回退路径，先绘制关系再覆盖表节点。箭头只用于逻辑外键方向与当前图元两端一致的已解析关系。关系基数由源模型提供。
 - LOD 使用典型表宽的投影尺寸。以正宽度中位数除以 236 归一化相机比例，沿用远中近三档回滞。预排版前 64 表，后续按视口及选中对象准备文字。每画板最多保留 256 个表视觉和 512 个共享文字条目，按加入顺序淘汰，优先保留选中和当前可见表。超出容量的表暂时只画轮廓。每条文字预览限 256 个 Unicode 码点，原文保留在模型中。背景复用一块按 DPI 和主题更新的 32～256 像素网格纹理。绘制回调查询可见项并消费已准备的文字。切换画板时替换渲染器，释放旧缓存。
 - 原生应用通过本地文件入口在后台解析和准备图数据。选择默认或用户指定画板时使用配套场景、索引与相机，默认适应当前画板。画板切换和视图复位清除选中与悬停；「显示全部」保持当前选中对象。自动布局状态、文件操作与画布工具复用首版双语资源。
 - 最终运行原生画布基准，沿用固定种子、规模、疏密布局、窗口与操作周期。实测记录注明运行的是正式绘制链路，位置单位标定与 PowerDesigner 应用内对照仍按 P4-03 跟踪。
+
+## ADR-007 画板纵轴投影
+
+- 日期：2026-11-21
+- 状态：已采纳
+- PowerDesigner 画板的 Y 轴向上，Graph 和窗口的 Y 轴向下。`MapDiagram` 将 PDM 点 `(x, y)` 投影为 `(x, -y)`。表框取投影后的两角形成有效矩形，关系折线对每个点执行同一变换并保留点序。空间索引、命中、自动路由和相机统一消费投影后的场景。
+- 原始整数矩形、折线和独立控制点保留在 PDM 及图元来源记录中。合成图与全回退布局沿用 Graph 坐标。
+- 同一份 PDM 的跨应用截图对照见 [P4-03](PHASE_4_ACCEPTANCE.md#powerdesigner-应用内对照)。坐标方向也与 SAP PowerDesigner 16.6 定制指南 §7.2.5 的四区定位示例一致。
