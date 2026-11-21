@@ -1,50 +1,16 @@
 package appui
 
 import (
-	"strconv"
 	"strings"
 
 	"pdmview/internal/pdm"
 )
 
 const (
-	DetailTableKey       = SelectedNodeKey
-	DetailCodeKey        = "pdmview.details.code"
-	DetailCommentKey     = "pdmview.details.comment"
-	DetailPackageKey     = "pdmview.details.package"
-	DetailColumnsKey     = "pdmview.details.columns"
-	DetailKeysKey        = "pdmview.details.keys"
-	DetailIndexesKey     = "pdmview.details.indexes"
-	DetailForeignKeysKey = "pdmview.details.foreign-keys"
+	DetailTableKey   = SelectedNodeKey
+	DetailCodeKey    = "pdmview.details.code"
+	DetailCommentKey = "pdmview.details.comment"
 )
-
-func DetailColumnKey(id string) string {
-	return "pdmview.details.column." + id
-}
-
-func DetailColumnPropertyKey(id, property string) string {
-	return DetailColumnKey(id) + "." + property
-}
-
-func DetailKeyKey(id string) string {
-	return "pdmview.details.key." + id
-}
-
-func DetailIndexKey(id string) string {
-	return "pdmview.details.index." + id
-}
-
-func DetailIndexColumnKey(indexID string, ordinal int) string {
-	return DetailIndexKey(indexID) + ".column." + strconv.Itoa(ordinal)
-}
-
-func DetailForeignKeyKey(id string) string {
-	return "pdmview.details.foreign-key." + id
-}
-
-func DetailJoinKey(id string, ordinal int) string {
-	return DetailForeignKeyKey(id) + ".join." + strconv.Itoa(ordinal)
-}
 
 type DetailRef struct {
 	ID       string
@@ -103,6 +69,8 @@ type TableDetail struct {
 	Keys         []KeyDetail
 	Indexes      []IndexDetail
 	ForeignKeys  []ForeignKeyDetail
+	ReferencesTo []DetailRef
+	ReferencedBy []DetailRef
 }
 
 type detailObjectOwner struct {
@@ -116,6 +84,7 @@ type tableDetailIndex struct {
 	keys              map[string]detailObjectOwner
 	packagePaths      map[string][]DetailRef
 	referencesByChild map[string][]pdm.Reference
+	childIDsByParent  map[string][]string
 }
 
 func buildTableDetailIndex(model *pdm.Model) *tableDetailIndex {
@@ -125,6 +94,7 @@ func buildTableDetailIndex(model *pdm.Model) *tableDetailIndex {
 		keys:              make(map[string]detailObjectOwner),
 		packagePaths:      make(map[string][]DetailRef),
 		referencesByChild: make(map[string][]pdm.Reference),
+		childIDsByParent:  make(map[string][]string),
 	}
 	if model != nil {
 		collectDetailModel(model.Contents, nil, index)
@@ -159,7 +129,8 @@ func (index *tableDetailIndex) resolve(tableID string) (TableDetail, bool) {
 		}
 	}
 	foreignColumns := make(map[string]bool)
-	for _, reference := range index.referencesByChild[table.ID] {
+	references := index.referencesByChild[table.ID]
+	for _, reference := range references {
 		for _, join := range reference.Joins {
 			if index.columns[join.ChildColumnID].tableID == table.ID {
 				foreignColumns[join.ChildColumnID] = true
@@ -204,7 +175,8 @@ func (index *tableDetailIndex) resolve(tableID string) (TableDetail, bool) {
 		}
 		detail.Indexes = append(detail.Indexes, indexDetail)
 	}
-	for _, reference := range index.referencesByChild[table.ID] {
+	parentIDs := make([]string, 0, len(references))
+	for _, reference := range references {
 		foreignKey := ForeignKeyDetail{
 			Metadata:         reference.Metadata,
 			ParentTable:      index.resolveTableRef(reference.ParentTableID),
@@ -222,7 +194,10 @@ func (index *tableDetailIndex) resolve(tableID string) (TableDetail, bool) {
 			})
 		}
 		detail.ForeignKeys = append(detail.ForeignKeys, foreignKey)
+		parentIDs = append(parentIDs, reference.ParentTableID)
 	}
+	detail.ReferencesTo = index.uniqueTableRefs(parentIDs)
+	detail.ReferencedBy = index.uniqueTableRefs(index.childIDsByParent[tableID])
 	return detail, true
 }
 
@@ -260,11 +235,29 @@ func collectDetailModel(
 		if reference.ChildTableID != "" {
 			index.referencesByChild[reference.ChildTableID] = append(index.referencesByChild[reference.ChildTableID], reference)
 		}
+		if reference.ParentTableID != "" {
+			index.childIDsByParent[reference.ParentTableID] = append(index.childIDsByParent[reference.ParentTableID], reference.ChildTableID)
+		}
 	}
 	for _, pkg := range contents.Packages {
 		next := append(append([]DetailRef(nil), path...), resolvedDetailRef(pkg.Metadata))
 		collectDetailModel(pkg.Contents, next, index)
 	}
+}
+
+func (index *tableDetailIndex) uniqueTableRefs(ids []string) []DetailRef {
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(ids))
+	var refs []DetailRef
+	for _, id := range ids {
+		if !seen[id] {
+			refs = append(refs, index.resolveTableRef(id))
+			seen[id] = true
+		}
+	}
+	return refs
 }
 
 func resolveOwnedDetailRef(objects map[string]detailObjectOwner, id, expectedTableID string) DetailRef {

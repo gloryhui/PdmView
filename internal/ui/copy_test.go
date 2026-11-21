@@ -2,6 +2,7 @@ package appui
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -118,7 +119,14 @@ func TestTableCopyTextCompleteOrderedEscapedAndLocaleIndependent(t *testing.T) {
 func TestTableCopyShowsOnlyForRealSelectedTableAndClearsStaleFeedback(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
-	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(detailDocument()))
+	document := detailDocument()
+	contents := &document.Model.Contents
+	for offset := range 25 {
+		id := "related-" + strconv.Itoa(offset)
+		contents.Tables = append(contents.Tables, pdm.Table{Metadata: pdm.Metadata{ID: id, Name: id}})
+		contents.References = append(contents.References, pdm.Reference{ChildTableID: "customers", ParentTableID: id})
+	}
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(document))
 	var written string
 	failure := errors.New("clipboard unavailable")
 	workspace.SetClipboardWriter(func(text string) error {

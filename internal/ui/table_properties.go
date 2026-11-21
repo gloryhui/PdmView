@@ -114,16 +114,19 @@ type tableGeneralDraft struct {
 }
 
 type tableColumnDraft struct {
-	ID         string
-	Name       string
-	Code       string
-	Comment    string
-	DataType   string
-	Length     string
-	Precision  string
-	PrimaryKey bool
-	ForeignKey bool
-	Mandatory  ui.CheckState
+	ID           string
+	Name         string
+	Code         string
+	Comment      string
+	DataType     string
+	Length       string
+	Precision    string
+	Scale        string
+	DefaultValue string
+	PrimaryKey   bool
+	ForeignKey   bool
+	Mandatory    ui.CheckState
+	Identity     ui.CheckState
 }
 
 type tableIndexDraft struct {
@@ -167,17 +170,27 @@ func newTablePropertiesDraft(detail TableDetail) tablePropertiesDraft {
 				mandatory = ui.CheckOn
 			}
 		}
+		identity := ui.CheckMixed
+		if column.Identity != nil {
+			identity = ui.CheckOff
+			if *column.Identity {
+				identity = ui.CheckOn
+			}
+		}
 		draft.Columns[offset] = tableColumnDraft{
-			ID:         column.ID,
-			Name:       column.Name,
-			Code:       column.Code,
-			Comment:    column.Comment.Value,
-			DataType:   column.DataType.Value,
-			Length:     column.Length.Value,
-			Precision:  column.Precision.Value,
-			PrimaryKey: column.PrimaryKey,
-			ForeignKey: column.ForeignKey,
-			Mandatory:  mandatory,
+			ID:           column.ID,
+			Name:         column.Name,
+			Code:         column.Code,
+			Comment:      column.Comment.Value,
+			DataType:     column.DataType.Value,
+			Length:       column.Length.Value,
+			Precision:    column.Precision.Value,
+			Scale:        column.Scale.Value,
+			DefaultValue: column.DefaultValue.Value,
+			PrimaryKey:   column.PrimaryKey,
+			ForeignKey:   column.ForeignKey,
+			Mandatory:    mandatory,
+			Identity:     identity,
 		}
 	}
 	draft.Indexes = make([]tableIndexDraft, len(detail.Indexes))
@@ -412,11 +425,14 @@ func (w *Workspace) tablePropertiesColumns(
 		minTypeWidth    = float32(90)
 		lengthWidth     = float32(50)
 		precisionWidth  = float32(60)
+		scaleWidth      = float32(55)
+		defaultWidth    = float32(115)
 		keyWidth        = float32(45)
 		mandatoryWidth  = float32(80)
-		flagsWidth      = 2*keyWidth + mandatoryWidth
+		identityWidth   = float32(64)
+		flagsWidth      = 2*keyWidth + mandatoryWidth + identityWidth
 		minWidth        = minNameWidth + minCodeWidth + minCommentWidth + minTypeWidth +
-			lengthWidth + precisionWidth + flagsWidth + 6*4 + 8
+			lengthWidth + precisionWidth + scaleWidth + defaultWidth + flagsWidth + 8*4 + 8
 	)
 	available, _ := c.Size()
 	extra := max(0, available-2*tablePropertiesPadding-12-minWidth)
@@ -426,6 +442,8 @@ func (w *Workspace) tablePropertiesColumns(
 	primary := state.Text(i18n.KeyDetailPK, nil)
 	foreign := state.Text(i18n.KeyDetailFK, nil)
 	mandatory := state.Text(i18n.KeyTablePropertiesMandatory, nil)
+	identity := state.Text(i18n.KeyDetailIdentity, nil)
+	defaultLabel := state.Text(i18n.KeyDetailDefault, nil)
 	header := func(label string, width float32) {
 		ui.Text(c, label).Width(width).Shrink(0).SingleLine().FontSize(10).
 			TextColor(theme.TextMuted).Lang(lang)
@@ -441,11 +459,13 @@ func (w *Workspace) tablePropertiesColumns(
 		header(state.Text(i18n.KeyDetailType, nil), typeWidth)
 		header(state.Text(i18n.KeyDetailLength, nil), lengthWidth)
 		header(state.Text(i18n.KeyDetailPrecision, nil), precisionWidth)
+		header(state.Text(i18n.KeyDetailScale, nil), scaleWidth)
+		header(defaultLabel, defaultWidth)
 		ui.Row(c).Width(flagsWidth).Shrink(0).Children(func() {
 			for _, flag := range []struct {
 				label string
 				width float32
-			}{{primary, keyWidth}, {foreign, keyWidth}, {mandatory, mandatoryWidth}} {
+			}{{primary, keyWidth}, {foreign, keyWidth}, {mandatory, mandatoryWidth}, {identity, identityWidth}} {
 				flagCell(flag.width, func() {
 					ui.Text(c, flag.label).SingleLine().FontSize(10).TextColor(theme.TextMuted).Lang(lang)
 				})
@@ -470,6 +490,15 @@ func (w *Workspace) tablePropertiesColumns(
 					state.Text(i18n.KeyDetailLength, nil), lengthWidth, &column.Length, lang)
 				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "precision"),
 					state.Text(i18n.KeyDetailPrecision, nil), precisionWidth, &column.Precision, lang)
+				tablePropertiesInput(c, TablePropertiesColumnFieldKey(column.ID, "scale"),
+					state.Text(i18n.KeyDetailScale, nil), scaleWidth, &column.Scale, lang)
+				placeholder := "—"
+				if w.tableProperties.detail.Columns[row].DefaultValue.Present {
+					placeholder = `""`
+				}
+				c.Key(TablePropertiesColumnFieldKey(column.ID, "default"))
+				ui.TextInput(c, &column.DefaultValue).Width(defaultWidth).Shrink(0).Label(defaultLabel).
+					Placeholder(placeholder).Lang(lang)
 				ui.Row(c).Width(flagsWidth).Shrink(0).Children(func() {
 					flagCell(keyWidth, func() {
 						ui.Checkbox(c.Key(TablePropertiesColumnFieldKey(column.ID, "pk")), &column.PrimaryKey, "").
@@ -483,10 +512,21 @@ func (w *Workspace) tablePropertiesColumns(
 						ui.CheckboxState(c.Key(TablePropertiesColumnFieldKey(column.ID, "mandatory")), &column.Mandatory, "").
 							Label(mandatory).Lang(lang)
 					})
+					flagCell(identityWidth, func() {
+						ui.CheckboxState(c.Key(TablePropertiesColumnFieldKey(column.ID, "identity")), &column.Identity, "").
+							Label(identity).Lang(lang)
+					})
 				})
 			})
 		}).RowWidth(totalWidth).Grow(1).FillWidth()
 	head.ScrollWith(list)
+}
+
+func detailID(id string, offset int) string {
+	if id != "" {
+		return id
+	}
+	return "index-" + strconv.Itoa(offset)
 }
 
 func (w *Workspace) tablePropertiesIndexes(

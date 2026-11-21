@@ -127,7 +127,7 @@ func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 		t.Fatalf("pane scroll areas = %d, want navigation and details", scrolls)
 	}
 	canvasLeft, canvasRight := splitters[0].X, splitters[1].X
-	for _, label := range []string{"Zoom out", "Zoom in", "Fit selection", "Show all", "Reset view"} {
+	for _, label := range []string{"Zoom out", "Zoom in", "Fit selection", "Show all", "Reset view", "Hide details"} {
 		info, ok := tester.Access(label)
 		if !ok || info.Bounds.X < canvasLeft-0.5 ||
 			info.Bounds.X+info.Bounds.W > canvasRight+0.5 ||
@@ -170,7 +170,7 @@ func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 
 	splitters = splitterBounds(tester)
 	canvasLeft, canvasRight = splitters[0].X, splitters[1].X
-	for _, label := range []string{"缩小", "放大", "适应选中", "显示全部", "重置视图"} {
+	for _, label := range []string{"缩小", "放大", "适应选中", "显示全部", "重置视图", "隐藏详情"} {
 		info, ok := tester.Access(label)
 		if !ok || info.Bounds.X < canvasLeft-0.5 ||
 			info.Bounds.X+info.Bounds.W > canvasRight+0.5 ||
@@ -178,6 +178,36 @@ func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 			t.Fatalf("canvas tool %q outside canvas bounds %.2f..%.2f: %+v, %v",
 				label, canvasLeft, canvasRight, info.Bounds, ok)
 		}
+	}
+}
+
+func TestDetailsCollapseReturnsWidthToCanvasAndPreservesSelection(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(detailDocument()))
+	tester := ui.NewTester(View(state, workspace), 800, 600)
+	workspace.LocateTable("customers")
+	tester.Frame()
+	before := workspace.canvas.viewport.Width()
+	camera := workspace.canvas.camera
+	selection := workspace.canvas.selection
+	scale, origin := camera.Scale(), camera.VisibleWorld().Min
+	if err := tester.Click("Hide details"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if len(splitterBounds(tester)) != 1 || tester.HasText("Copy table info") ||
+		workspace.canvas.viewport.Width() < before+detailsMinWidth-1 {
+		t.Fatal("collapsed details still occupy workspace width")
+	}
+	if err := tester.Click("Show details"); err != nil {
+		t.Fatal(err)
+	}
+	tester.Frame()
+	if len(splitterBounds(tester)) != 2 || !tester.HasText("Copy table info") ||
+		workspace.canvas.viewport.Width() != before || workspace.canvas.camera != camera ||
+		camera.Scale() != scale || camera.VisibleWorld().Min != origin || workspace.canvas.selection != selection {
+		t.Fatal("details restore changed its size, selection or camera")
 	}
 }
 

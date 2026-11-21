@@ -35,6 +35,9 @@ func TestPDMSaveCollectsOnlySupportedEdits(t *testing.T) {
 	draft.Columns[0].Code = "NEW_CODE"
 	draft.Columns[0].Comment = "New comment"
 	draft.Columns[0].DataType = "text"
+	draft.Columns[0].Scale = "4"
+	draft.Columns[0].DefaultValue = "test"
+	draft.Columns[0].Identity = ui.CheckOn
 	draft.Columns[0].PrimaryKey = !draft.Columns[0].PrimaryKey
 	draft.Indexes[0].Name = "Edited index"
 	draft.Keys[0].Code = "EDITED_KEY"

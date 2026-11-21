@@ -1,241 +1,147 @@
 package appui
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"pdmview/internal/app"
 	"pdmview/internal/i18n"
-	"pdmview/internal/pdm"
 
 	"github.com/egoist/mygo/ui"
 )
 
-func renderTableDetail(
-	c *ui.Context,
-	state *app.State,
-	t *ui.Theme,
-	lang string,
-	detail TableDetail,
-	unplaced bool,
-) {
+const (
+	DetailsToggleKey    = "pdmview.details.toggle"
+	OpenPropertiesKey   = "pdmview.details.open-properties"
+	DetailRelatedKey    = "pdmview.details.related"
+	DetailReferencesKey = "pdmview.details.references-to"
+	DetailReferencedKey = "pdmview.details.referenced-by"
+)
+
+func (w *Workspace) detailsToggle(c *ui.Context, state *app.State, lang string) {
+	key := i18n.KeyDetailsHide
+	if w.detailsHidden {
+		key = i18n.KeyDetailsShow
+	}
+	label := state.Text(key, nil)
+	ui.Button(c, label).Key(DetailsToggleKey).Height(24).Label(label).Lang(lang).Expanded(!w.detailsHidden).
+		OnClick(func() {
+			w.detailsHidden = !w.detailsHidden
+			w.notifyChanged()
+		})
+}
+
+func (w *Workspace) detailsPane(c *ui.Context, state *app.State, theme *ui.Theme, lang string) {
+	ui.Column(c).Fill().Background(theme.Surface).Padding(12).Gap(10).
+		MinWidth(detailsMinWidth).MaxWidth(detailsMaxWidth).Clip().Children(func() {
+		paneHeading(c, state.Text(i18n.KeyDetailsHeading, nil), theme, lang)
+		selected := w.hasTableDetail && w.tableDetail.ID == w.selectedTableID
+		if selected {
+			w.detailsActions(c, state, theme, lang, w.tableDetail.ID)
+		}
+		ui.Scroll(c.Key(DetailsBodyKey)).TrackScroll(&w.detailsScroll).Grow(1).FillWidth().Children(func() {
+			if selected {
+				detail := w.tableDetail
+				ui.Column(c).FillWidth().Gap(12).Children(func() {
+					renderTableSummary(c, state, theme, lang, detail, w.unplacedTable)
+					if len(detail.ReferencesTo)+len(detail.ReferencedBy) != 0 {
+						w.detailsRelations(c, state, theme, lang, detail)
+					}
+				})
+			} else if w.selectedTableID != "" {
+				renderTableName(c, theme, lang, w.selectedTableName)
+			} else if node := w.canvas.selectedNode(); node != nil {
+				renderTableName(c, theme, lang, node.Name)
+			}
+		})
+	})
+}
+
+func renderTableName(c *ui.Context, theme *ui.Theme, lang, name string) {
+	ui.Text(c, name).Key(DetailTableKey).FillWidth().Wrap().FontSize(14).
+		Bold().TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(3)
+}
+
+func renderTableSummary(c *ui.Context, state *app.State, theme *ui.Theme, lang string, detail TableDetail, unplaced bool) {
 	name := firstNonEmpty(detail.Name, detail.Code, detail.ID)
-	ui.Column(c).FillWidth().Gap(10).Children(func() {
-		ui.Text(c, name).Key(DetailTableKey).FillWidth().Wrap().
-			FontSize(14).Bold().TextColor(t.Text).Lang(lang)
+	count := state.Text(i18n.KeyDetailColumnCount, map[string]string{"count": strconv.Itoa(len(detail.Columns))})
+	for _, key := range detail.Keys {
+		if key.Primary {
+			count += " · " + state.Text(i18n.KeyDetailPrimaryCount, nil)
+			break
+		}
+	}
+	ui.Column(c).FillWidth().Gap(5).Children(func() {
+		renderTableName(c, theme, lang, name)
+		if detail.Code != "" && detail.Code != name {
+			ui.Text(c, detail.Code).Key(DetailCodeKey).FillWidth().Wrap().Selectable().
+				FontSize(12).TextColor(theme.Text).Lang(lang)
+		}
+		if strings.TrimSpace(detail.Comment.Value) != "" {
+			ui.Text(c, detail.Comment.Value).Key(DetailCommentKey).FillWidth().Wrap().MaxLines(3).Ellipsis("…").
+				FontSize(12).TextColor(theme.TextMuted).Lang(lang)
+		}
+		ui.Text(c, count).FillWidth().Wrap().FontSize(11).TextColor(theme.TextMuted).Lang(lang)
 		if unplaced {
-			ui.Text(c, state.Text(i18n.KeyNotOnDiagram, nil)).
-				FillWidth().Wrap().FontSize(11).TextColor(t.TextMuted).Lang(lang)
-		}
-		detailProperty(c, DetailCodeKey, state.Text(i18n.KeyDetailCode, nil), valueOrDash(detail.Code), t, lang)
-		packagePath := packagePathText(detail.PackagePath)
-		if packagePath == "" {
-			packagePath = state.Text(i18n.KeyModelRoot, nil)
-		}
-		detailProperty(c, DetailPackageKey, state.Text(i18n.KeyDetailPackage, nil), packagePath, t, lang)
-		detailProperty(c, DetailCommentKey, state.Text(i18n.KeyDetailComment, nil), optionalValue(detail.Comment), t, lang)
-
-		detailSection(c, DetailColumnsKey, state.Text(i18n.KeyDetailColumns, nil), t, lang, func() {
-			for offset, column := range detail.Columns {
-				renderColumnDetail(c, state, t, lang, column, offset)
-			}
-		})
-		detailSection(c, DetailKeysKey, state.Text(i18n.KeyDetailKeys, nil), t, lang, func() {
-			for offset, key := range detail.Keys {
-				id := detailID(key.ID, offset)
-				ui.Column(c).FillWidth().Gap(2).Children(func() {
-					mode := ""
-					if key.Primary {
-						mode = " · " + state.Text(i18n.KeyDetailPrimary, nil)
-					}
-					ui.Text(c, firstNonEmpty(key.Name, key.Code, key.ID, "—")+mode).Key(DetailKeyKey(id)).FillWidth().Wrap().
-						FontSize(11).Bold().TextColor(t.Text).Lang(lang)
-					detailProperty(c, DetailKeyKey(id)+".columns",
-						state.Text(i18n.KeyDetailColumns, nil), refListText(state, key.Columns), t, lang)
-					if key.Comment.Present {
-						detailProperty(c, DetailKeyKey(id)+".comment",
-							state.Text(i18n.KeyDetailComment, nil), optionalValue(key.Comment), t, lang)
-					}
-				})
-			}
-		})
-		detailSection(c, DetailIndexesKey, state.Text(i18n.KeyDetailIndexes, nil), t, lang, func() {
-			for offset, index := range detail.Indexes {
-				id := detailID(index.ID, offset)
-				ui.Column(c).FillWidth().Gap(2).Children(func() {
-					ui.Text(c, firstNonEmpty(index.Name, index.Code, index.ID, "—")).Key(DetailIndexKey(id)).FillWidth().Wrap().
-						FontSize(11).Bold().TextColor(t.Text).Lang(lang)
-					detailProperty(c, DetailIndexKey(id)+".unique",
-						state.Text(i18n.KeyDetailUnique, nil), boolValue(state, index.Unique), t, lang)
-					for columnOffset, column := range index.Columns {
-						value := detailRefText(state, column.Column)
-						sortOrder := optionalValue(column.SortOrder)
-						if column.SortOrder.Present {
-							value += " · " + state.Text(i18n.KeyDetailSort, nil) + ": " + sortOrder
-						}
-						detailProperty(c, DetailIndexColumnKey(id, columnOffset),
-							fmt.Sprintf("%d", columnOffset+1), value, t, lang)
-					}
-				})
-			}
-		})
-		detailSection(c, DetailForeignKeysKey, state.Text(i18n.KeyDetailForeignKeys, nil), t, lang, func() {
-			for offset, foreignKey := range detail.ForeignKeys {
-				id := detailID(foreignKey.ID, offset)
-				ui.Column(c).FillWidth().Gap(2).Children(func() {
-					ui.Text(c, firstNonEmpty(foreignKey.Name, foreignKey.Code, foreignKey.ID, "—")).Key(DetailForeignKeyKey(id)).FillWidth().Wrap().
-						FontSize(11).Bold().TextColor(t.Text).Lang(lang)
-					detailProperty(c, DetailForeignKeyKey(id)+".parent",
-						state.Text(i18n.KeyDetailParent, nil), detailRefText(state, foreignKey.ParentTable), t, lang)
-					detailProperty(c, DetailForeignKeyKey(id)+".child",
-						state.Text(i18n.KeyDetailChild, nil), detailRefText(state, foreignKey.ChildTable), t, lang)
-					detailProperty(c, DetailForeignKeyKey(id)+".key",
-						state.Text(i18n.KeyDetailKeys, nil), detailRefText(state, foreignKey.ParentKey), t, lang)
-					for joinOffset, join := range foreignKey.Joins {
-						value := detailRefText(state, join.ChildColumn) + " → " + detailRefText(state, join.ParentColumn)
-						detailProperty(c, DetailJoinKey(id, joinOffset), fmt.Sprintf("%d", joinOffset+1), value, t, lang)
-					}
-					for _, property := range []struct {
-						key   string
-						label i18n.Key
-						value pdm.OptionalText
-					}{
-						{key: DetailForeignKeyKey(id) + ".update", label: i18n.KeyDetailOnUpdate, value: foreignKey.UpdateConstraint},
-						{key: DetailForeignKeyKey(id) + ".delete", label: i18n.KeyDetailOnDelete, value: foreignKey.DeleteConstraint},
-						{key: DetailForeignKeyKey(id) + ".cardinality", label: i18n.KeyDetailCardinality, value: foreignKey.Cardinality},
-					} {
-						if property.value.Present {
-							detailProperty(c, property.key, state.Text(property.label, nil), optionalValue(property.value), t, lang)
-						}
-					}
-				})
-			}
-		})
-	})
-}
-
-func renderColumnDetail(
-	c *ui.Context,
-	state *app.State,
-	t *ui.Theme,
-	lang string,
-	column ColumnDetail,
-	offset int,
-) {
-	id := detailID(column.ID, offset)
-	ui.Column(c).FillWidth().Gap(2).Children(func() {
-		markers := ""
-		if column.PrimaryKey {
-			markers += " · " + state.Text(i18n.KeyDetailPK, nil)
-		}
-		if column.ForeignKey {
-			markers += " · " + state.Text(i18n.KeyDetailFK, nil)
-		}
-		ui.Text(c, strconv.Itoa(offset+1)+". "+valueOrDash(column.Name)+markers).Key(DetailColumnKey(id)).FillWidth().Wrap().
-			FontSize(11).Bold().TextColor(t.Text).Lang(lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "code"),
-			state.Text(i18n.KeyDetailCode, nil), valueOrDash(column.Code), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "type"),
-			state.Text(i18n.KeyDetailType, nil), optionalValue(column.DataType), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "length"),
-			state.Text(i18n.KeyDetailLength, nil), optionalValue(column.Length), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "precision"),
-			state.Text(i18n.KeyDetailPrecision, nil), optionalValue(column.Precision), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "scale"),
-			state.Text(i18n.KeyDetailScale, nil), optionalValue(column.Scale), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "null"),
-			state.Text(i18n.KeyDetailNull, nil), boolValue(state, column.Nullable), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "default"),
-			state.Text(i18n.KeyDetailDefault, nil), optionalValue(column.DefaultValue), t, lang)
-		detailProperty(c, DetailColumnPropertyKey(id, "identity"),
-			state.Text(i18n.KeyDetailIdentity, nil), boolValue(state, column.Identity), t, lang)
-		if column.Comment.Present {
-			detailProperty(c, DetailColumnPropertyKey(id, "comment"),
-				state.Text(i18n.KeyDetailComment, nil), optionalValue(column.Comment), t, lang)
+			ui.Text(c, state.Text(i18n.KeyNotOnDiagram, nil)).FillWidth().Wrap().
+				FontSize(11).TextColor(theme.TextMuted).Lang(lang).Role(ui.RoleStatus)
 		}
 	})
 }
 
-func detailSection(
-	c *ui.Context,
-	key, label string,
-	t *ui.Theme,
-	lang string,
-	children func(),
-) {
+func (w *Workspace) detailsActions(c *ui.Context, state *app.State, theme *ui.Theme, lang, tableID string) {
 	ui.Column(c).FillWidth().Gap(4).Children(func() {
-		ui.Text(c, label).Key(key).FillWidth().FontSize(12).Bold().
-			TextColor(t.Text).Lang(lang).Role(ui.RoleHeading).Level(3)
-		children()
+		for _, action := range []struct {
+			key   string
+			label i18n.Key
+			run   func()
+		}{
+			{OpenPropertiesKey, i18n.KeyOpenTableProperties, func() { w.requestTableProperties(tableID) }},
+			{CopyTableKey, i18n.KeyCopyTable, w.copySelectedTable},
+			{CopyCreateTableKey, i18n.KeyCopyCreateTable, w.copySelectedCreateTable},
+		} {
+			label := state.Text(action.label, nil)
+			ui.Button(c, label).Key(action.key).Label(label).Lang(lang).FillWidth().OnClick(action.run)
+		}
+		if status, failed := w.copyFeedbackText(state); status != "" {
+			color, role := theme.Success, ui.RoleStatus
+			if failed {
+				color, role = theme.Danger, ui.RoleAlert
+			}
+			ui.Text(c, status).Key(CopyStatusKey).FillWidth().Wrap().
+				FontSize(11).TextColor(color).Lang(lang).Role(role)
+		}
 	})
 }
 
-func detailProperty(
-	c *ui.Context,
-	key, label, value string,
-	t *ui.Theme,
-	lang string,
-) {
-	ui.Row(c).FillWidth().Gap(6).Children(func() {
-		ui.Text(c, label).Width(66).Shrink(0).Wrap().FontSize(11).
-			TextColor(t.TextMuted).Lang(lang)
-		ui.Text(c, value).Key(key).FillWidth().Wrap().FontSize(11).
-			TextColor(t.Text).Lang(lang)
+func (w *Workspace) detailsRelations(c *ui.Context, state *app.State, theme *ui.Theme, lang string, detail TableDetail) {
+	ui.Column(c).FillWidth().Gap(8).Children(func() {
+		ui.Text(c, state.Text(i18n.KeyDetailRelatedTables, nil)).Key(DetailRelatedKey).FontSize(12).
+			Bold().TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(3)
+		w.relatedTableGroup(c, state, theme, lang, DetailReferencesKey, i18n.KeyDetailReferencesTo, detail.ReferencesTo)
+		w.relatedTableGroup(c, state, theme, lang, DetailReferencedKey, i18n.KeyDetailReferencedBy, detail.ReferencedBy)
 	})
 }
 
-func optionalValue(value pdm.OptionalText) string {
-	if !value.Present {
-		return "—"
-	}
-	if value.Value == "" {
-		return `""`
-	}
-	return value.Value
-}
-
-func boolValue(state *app.State, value *bool) string {
-	if value == nil {
-		return "—"
-	}
-	if *value {
-		return state.Text(i18n.KeyDetailYes, nil)
-	}
-	return state.Text(i18n.KeyDetailNo, nil)
-}
-
-func valueOrDash(value string) string {
-	if value == "" {
-		return "—"
-	}
-	return value
-}
-
-func detailRefText(state *app.State, ref DetailRef) string {
-	if ref.ID == "" {
-		return "—"
-	}
-	if ref.Resolved {
-		return firstNonEmpty(ref.Name, ref.Code, ref.ID)
-	}
-	return ref.ID + " · " + state.Text(i18n.KeyDetailUnresolved, nil)
-}
-
-func refListText(state *app.State, refs []DetailRef) string {
+func (w *Workspace) relatedTableGroup(c *ui.Context, state *app.State, theme *ui.Theme, lang, key string, heading i18n.Key, refs []DetailRef) {
 	if len(refs) == 0 {
-		return "—"
+		return
 	}
-	names := make([]string, len(refs))
-	for offset, ref := range refs {
-		names[offset] = detailRefText(state, ref)
-	}
-	return strings.Join(names, ", ")
-}
-
-func detailID(id string, offset int) string {
-	if id != "" {
-		return id
-	}
-	return "index-" + strconv.Itoa(offset)
+	ui.Column(c.Key(key)).FillWidth().Gap(4).Children(func() {
+		ui.Text(c, state.Text(heading, nil)).FillWidth().Wrap().FontSize(11).TextColor(theme.TextMuted).
+			Lang(lang).Role(ui.RoleHeading).Level(4)
+		for _, table := range refs {
+			if !table.Resolved {
+				label := state.Text(i18n.KeyDetailUnresolved, nil)
+				if table.ID != "" {
+					label = table.ID + " · " + label
+				}
+				ui.Text(c, label).FillWidth().Wrap().FontSize(11).TextColor(theme.TextMuted).Lang(lang)
+				continue
+			}
+			name := firstNonEmpty(table.Name, table.Code, table.ID)
+			ui.Button(c, name).Key(key + "." + table.ID).Label(name).Tooltip(name).Lang(lang).FillWidth().
+				OnClick(func() { w.locateTable(table.ID, true) })
+		}
+	})
 }

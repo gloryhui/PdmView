@@ -78,6 +78,15 @@ const (
 	KeyCopySucceeded     Key = "copy.succeeded"
 	KeyCopyFailed        Key = "copy.failed"
 
+	KeyDetailsShow         Key = "workspace.details_show"
+	KeyDetailsHide         Key = "workspace.details_hide"
+	KeyDetailColumnCount   Key = "details.column_count"
+	KeyDetailPrimaryCount  Key = "details.primary_count"
+	KeyDetailRelatedTables Key = "details.related_tables"
+	KeyDetailReferencesTo  Key = "details.references_to"
+	KeyDetailReferencedBy  Key = "details.referenced_by"
+	KeyOpenTableProperties Key = "details.open_properties"
+
 	KeyTablePropertiesTitle     Key = "table_properties.title"
 	KeyTablePropertiesGeneral   Key = "table_properties.general"
 	KeyTablePropertiesPreview   Key = "table_properties.preview"
@@ -199,6 +208,15 @@ var resources = map[Locale]map[Key]message{
 		KeyCopySucceeded:     {text: "Copied"},
 		KeyCopyFailed:        {text: "Copy failed"},
 
+		KeyDetailsShow:         {text: "Show details"},
+		KeyDetailsHide:         {text: "Hide details"},
+		KeyDetailColumnCount:   {text: "Columns: {count}", params: []string{"count"}},
+		KeyDetailPrimaryCount:  {text: "1 primary key"},
+		KeyDetailRelatedTables: {text: "Related tables"},
+		KeyDetailReferencesTo:  {text: "References"},
+		KeyDetailReferencedBy:  {text: "Referenced by"},
+		KeyOpenTableProperties: {text: "Open table properties"},
+
 		KeyTablePropertiesTitle:     {text: "Table properties"},
 		KeyTablePropertiesGeneral:   {text: "General"},
 		KeyTablePropertiesPreview:   {text: "Preview"},
@@ -311,6 +329,15 @@ var resources = map[Locale]map[Key]message{
 		KeyCopyTable:         {text: "复制表信息"},
 		KeyCopySucceeded:     {text: "已复制"},
 		KeyCopyFailed:        {text: "复制失败"},
+
+		KeyDetailsShow:         {text: "显示详情"},
+		KeyDetailsHide:         {text: "隐藏详情"},
+		KeyDetailColumnCount:   {text: "{count} 个字段", params: []string{"count"}},
+		KeyDetailPrimaryCount:  {text: "1 个主键"},
+		KeyDetailRelatedTables: {text: "关联表"},
+		KeyDetailReferencesTo:  {text: "引用的表"},
+		KeyDetailReferencedBy:  {text: "引用本表的表"},
+		KeyOpenTableProperties: {text: "打开表属性"},
 
 		KeyTablePropertiesTitle:     {text: "表属性"},
 		KeyTablePropertiesGeneral:   {text: "常规"},

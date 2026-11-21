@@ -48,32 +48,95 @@ func TestTableDetailPreservesColumnAndConstraintOrder(t *testing.T) {
 	}
 }
 
-func TestTableDetailsUseNativeScrollAndKeepDataOnLanguageSwitch(t *testing.T) {
+func TestDetailsSummaryActionsAndRelatedTableNavigation(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
-	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(detailDocument()))
+	document := detailDocument()
+	duplicate := document.Model.Contents.References[0]
+	duplicate.ID = "duplicate-pair"
+	document.Model.Contents.References = append(document.Model.Contents.References, duplicate)
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(document))
 	tester := ui.NewTester(View(state, workspace), 800, 600)
 	workspace.LocateTable("customers")
 	tester.Frame()
-	for _, label := range []string{"Columns", "Foreign keys", "客户档案", "customer_record", "DECIMAL(12,2)", `""`} {
+	for _, label := range []string{"Columns: 3 · 1 primary key", "Related tables", "References", "客户档案", "customer_record"} {
 		if !tester.HasText(label) {
-			t.Errorf("missing English detail %q", label)
+			t.Errorf("missing English summary %q", label)
 		}
 	}
+	if tester.HasText("DECIMAL(12,2)") || len(workspace.tableDetail.ReferencesTo) != 1 {
+		t.Fatal("summary rendered a column type or duplicated the related table")
+	}
+	if err := tester.Click("Open table properties"); err != nil {
+		t.Fatal(err)
+	}
+	if !workspace.TablePropertiesOpen() || workspace.tableProperties.tableID != "customers" {
+		t.Fatal("shortcut did not open the selected table")
+	}
+	workspace.CloseTableProperties()
 	state.SelectLanguage(i18n.ZHCN)
 	tester.Frame()
-	for _, label := range []string{"字段", "外键", "客户档案", "customer_record", "DECIMAL(12,2)", `""`} {
+	for _, label := range []string{"3 个字段 · 1 个主键", "关联表", "引用的表", "复制表信息", "复制建表 SQL", "打开表属性"} {
 		if !tester.HasText(label) {
-			t.Errorf("missing Chinese detail %q", label)
+			t.Errorf("missing Chinese summary %q", label)
 		}
 	}
-	if workspace.tableDetail.ID != "customers" || workspace.detailsScroll.MaxY <= 0 {
-		t.Fatal("locale change lost selected table or detail scroll range")
+	related, ok := tester.AccessByRole(ui.RoleButton, "Orders")
+	if !ok {
+		t.Fatal("referenced table has no button")
+	}
+	tester.ClickAt(related.Bounds.X+related.Bounds.W/2, related.Bounds.Y+related.Bounds.H/2)
+	tester.Frame()
+	if workspace.ActiveBoard() != 1 || selectedTableIDOnCanvas(workspace.canvas) != "orders" ||
+		!tester.HasText("引用本表的表") {
+		t.Fatal("relationship did not select the other board and show incoming references")
+	}
+	incoming, ok := tester.AccessByRole(ui.RoleButton, "Customers")
+	if !ok {
+		t.Fatal("referencing table has no button")
+	}
+	tester.ClickAt(incoming.Bounds.X+incoming.Bounds.W/2, incoming.Bounds.Y+incoming.Bounds.H/2)
+	tester.Frame()
+	if workspace.ActiveBoard() != 1 || selectedTableIDOnCanvas(workspace.canvas) != "customers" {
+		t.Fatal("incoming relationship did not prefer the current board")
 	}
 	workspace.LocateTable("package-child-table")
 	tester.Frame()
-	if workspace.tableDetail.ID != "package-child-table" || workspace.detailsScroll.Y != 0 {
-		t.Fatal("selecting another table retained the previous detail view")
+	if workspace.tableDetail.ID != "package-child-table" || tester.HasText("关联表") {
+		t.Fatal("unrelated table retained the relationship section")
+	}
+}
+
+func TestTablePropertiesShowsDetailedColumnAttributes(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(detailDocument()))
+	if !workspace.OpenTableProperties("customers") {
+		t.Fatal("table properties did not open")
+	}
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 640, 480)
+	if err := tester.Click("Columns"); err != nil {
+		t.Fatal(err)
+	}
+	bounds, ok := propertiesListBounds(tester)
+	if !ok {
+		t.Fatal("missing column list")
+	}
+	tester.Scroll(bounds.X+bounds.W/2, bounds.Y+bounds.H/2, 1000, 0)
+	tester.Frame()
+	for _, label := range []string{"Scale", "Default", "Identity"} {
+		if !tester.HasText(label) {
+			t.Errorf("missing field metadata label %q", label)
+		}
+	}
+	checked := false
+	for _, info := range tester.AccessAll() {
+		if info.Role == ui.RoleCheckBox && info.Name == "Identity" && info.Checked {
+			checked = true
+		}
+	}
+	if !checked || workspace.tableProperties.draft.Columns[1].Scale != "2" {
+		t.Fatal("properties lost identity or scale values")
 	}
 }
 

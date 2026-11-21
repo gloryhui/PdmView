@@ -63,6 +63,7 @@ type Workspace struct {
 	selectedTableName string
 	detailIndex       *tableDetailIndex
 	detailsScroll     ui.ScrollState
+	detailsHidden     bool
 	tableDetail       TableDetail
 	hasTableDetail    bool
 	tableProperties   tablePropertiesState
@@ -605,17 +606,24 @@ func (w *Workspace) notifyChanged() {
 }
 
 func (w *Workspace) constrainPanes(total float32) {
-	if total < navigationMinWidth+detailsMinWidth+canvasMinWidth+2 {
+	reserved := float32(canvasMinWidth)
+	if !w.detailsHidden {
+		reserved += detailsMinWidth + 1
+	}
+	if total < navigationMinWidth+reserved+1 {
 		return
 	}
 	available := total - 1
-	navMax := min(float32(navigationMaxWidth), max(float32(navigationMinWidth), available-detailsMinWidth-canvasMinWidth-1))
+	navMax := min(float32(navigationMaxWidth), max(float32(navigationMinWidth), available-reserved))
 	navWidth := available * w.NavigationPercent / 100
 	switch {
 	case navWidth < navigationMinWidth-0.5:
 		w.NavigationPercent = navigationMinWidth * 100 / available
 	case navWidth > navMax+0.5:
 		w.NavigationPercent = navMax * 100 / available
+	}
+	if w.detailsHidden {
+		return
 	}
 	innerAvailable := available*(1-w.NavigationPercent/100) - 1
 	details := innerAvailable * (1 - w.CanvasPercent/100)
@@ -652,10 +660,19 @@ func View(state *app.State, workspace *Workspace) func(*ui.Context) {
 					})
 				},
 				func() {
+					canvas := func() {
+						workspace.canvas.view(c, state, t, lang, func() {
+							workspace.detailsToggle(c, state, lang)
+						})
+					}
+					if workspace.detailsHidden {
+						canvas()
+						return
+					}
 					ui.SplitPercent(c.Key(DetailsSplitKey), &workspace.CanvasPercent,
-						func() { workspace.canvas.view(c, state, t, lang) },
+						canvas,
 						func() {
-							detailsPane(c, state, workspace, t, lang)
+							workspace.detailsPane(c, state, t, lang)
 						},
 					).Fill()
 				},
@@ -759,26 +776,6 @@ func (w *Workspace) searchNavigation(c *ui.Context, state *app.State, t *ui.Them
 	}
 }
 
-func (w *Workspace) selectedDetails(c *ui.Context, state *app.State, t *ui.Theme, lang string) {
-	if w.selectedTableID != "" {
-		if w.hasTableDetail {
-			renderTableDetail(c, state, t, lang, w.tableDetail, w.unplacedTable)
-			return
-		}
-		ui.Text(c, w.selectedTableName).Key(SelectedNodeKey).
-			FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
-		if w.unplacedTable {
-			ui.Text(c, state.Text(i18n.KeyNotOnDiagram, nil)).
-				FillWidth().Wrap().FontSize(11).TextColor(t.TextMuted).Lang(lang)
-		}
-		return
-	}
-	if node := w.canvas.selectedNode(); node != nil {
-		ui.Text(c, node.Name).Key(SelectedNodeKey).
-			FillWidth().Wrap().FontSize(12).TextColor(t.Text).Lang(lang)
-	}
-}
-
 func (w *Workspace) statusText(state *app.State) string {
 	switch {
 	case w.loading:
@@ -809,54 +806,6 @@ func sidePane(
 		MinWidth(minWidth).MaxWidth(maxWidth).Clip().Children(func() {
 		paneHeading(c, state.Text(key, nil), t, lang)
 		content()
-	})
-}
-
-func detailsPane(
-	c *ui.Context,
-	state *app.State,
-	workspace *Workspace,
-	t *ui.Theme,
-	lang string,
-) {
-	ui.Column(c).Fill().Background(t.Surface).Padding(12).Gap(8).
-		MinWidth(detailsMinWidth).MaxWidth(detailsMaxWidth).Clip().Children(func() {
-		ui.Column(c).FillWidth().Gap(4).Children(func() {
-			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-				paneHeading(c, state.Text(i18n.KeyDetailsHeading, nil), t, lang).Grow(1)
-				workspace.detailsCopyButton(c, state, lang)
-			})
-			if status, failed := workspace.copyFeedbackText(state); status != "" {
-				color, role := t.Success, ui.RoleStatus
-				if failed {
-					color, role = t.Danger, ui.RoleAlert
-				}
-				ui.Row(c).FillWidth().Justify(ui.End).Children(func() {
-					ui.Text(c, status).Key(CopyStatusKey).Wrap().
-						FontSize(11).TextColor(color).Lang(lang).Role(role)
-				})
-			}
-		})
-		ui.Scroll(c.Key(DetailsBodyKey)).TrackScroll(&workspace.detailsScroll).Grow(1).FillWidth().Children(func() {
-			ui.Column(c).FillWidth().Gap(6).Children(func() {
-				workspace.selectedDetails(c, state, t, lang)
-			})
-		})
-	})
-}
-
-func (w *Workspace) detailsCopyButton(c *ui.Context, state *app.State, lang string) {
-	if w.selectedTableID == "" || !w.hasTableDetail ||
-		w.tableDetail.ID != w.selectedTableID {
-		return
-	}
-	ui.Column(c).Gap(4).AlignItems(ui.End).Children(func() {
-		label := state.Text(i18n.KeyCopyTable, nil)
-		ui.Button(c, label).Key(CopyTableKey).Label(label).
-			Lang(lang).OnClick(w.copySelectedTable)
-		createLabel := state.Text(i18n.KeyCopyCreateTable, nil)
-		ui.Button(c, createLabel).Key(CopyCreateTableKey).Label(createLabel).
-			Lang(lang).OnClick(w.copySelectedCreateTable)
 	})
 }
 

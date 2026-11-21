@@ -92,7 +92,7 @@ func (view *canvasView) activatePrepared(prepared PreparedBoard) {
 	}
 }
 
-func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, lang string) {
+func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, lang string, detailsToggle func()) {
 	if view.prepareAfterFit {
 		view.prepareVisible()
 		view.prepareAfterFit = false
@@ -102,8 +102,9 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 	}
 	heading := state.Text(i18n.KeyCanvasHeading, nil)
 	ui.Column(c).Fill().Background(theme.Background).Children(func() {
-		ui.Row(c).FillWidth().Height(28).Padding(4, 8).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
-			paneHeading(c, heading, theme, lang)
+		ui.Row(c).FillWidth().Height(28).Padding(2, 8).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
+			paneHeading(c, heading, theme, lang).Grow(1)
+			detailsToggle()
 		})
 		ui.Row(c).FillWidth().Height(38).Padding(4, 8).Gap(4).
 			AlignItems(ui.Center).Background(theme.Surface).
