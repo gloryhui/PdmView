@@ -11,3 +11,11 @@
 - 默认值区分未设置、SQL `NULL`、字符串（含空字符串）、数值和受支持的表达式。未识别表达式、类型冲突及能够确定的越界值均阻断。表达式默认值使用 MySQL 8.0.13+ 语法。[MySQL 8.0 默认值规则](https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html)
 - 本地样本 13 张表的 DDL 重复生成一致。149 个字段声明的类型、NULL 属性及顺序、13 个主键顺序和 68 条注释逐项核对通过。样本中的默认值和自增场景由合成用例覆盖。
 - `go test -count=1 ./internal/sqlgen ./internal/pdm`、对应 `go vet` 和 `make format-check` 通过。用例覆盖反引号、引号、反斜杠、Unicode、复合主键、未知类型阻断、默认值分类和自增约束。
+
+## P8-03 索引和约束
+
+- 索引生成保留复合列顺序、升降序、受支持的前缀、唯一性和索引注释。自增列资格通过实际输出的索引核对。无法表达的索引类型和已识别的不支持属性有阻断诊断。[MySQL 8.0 索引规则](https://dev.mysql.com/doc/refman/8.0/en/create-index.html)
+- 外键编译保留约束名及有序的子列、父列映射，验证父键、类型和动作。目标使用完整的主键或唯一键。数字动作码和类型兼容性无法确认时阻断。[MySQL 8.0 外键限制](https://dev.mysql.com/doc/refman/8.0/en/create-table-foreign-keys.html)
+- 本地业务样本的 13 个主键均只声明一次。两份本地合成 XML 覆盖 2 个复合主键、1 个降序前缀索引和 1 个带升降序的复合唯一索引。
+- `go test -count=1 ./internal/sqlgen ./internal/pdm`、对应 `go vet` 和 `make format-check` 通过。补充用例覆盖同名主键镜像去重、不同名称的索引保留、缺列及重复列、JSON 索引、前缀过长、复合索引列数上限、类型不兼容、无效的 `SET NULL` 和自引用同列。
+- 生成阶段检查可从模型确定的索引长度上限。继承字符集及目标实例页大小导致的字节限制随 P9-04 实测。

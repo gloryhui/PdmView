@@ -53,8 +53,8 @@ Phase 7 五项任务已于 2026-11-21 完成并通过 [macOS 原生工作区验�
 | P7-05 | 完整信息复制 | DONE | DeepSeek / GPT | [剪贴板验收](../docs/PHASE_7_ACCEPTANCE.md#p7-05-完整信息复制)。详情滚动后仍可操作，双语 3,058 字节一致，原剪贴板恢复并逐项核对通过。注入失败、全量检查、e2e 标签测试和 macOS 构建通过 | 单表 SQL 随 Phase 8/9 验收 |
 | P8-01 | MySQL 类型映射 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-01-类型映射和未知类型诊断)。本地 149/149 字段一致，18 种源写法归一为 17 种输出。未知类型阻断、参数冲突测试与 vet 通过 | |
 | P8-02 | 单表 DDL | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-02-单表-ddl)。本地 13 表、149 字段、13 主键、68 注释逐项核对，默认值、自增、转义由合成用例覆盖。测试与 vet 通过 | 实际执行随 P9-04 |
-| P8-03 | 索引/主键/约束 | IN_PROGRESS | DeepSeek / GPT | | |
-| P8-04 | 全库依赖与外键策略 | TODO | GPT | | |
+| P8-03 | 索引/主键/约束 | DONE | DeepSeek / GPT | [验收](../docs/PHASE_8_ACCEPTANCE.md#p8-03-索引和约束)。本地 13 个主键各声明一次，合成 XML 的复合主键、前缀索引与唯一索引核对通过。外键编译、阻断诊断及 vet 通过 | 真实 MySQL 索引及外键实测随 P9-04 |
+| P8-04 | 全库依赖与外键策略 | IN_PROGRESS | DeepSeek / GPT | | |
 | P8-05 | 全库初始化 SQL | TODO | DeepSeek | | |
 | P9-01 | SQL 预览与复制 | TODO | DeepSeek | | |
 | P9-02 | SQL 文件导出 | TODO | DeepSeek | | |

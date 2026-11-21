@@ -80,7 +80,8 @@ func (result Result) HasErrors() bool {
 
 // GenerateTable creates one deterministic MySQL 8.0 CREATE TABLE statement.
 // It emits columns, nullability, defaults, AUTO_INCREMENT, the primary key,
-// comments, and ENGINE=InnoDB. Indexes and foreign keys remain for later stages.
+// comments, primary/unique/ordinary indexes, and ENGINE=InnoDB. Foreign keys
+// remain for later stages.
 func GenerateTable(table pdm.Table) Result {
 	compiled, diagnostics := compileTable(table)
 	defaults := make([]string, len(compiled.columns))
@@ -108,6 +109,7 @@ type compiledTable struct {
 	keyByID          map[string]int
 	primary          int
 	primaryPositions []int
+	indexes          []compiledIndex
 }
 
 type compiledColumn struct {
@@ -122,9 +124,10 @@ type compiledColumn struct {
 }
 
 type compiledKey struct {
-	source    pdm.Key
-	position  int
-	positions []int
+	source     pdm.Key
+	position   int
+	identifier string
+	positions  []int
 }
 
 func compileTable(table pdm.Table) (compiledTable, []Diagnostic) {
@@ -224,6 +227,13 @@ func compileTable(table pdm.Table) (compiledTable, []Diagnostic) {
 			diagnostics = append(diagnostics, keyDiagnostic(
 				DiagnosticEmptyKey, key, "Key has no columns"))
 		}
+		current.identifier = keyIdentifier(key.Metadata)
+		if err := validateIdentifier(current.identifier); err != nil {
+			diagnostics = append(diagnostics, keyDiagnostic(
+				DiagnosticInvalidIndexIdentifier, key,
+				"Candidate key has no valid SQL identifier: "+err.Error()))
+			current.identifier = ""
+		}
 		seen := make(map[int]struct{})
 		for _, columnID := range key.ColumnIDs {
 			columnPosition, ok := compiled.columnByID[columnID]
@@ -254,6 +264,7 @@ func compileTable(table pdm.Table) (compiledTable, []Diagnostic) {
 		} else {
 			compiled.primary = keyPosition
 			compiled.primaryPositions = append([]int(nil), compiled.keys[keyPosition].positions...)
+			compiled.validateKeyIndex(compiled.keys[keyPosition], &diagnostics)
 			for _, columnPosition := range compiled.primaryPositions {
 				column := &compiled.columns[columnPosition]
 				column.primary = true
@@ -267,6 +278,7 @@ func compileTable(table pdm.Table) (compiledTable, []Diagnostic) {
 		}
 	}
 
+	compiled.compileIndexes(&diagnostics)
 	compiled.validateAutoIncrement(&diagnostics)
 	return compiled, diagnostics
 }
@@ -301,29 +313,32 @@ func (compiled *compiledTable) validateAutoIncrement(diagnostics *[]Diagnostic) 
 				DiagnosticAutoIncrementDefault, column.source,
 				"AUTO_INCREMENT column must not have a DEFAULT."))
 		}
-		if !compiled.columnLeadsKey(column.source.ID) {
+		if !compiled.columnLeadsEmittedIndex(column.position) {
 			*diagnostics = append(*diagnostics, columnDiagnostic(
 				DiagnosticAutoIncrementNotKey, column.source,
-				"AUTO_INCREMENT column must be the first column of a key or index."))
+				"AUTO_INCREMENT column must lead a non-prefix ASC key or index."))
 		}
 	}
 }
 
-func (compiled *compiledTable) columnLeadsKey(columnID string) bool {
-	if columnID == "" {
-		return false
+func (compiled *compiledTable) columnLeadsEmittedIndex(columnPosition int) bool {
+	if compiled.primary >= 0 && len(compiled.primaryPositions) > 0 &&
+		compiled.primaryPositions[0] == columnPosition {
+		return true
 	}
-	for _, key := range compiled.source.Keys {
-		if len(key.ColumnIDs) > 0 && key.ColumnIDs[0] == columnID {
-			return true
-		}
-	}
-	for _, index := range compiled.source.Indexes {
-		if len(index.Columns) > 0 && index.Columns[0].ColumnID == columnID {
+	for _, index := range compiled.indexes {
+		if len(index.columns) > 0 &&
+			index.columns[0].position == columnPosition &&
+			index.columns[0].prefix == 0 &&
+			index.columns[0].directionEffective() == "ASC" {
 			return true
 		}
 	}
 	return false
+}
+
+func (compiled *compiledTable) hasTail() bool {
+	return compiled.primary >= 0 || len(compiled.indexes) > 0
 }
 
 func renderCreateTable(table compiledTable, defaults []string) string {
@@ -352,7 +367,7 @@ func renderCreateTable(table compiledTable, defaults []string) string {
 			sql.WriteString(" COMMENT ")
 			sql.WriteString(quoteSQLString(column.source.Comment.Value))
 		}
-		if offset != len(table.columns)-1 || table.primary >= 0 {
+		if offset != len(table.columns)-1 || table.hasTail() {
 			sql.WriteByte(',')
 		}
 		sql.WriteByte('\n')
@@ -366,8 +381,20 @@ func renderCreateTable(table compiledTable, defaults []string) string {
 			sql.WriteString(quoteIdentifier(table.columns[columnPosition].identifier))
 		}
 		sql.WriteByte(')')
+		if len(table.indexes) > 0 {
+			sql.WriteByte(',')
+		}
+		sql.WriteByte('\n')
 	}
-	sql.WriteString("\n) ENGINE=InnoDB")
+	for offset, index := range table.indexes {
+		sql.WriteString("  ")
+		sql.WriteString(renderIndex(table, index))
+		if offset != len(table.indexes)-1 {
+			sql.WriteByte(',')
+		}
+		sql.WriteByte('\n')
+	}
+	sql.WriteString(") ENGINE=InnoDB")
 	if table.source.Comment.Present {
 		sql.WriteString(" COMMENT=")
 		sql.WriteString(quoteSQLString(table.source.Comment.Value))

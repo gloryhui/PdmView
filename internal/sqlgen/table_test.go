@@ -22,7 +22,8 @@ func TestGenerateTableCompleteOrderedDDL(t *testing.T) {
 		"  `note` TEXT NULL DEFAULT ('hello'),\n" +
 		"  `payload` JSON NULL DEFAULT (JSON_ARRAY()),\n" +
 		"  `amount` DECIMAL(20,2) NULL DEFAULT 12.30,\n" +
-		"  PRIMARY KEY (`id`, `tenant`)\n" +
+		"  PRIMARY KEY (`id`, `tenant`),\n" +
+		"  UNIQUE KEY `ix-name` (`display``name`, `tenant`)\n" +
 		") ENGINE=InnoDB COMMENT='客户表';"
 	if result.SQL != want {
 		t.Fatalf("SQL mismatch\nwant:\n%s\n\ngot:\n%s", want, result.SQL)
