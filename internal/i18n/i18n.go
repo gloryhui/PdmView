@@ -85,13 +85,17 @@ const (
 	KeyTablePropertiesName      Key = "table_properties.name"
 	KeyTablePropertiesMandatory Key = "table_properties.mandatory"
 
-	KeyPDMCopySave        Key = "pdm_copy.save"
-	KeyPDMCopyScope       Key = "pdm_copy.scope"
-	KeyPDMCopySaving      Key = "pdm_copy.saving"
-	KeyPDMCopySaved       Key = "pdm_copy.saved"
-	KeyPDMCopyInvalidEdit Key = "pdm_copy.invalid_edit"
-	KeyPDMCopyExists      Key = "pdm_copy.exists"
-	KeyPDMCopyFailed      Key = "pdm_copy.failed"
+	KeyPDMCopySave           Key = "pdm_copy.save"
+	KeyPDMCopyScope          Key = "pdm_copy.scope"
+	KeyPDMCopySaving         Key = "pdm_copy.saving"
+	KeyPDMCopySaved          Key = "pdm_copy.saved"
+	KeyPDMCopyInvalidEdit    Key = "pdm_copy.invalid_edit"
+	KeyPDMCopyExists         Key = "pdm_copy.exists"
+	KeyPDMCopyFailed         Key = "pdm_copy.failed"
+	KeyPDMSave               Key = "pdm_copy.save_current"
+	KeyPDMCopySaveFailed     Key = "pdm_copy.save_failed"
+	KeyPDMCopyChanged        Key = "pdm_copy.changed"
+	KeyPDMCopyRememberFailed Key = "pdm_copy.remember_failed"
 
 	KeyDatabaseSQL              Key = "database.sql"
 	KeyPreviewBack              Key = "preview.back"
@@ -211,6 +215,10 @@ var resources = map[Locale]map[Key]message{
 		KeyPDMCopyInvalidEdit:       {text: "Cannot save these edits. Check names, codes, and comments."},
 		KeyPDMCopyExists:            {text: "This file already exists. Choose a new filename."},
 		KeyPDMCopyFailed:            {text: "Could not save the PDM copy. Choose another location."},
+		KeyPDMSave:                  {text: "Save"},
+		KeyPDMCopySaveFailed:        {text: "Could not update the PDM copy. Check file permissions."},
+		KeyPDMCopyChanged:           {text: "The copy changed on disk. Reopen it to see the latest version."},
+		KeyPDMCopyRememberFailed:    {text: "Saved. Could not remember this copy for the next session."},
 		KeyTablePropertiesMandatory: {text: "Mandatory"},
 
 		KeyDatabaseSQL:              {text: "Database SQL"},
@@ -324,6 +332,10 @@ var resources = map[Locale]map[Key]message{
 		KeyPDMCopyInvalidEdit:       {text: "无法保存这些修改，请检查名称、编码和注释。"},
 		KeyPDMCopyExists:            {text: "文件已存在，请使用新文件名。"},
 		KeyPDMCopyFailed:            {text: "无法保存 PDM 副本，请选择其他位置。"},
+		KeyPDMSave:                  {text: "保存"},
+		KeyPDMCopySaveFailed:        {text: "无法更新 PDM 副本，请检查文件权限。"},
+		KeyPDMCopyChanged:           {text: "磁盘上的副本已发生变化，请重新打开以查看最新版本。"},
+		KeyPDMCopyRememberFailed:    {text: "已保存，但无法记录此副本供下次打开时识别。"},
 		KeyTablePropertiesMandatory: {text: "必填"},
 
 		KeyDatabaseSQL:              {text: "数据库 SQL"},

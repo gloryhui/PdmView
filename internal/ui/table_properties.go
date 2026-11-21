@@ -76,7 +76,6 @@ func TablePropertiesKeyMemberFieldKey(id string, ordinal int, field string) stri
 }
 
 type tablePropertiesState struct {
-	copyRequest       *PDMCopyRequest
 	copyStatus        i18n.Key
 	open              bool
 	tableID           string
@@ -236,6 +235,9 @@ func (w *Workspace) OpenTableProperties(tableID string) bool {
 	if w.tableProperties.open && w.tableProperties.tableID == tableID {
 		return true
 	}
+	if w.pdmCopyRequest != nil {
+		return false
+	}
 	detail, ok := w.detailIndex.resolve(tableID)
 	if !ok {
 		return false
@@ -312,9 +314,13 @@ func (w *Workspace) renderTableProperties(
 				ui.Text(c, title).Key(TablePropertiesTitleKey).Grow(1).FontSize(16).Bold().
 					TextColor(theme.Text).Lang(lang).Role(ui.RoleHeading).Level(2)
 				if w.pdmCopyStarter != nil && w.sourcePath != "" {
-					saveLabel := state.Text(i18n.KeyPDMCopySave, nil)
+					saveKey := i18n.KeyPDMCopySave
+					if w.writableCopy {
+						saveKey = i18n.KeyPDMSave
+					}
+					saveLabel := state.Text(saveKey, nil)
 					ui.Button(c, saveLabel).Key(TablePropertiesSaveCopyKey).Label(saveLabel).
-						Lang(lang).Disabled(w.tableProperties.copyRequest != nil).
+						Lang(lang).Disabled(w.pdmCopyRequest != nil).
 						OnClick(w.savePDMCopy)
 				}
 				closeLabel := state.Text(i18n.KeyTablePropertiesClose, nil)
@@ -360,7 +366,8 @@ func (w *Workspace) renderTableProperties(
 			if status := w.tableProperties.copyStatus; status != "" {
 				color, role := theme.TextMuted, ui.RoleStatus
 				switch status {
-				case i18n.KeyPDMCopyInvalidEdit, i18n.KeyPDMCopyExists, i18n.KeyPDMCopyFailed:
+				case i18n.KeyPDMCopyInvalidEdit, i18n.KeyPDMCopyExists, i18n.KeyPDMCopyFailed,
+					i18n.KeyPDMCopySaveFailed, i18n.KeyPDMCopyChanged, i18n.KeyPDMCopyRememberFailed:
 					color, role = theme.Danger, ui.RoleAlert
 				}
 				ui.Text(c, state.Text(status, nil)).FillWidth().FontSize(12).

@@ -1,23 +1,45 @@
 package appui
 
 import (
+	"bytes"
+
 	"pdmview/internal/i18n"
 	"pdmview/internal/pdm"
 )
 
 type PDMCopyRequest struct {
-	sourcePath string
-	sourceXML  []byte
-	tableID    string
-	edits      []pdm.TextEdit
+	sourcePath   string
+	sourceXML    []byte
+	tableID      string
+	edits        []pdm.TextEdit
+	activeBoard  int
+	writableCopy bool
 }
 
 func (r *PDMCopyRequest) SourcePath() string {
 	return r.sourcePath
 }
 
+func (r *PDMCopyRequest) SourceXML() []byte {
+	return r.sourceXML
+}
+
+func (r *PDMCopyRequest) WritableCopy() bool {
+	return r.writableCopy
+}
+
 func (r *PDMCopyRequest) Run() ([]byte, error) {
 	return pdm.PatchTableText(r.sourceXML, r.tableID, r.edits)
+}
+
+func (r *PDMCopyRequest) Prepare(path string, data []byte) (BoardSet, error) {
+	document, err := pdm.Parse(bytes.NewReader(data))
+	if err != nil {
+		return BoardSet{}, err
+	}
+	set := buildBoardSet(document, r.activeBoard)
+	set.SourcePath, set.SourceXML, set.WritableCopy = path, data, true
+	return set, nil
 }
 
 func (w *Workspace) SetPDMCopyStarter(starter func(*PDMCopyRequest)) {
@@ -25,27 +47,54 @@ func (w *Workspace) SetPDMCopyStarter(starter func(*PDMCopyRequest)) {
 }
 
 func (w *Workspace) PDMCopyCurrent(request *PDMCopyRequest) bool {
-	return request != nil && w.tableProperties.copyRequest == request
+	return request != nil && w.pdmCopyRequest == request
 }
 
-func (w *Workspace) PublishPDMCopyResult(request *PDMCopyRequest, status i18n.Key) {
+func (w *Workspace) PublishPDMCopyResult(request *PDMCopyRequest, status i18n.Key, saved *BoardSet) {
 	if !w.PDMCopyCurrent(request) {
 		return
 	}
-	w.tableProperties.copyRequest = nil
-	w.tableProperties.copyStatus = status
+	w.pdmCopyRequest = nil
+	properties := &w.tableProperties
+	if properties.tableID == request.tableID {
+		properties.copyStatus = status
+	}
+	if saved != nil {
+		w.sourcePath, w.sourceXML, w.writableCopy = saved.SourcePath, saved.SourceXML, true
+		w.document, w.boards = saved.Document, saved.Boards
+		w.catalog, w.detailIndex, w.searchIndex = saved.Catalog, saved.Details, saved.Search
+		prepared := saved.Prepared
+		w.canvas.scene = prepared.Graph.Scene
+		w.canvas.diagram = prepared.Graph
+		w.canvas.index = prepared.Index
+		w.canvas.renderer = prepared.Renderer
+		w.canvas.prepareVisible()
+		w.hasTableDetail = false
+		w.refreshSelectedDetail()
+		if properties.open {
+			properties.detail, properties.hasDetail = w.detailIndex.resolve(properties.tableID)
+			if properties.previewEditor == nil || properties.previewEditor.Buffer.String() == properties.previewResult.SQL {
+				properties.previewLoaded = false
+			}
+		}
+		w.clearCopyFeedback()
+		w.invalidateDatabasePreview()
+		w.requestSearch()
+	}
 	w.notifyChanged()
 }
 
 func (w *Workspace) savePDMCopy() {
 	properties := &w.tableProperties
-	if !properties.open || w.pdmCopyStarter == nil || properties.copyRequest != nil || w.sourcePath == "" {
+	if !properties.open || w.pdmCopyStarter == nil || w.pdmCopyRequest != nil || w.sourcePath == "" || w.loading || w.switching {
 		return
 	}
 	request := &PDMCopyRequest{
-		sourcePath: w.sourcePath,
-		sourceXML:  w.sourceXML,
-		tableID:    properties.tableID,
+		sourcePath:   w.sourcePath,
+		sourceXML:    w.sourceXML,
+		tableID:      properties.tableID,
+		activeBoard:  w.activeBoard,
+		writableCopy: w.writableCopy,
 	}
 	collect := func(original pdm.Metadata, name, code, comment string) {
 		if name != original.Name {
@@ -63,7 +112,7 @@ func (w *Workspace) savePDMCopy() {
 	for index, column := range draft.Columns {
 		collect(detail.Columns[index].Metadata, column.Name, column.Code, column.Comment)
 	}
-	properties.copyRequest = request
+	w.pdmCopyRequest = request
 	properties.copyStatus = i18n.KeyPDMCopySaving
 	w.notifyChanged()
 	w.pdmCopyStarter(request)

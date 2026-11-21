@@ -64,6 +64,7 @@ func showMainWindow() {
 		fmt.Fprintln(os.Stderr, "pdmview: preferences:", err)
 	}
 	state := app.New(app.NewStore(path), systemTag)
+	copyStore := newPDMCopyStore(path)
 	workspace := appui.NewWorkspace()
 	workspace.SetClipboardWriter(func(text string) error {
 		return mygo.Clipboard.Write(transfer.TextData(text))
@@ -89,6 +90,7 @@ func showMainWindow() {
 			win.Invalidate()
 		}
 		if properties != nil && !properties.IsDestroyed() {
+			properties.SetTitle(workspace.TablePropertiesTitle(state))
 			properties.Invalidate()
 		}
 	})
@@ -101,10 +103,10 @@ func showMainWindow() {
 		}
 	})
 	workspace.SetPDMCopyStarter(func(request *appui.PDMCopyRequest) {
-		startPDMCopy(properties, workspace, state, request)
+		startPDMCopy(properties, workspace, state, copyStore, request)
 	})
 	workspace.SetOpenHandler(func() {
-		openPDMDialog(win, workspace, state)
+		openPDMDialog(win, workspace, state, copyStore)
 	})
 	workspace.SetBoardSelector(func(index int) {
 		startBoardSwitch(win, workspace, index)
@@ -124,7 +126,7 @@ func showMainWindow() {
 		}
 	})
 	if path, ok := optionalPDMPath(os.Args[1:]); ok {
-		startBoardLoad(win, workspace, path)
+		startBoardLoad(win, workspace, copyStore, path)
 	}
 }
 
@@ -187,7 +189,7 @@ func optionalPDMPath(args []string) (string, bool) {
 	return args[0], true
 }
 
-func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.State) {
+func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.State, copyStore pdmCopyStore) {
 	if win == nil || win.IsDestroyed() {
 		return
 	}
@@ -221,18 +223,18 @@ func openPDMDialog(win *mygo.Window, workspace *appui.Workspace, state *app.Stat
 			if win.IsDestroyed() {
 				return
 			}
-			startBoardLoad(win, workspace, paths[0])
+			startBoardLoad(win, workspace, copyStore, paths[0])
 		})
 	}()
 }
 
-func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, path string) {
+func startBoardLoad(win *mygo.Window, workspace *appui.Workspace, copyStore pdmCopyStore, path string) {
 	if win == nil || win.IsDestroyed() || workspace == nil {
 		return
 	}
 	token := workspace.BeginOpen()
 	go func() {
-		set, err := loadBoardSet(path)
+		set, err := loadPDMSource(path, copyStore)
 		mygo.RunOnMain(func() {
 			applyBoardResult(win, workspace, token, set, err)
 		})

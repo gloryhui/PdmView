@@ -26,20 +26,25 @@ type PreparedBoard struct {
 
 // BoardSet is the ordered source catalog and its prepared default.
 type BoardSet struct {
-	Document   *pdm.Document
-	SourcePath string
-	SourceXML  []byte
-	Boards     []DiagramBoard
-	Default    int
-	Prepared   PreparedBoard
-	Catalog    *modelCatalog
-	Details    *tableDetailIndex
-	Search     *searchIndex
+	Document     *pdm.Document
+	SourcePath   string
+	SourceXML    []byte
+	WritableCopy bool
+	Boards       []DiagramBoard
+	Default      int
+	Prepared     PreparedBoard
+	Catalog      *modelCatalog
+	Details      *tableDetailIndex
+	Search       *searchIndex
 }
 
 // BuildBoardSet enumerates diagram descriptors and prepares only the selected
 // default graph, BVH, and renderer. It is intended for a worker goroutine.
 func BuildBoardSet(document *pdm.Document) BoardSet {
+	return buildBoardSet(document, -1)
+}
+
+func buildBoardSet(document *pdm.Document, active int) BoardSet {
 	var model *pdm.Model
 	if document != nil {
 		model = &document.Model
@@ -74,7 +79,10 @@ func BuildBoardSet(document *pdm.Document) BoardSet {
 			}
 		}
 	}
-	set.Prepared = PrepareBoard(set.Boards[set.Default])
+	if active < 0 || active >= len(set.Boards) {
+		active = set.Default
+	}
+	set.Prepared = PrepareBoard(set.Boards[active])
 	set.Catalog = buildModelCatalog(model, "")
 	set.Details = buildTableDetailIndex(model)
 	set.Search = buildSearchIndex(model)
