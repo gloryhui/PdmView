@@ -56,9 +56,11 @@ type Table struct {
 
 // Contents holds directly owned package and table definitions.
 type Contents struct {
-	Packages   []Package
-	Tables     []Table
-	References []Reference
+	Packages         []Package
+	Tables           []Table
+	References       []Reference
+	Diagrams         []Diagram
+	DefaultDiagramID string
 }
 
 // Parse decodes a PDM document and projects its model, packages, and tables.
@@ -105,19 +107,22 @@ func Project(raw *RawDocument) *Document {
 	}
 
 	projector := &projector{
-		raw:    raw,
-		schema: newSchemaState(),
+		raw:      raw,
+		schema:   newSchemaState(),
+		diagrams: newDiagramState(raw),
 	}
 	document.Model.Metadata = projector.metadata(raw.Model, true, &document.Diagnostics)
 	document.Model.DBMS = projector.projectDBMS(raw.Model)
 	document.Model.Contents = projector.projectContents(raw.Model, document.Model.ID, &document.Diagnostics)
 	projector.schema.validate(&document.Diagnostics)
+	projector.diagrams.validate(projector.schema, &document.Diagnostics)
 	return document
 }
 
 type projector struct {
-	raw    *RawDocument
-	schema *schemaState
+	raw      *RawDocument
+	schema   *schemaState
+	diagrams *diagramState
 }
 
 func (p *projector) metadata(element *Element, requireID bool, diagnostics *[]Diagnostic) Metadata {
@@ -232,6 +237,15 @@ func (p *projector) projectContents(parent *Element, ownerID string, diagnostics
 
 		case "References":
 			contents.References = append(contents.References, p.projectReferences(collection, ownerID, diagnostics)...)
+
+		case "PhysicalDiagrams":
+			contents.Diagrams = append(contents.Diagrams, p.projectDiagrams(collection, ownerID, diagnostics)...)
+
+		case "DefaultDiagram":
+			id := p.projectDefaultDiagram(collection, ownerID, diagnostics)
+			if contents.DefaultDiagramID == "" {
+				contents.DefaultDiagramID = id
+			}
 		}
 	}
 	return contents

@@ -61,13 +61,14 @@ type ReferenceJoin struct {
 }
 
 type schemaState struct {
-	tables  map[string]struct{}
-	columns map[string]string
-	keys    map[string]string
-	keyList []keyRecord
-	primary []primaryKeyRecord
-	indexes []indexRecord
-	refs    []referenceRecord
+	tables        map[string]struct{}
+	columns       map[string]string
+	keys          map[string]string
+	referenceByID map[string]Reference
+	keyList       []keyRecord
+	primary       []primaryKeyRecord
+	indexes       []indexRecord
+	refs          []referenceRecord
 }
 
 type schemaRef struct {
@@ -106,9 +107,10 @@ type joinRecord struct {
 
 func newSchemaState() *schemaState {
 	return &schemaState{
-		tables:  make(map[string]struct{}),
-		columns: make(map[string]string),
-		keys:    make(map[string]string),
+		tables:        make(map[string]struct{}),
+		columns:       make(map[string]string),
+		keys:          make(map[string]string),
+		referenceByID: make(map[string]Reference),
 	}
 }
 
@@ -558,6 +560,11 @@ func (s *schemaState) addReference(
 	childExternal bool,
 	parentKeyExternal bool,
 ) {
+	if reference.ID != "" {
+		if _, exists := s.referenceByID[reference.ID]; !exists {
+			s.referenceByID[reference.ID] = reference
+		}
+	}
 	s.refs = append(s.refs, referenceRecord{
 		reference:         reference,
 		parentKeyElement:  parentKey,
@@ -566,6 +573,11 @@ func (s *schemaState) addReference(
 		parentKeyExternal: parentKeyExternal,
 		joins:             joins,
 	})
+}
+
+func (s *schemaState) reference(id string) (Reference, bool) {
+	reference, exists := s.referenceByID[id]
+	return reference, exists
 }
 
 func (s *schemaState) validate(diagnostics *[]Diagnostic) {
