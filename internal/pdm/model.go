@@ -224,6 +224,12 @@ func (p *projector) projectContents(parent *Element, ownerID string, diagnostics
 
 		case "Tables":
 			for _, member := range collection.Children {
+				if isObjectKind(member, "Shortcut") {
+					if p.isDefinition(member) {
+						p.externalReference(member, diagnostics)
+					}
+					continue
+				}
 				if !isObjectKind(member, "Table") {
 					p.malformedMember(member, diagnostics)
 					continue

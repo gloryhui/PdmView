@@ -167,6 +167,7 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 
 	for {
 		line, _ := decoder.InputPos()
+		offset := decoder.InputOffset()
 		token, tokenErr := decoder.Token()
 		if tokenErr != nil {
 			if limited.N <= 0 {
@@ -243,6 +244,9 @@ func decodeWithLimits(r io.Reader, maxBytes int64, maxDepth int) (*RawDocument, 
 			// Comments are not part of the text or object model.
 
 		case xml.ProcInst:
+			if value.Target == "xml" && offset != 0 {
+				return nil, malformedError(line)
+			}
 			if len(stack) != 0 {
 				continue
 			}
@@ -554,7 +558,7 @@ var knownProperties = strings.Fields(`
 	ArrowStyle AutoAdjustToText BrushStyle Cardinality Code Column.Mandatory Comment
 	ControlPoints CornerStyle CreationDate Creator DataType DefaultValue DeleteConstraint
 	DisplayPreferences FillColor FontColor FontList FontName GradientEndColor GradientFillMode
-	History IconMode Identity Length LineColor ListOfControlPoints ListOfPoints Mandatory
+	History IconMode Identity Length LineColor ListOfPoints Mandatory
 	ManuallyResized ModelOptionsText ModificationDate Modifier Name ObjectID PackageOptionsText
 	PageMargins PageOrientation PaperSize PaperSource Precision Rect Scale ShadowColor SortOrder
 	SubObjects SymbolContent TargetClassID TargetID TargetModelClassID TargetModelID

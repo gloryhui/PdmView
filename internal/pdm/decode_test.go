@@ -190,6 +190,8 @@ func TestDecodeRejectsMalformedRootsEncodingAndDirectives(t *testing.T) {
 		{name: "garbage before root", in: "garbage" + testDocument(""), want: ErrMalformedXML},
 		{name: "garbage after root", in: testDocument("") + "garbage", want: ErrMalformedXML},
 		{name: "multiple roots", in: testHeader + modelShell("") + modelShell(""), want: ErrMultipleRoots},
+		{name: "embedded XML declaration", in: testDocument(`<?xml version="1.0"?>`), want: ErrMalformedXML},
+		{name: "late XML declaration", in: " " + testDocument(""), want: ErrMalformedXML},
 		{name: "doctype", in: testHeader + `<!DOCTYPE Model><Model/>`, want: ErrUnsupportedDirective},
 		{name: "unsupported encoding", in: `<?xml version="1.0" encoding="ISO-8859-1"?><Model/>`, want: ErrUnsupportedEncoding},
 		{name: "invalid UTF-8", in: testDocument("<attr:Name>\xFF</attr:Name>"), want: ErrMalformedXML},
