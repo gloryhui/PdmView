@@ -139,8 +139,10 @@ func symbolNodes(
 			node.Name = tableDisplayName(table)
 			node.Code = table.Code
 			node.Fields = tableFields(table, decorations[table.ID])
+			node.Presentation = presentTable(node, table, symbol.Appearance)
+		} else if symbol.Appearance != (pdm.TableAppearance{}) {
+			node.Presentation = presentTable(node, table, symbol.Appearance)
 		}
-		node.Presentation = presentTable(node, table, symbol.Appearance)
 		nodes = append(nodes, node)
 		sources = append(sources, DiagramNodeSource{
 			SymbolID: symbol.ID,
@@ -152,9 +154,6 @@ func symbolNodes(
 }
 
 func presentTable(node Node, table pdm.Table, appearance pdm.TableAppearance) *TablePresentation {
-	if appearance == (pdm.TableAppearance{}) {
-		return nil
-	}
 	display := pdm.TableDisplay{ShowName: true, ShowColumns: true, ShowDataType: true, ShowKeyIndicator: true}
 	if appearance.Display != nil {
 		display = *appearance.Display

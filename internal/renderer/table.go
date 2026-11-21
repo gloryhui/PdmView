@@ -43,11 +43,9 @@ func (c *Canvas) prepareTable(node graph.Node) *tableVisual {
 	top := visual.fieldStart()
 	if count := len(content.Columns); count > 0 {
 		required := float64(top) + float64(count)*tableRowHeight
-		visual.unit = max(visual.unit*0.65, min(visual.unit, node.Bounds.Height()/required))
+		visual.unit = min(visual.unit, node.Bounds.Height()/required)
 	}
-	available := max(0, node.Bounds.Height()/visual.unit-float64(top))
-	rowCount := int(min(float64(len(content.Columns)), (available+0.01)/tableRowHeight))
-	columns := content.Columns[:rowCount]
+	columns := content.Columns
 	var showType, showIndicators bool
 	for _, column := range columns {
 		showType = showType || column.DataType != ""
@@ -63,7 +61,7 @@ func (c *Canvas) prepareTable(node graph.Node) *tableVisual {
 	}
 	visual.typeX = tableInset + nameWidth
 	visual.indicatorX = visual.typeX + typeWidth
-	visual.rows = make([]tableRow, 0, rowCount)
+	visual.rows = make([]tableRow, 0, len(columns))
 	for _, column := range columns {
 		visual.rows = append(visual.rows, tableRow{
 			name:       c.tableLabel(column.Name, fieldFont, nameWidth-3),
@@ -142,8 +140,8 @@ func (c *Canvas) drawTable(
 	}
 
 	table := visual.table
-	zoom := float32(camera.Scale() * table.unit)
-	if zoom < 0.28 || rect.W <= 0 || rect.H <= 0 {
+	zoom := tableZoom(camera, table)
+	if rect.W <= 0 || rect.H <= 0 {
 		return 0
 	}
 	text := theme.Text
@@ -198,6 +196,13 @@ func (c *Canvas) drawTable(
 		})
 	})
 	return rows
+}
+
+func tableZoom(camera *graph.Camera, table *tableVisual) float32 {
+	if camera == nil || table == nil {
+		return 0
+	}
+	return float32(camera.Scale() * table.unit)
 }
 
 func drawTableLabel(p *ui.Painter, layout *ui.TextLayout, x, y float32, color ui.Color, underline bool) {

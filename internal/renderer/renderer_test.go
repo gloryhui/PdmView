@@ -44,6 +44,43 @@ func TestSavedTableStyleAndMoreThanFiveFieldsAtMediumZoom(t *testing.T) {
 	}
 }
 
+func TestPresentationDrawsAllRowsAndFontScalesWithZoom(t *testing.T) {
+	columns := make([]graph.ColumnPresentation, 21)
+	for index := range columns {
+		columns[index] = graph.ColumnPresentation{
+			Name:     fmt.Sprintf("Column %02d", index+1),
+			DataType: "INTEGER",
+		}
+	}
+	presentation := &graph.TablePresentation{Title: "All Rows", Columns: columns}
+	scene := graph.Scene{Nodes: []graph.Node{{
+		Bounds:       graph.Rect{Min: graph.Point{X: 10, Y: 10}, Max: graph.Point{X: 310, Y: 510}},
+		Presentation: presentation,
+	}}}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 400, Y: 600}})
+	setScale(camera, 0.65)
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	stats := FrameStats{}
+	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 400, 600, &stats)
+	if stats.LOD != Medium || stats.FieldRows != 21 {
+		t.Fatalf("all-row presentation = %+v, want Medium with 21 rows", stats)
+	}
+	visual := renderer.nodeVisual(0)
+	if visual == nil || visual.table == nil || len(visual.table.rows) != 21 ||
+		visual.table.rows[0].name == nil || visual.table.rows[20].name == nil {
+		t.Fatalf("presentation rows = %+v", visual)
+	}
+
+	zoom1 := tableZoom(camera, visual.table)
+	setScale(camera, 1.2)
+	zoom2 := tableZoom(camera, visual.table)
+	setScale(camera, 2.4)
+	zoom3 := tableZoom(camera, visual.table)
+	if zoom1 <= 0 || zoom1 >= zoom2 || zoom2 >= zoom3 {
+		t.Fatalf("table zoom not monotonic: %v, %v, %v", zoom1, zoom2, zoom3)
+	}
+}
+
 func TestRendererVisibleEdgesUseExactViewportCrossings(t *testing.T) {
 	scene := graph.Scene{
 		Edges: []graph.Edge{

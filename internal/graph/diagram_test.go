@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -209,6 +210,66 @@ func TestMapDiagramProjectsEachSymbolPresentation(t *testing.T) {
 	}
 	if second.Presentation.Title != "Table Name" || len(second.Presentation.Columns) != 0 {
 		t.Fatalf("the second instance ignored its own display settings: %+v", second.Presentation)
+	}
+}
+
+func TestMapDiagramPresentsAllRowsWithoutAppearanceAndKeepsUnresolvedStyle(t *testing.T) {
+	columns := make([]pdm.Column, 21)
+	for index := range columns {
+		columns[index] = mappingColumn(
+			fmt.Sprintf("col-%02d", index+1),
+			fmt.Sprintf("Column %02d", index+1),
+			fmt.Sprintf("COL_%02d", index+1),
+		)
+		columns[index].DataType = pdm.OptionalText{Value: "INTEGER", Present: true}
+	}
+	table := mappingTable("table", "All Rows", "ALL_ROWS", columns...)
+	model := &pdm.Model{Contents: pdm.Contents{Tables: []pdm.Table{table}}}
+	fill := &pdm.RGBColor{R: 12, G: 34, B: 56}
+	diagram := &pdm.Diagram{TableSymbols: []pdm.TableSymbol{
+		{
+			Metadata: pdm.Metadata{ID: "resolved"},
+			TableID:  "table",
+			Rect:     mappingRect(0, 0, 300, 500),
+		},
+		{
+			Metadata:   pdm.Metadata{ID: "unresolved-styled"},
+			TableID:    "missing",
+			Appearance: pdm.TableAppearance{Fill: fill},
+			Rect:       mappingRect(400, 0, 700, 500),
+		},
+		{
+			Metadata: pdm.Metadata{ID: "unresolved-plain"},
+			TableID:  "missing",
+			Rect:     mappingRect(800, 0, 1100, 500),
+		},
+	}}
+
+	scene := MapDiagram(model, diagram).Scene
+	resolved := scene.Nodes[0]
+	if len(resolved.Fields) != 21 || resolved.Presentation == nil ||
+		len(resolved.Presentation.Columns) != 21 ||
+		resolved.Presentation.Title != "All Rows" ||
+		resolved.Presentation.Columns[0].Name != "Column 01" ||
+		resolved.Presentation.Columns[20].Name != "Column 21" {
+		t.Fatalf("resolved presentation = %+v", resolved.Presentation)
+	}
+	if resolved.Presentation.Style != (pdm.TableAppearance{}) {
+		t.Fatalf("resolved table with no saved appearance got style: %+v", resolved.Presentation.Style)
+	}
+	unresolvedStyled := scene.Nodes[1]
+	if unresolvedStyled.Presentation == nil ||
+		unresolvedStyled.Presentation.Style.Fill != fill ||
+		len(unresolvedStyled.Presentation.Columns) != 0 {
+		t.Fatalf("unresolved styled presentation = %+v", unresolvedStyled.Presentation)
+	}
+	unresolvedPlain := scene.Nodes[2]
+	if unresolvedPlain.Presentation != nil {
+		t.Fatalf("unresolved plain symbol gained a presentation: %+v", unresolvedPlain.Presentation)
+	}
+	fallback := MapDiagram(model, nil).Scene.Nodes[0]
+	if fallback.Presentation == nil || len(fallback.Presentation.Columns) != 21 {
+		t.Fatalf("fallback table lost its full presentation: %+v", fallback.Presentation)
 	}
 }
 
