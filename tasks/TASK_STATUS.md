@@ -39,8 +39,8 @@ Phase 5 五项任务已于 2026-11-21 完成并通过 [图引擎验收](../docs/
 | P5-05 | 关系线几何与 fallback | DONE | DeepSeek / GPT | [图引擎验收](../docs/PHASE_5_ACCEPTANCE.md)。23 条源路径的 56 个点全部保留，内存副本清除路径后 23/23 条安全重建。四档密集图 2,000/2,000 条安全路由，500 节点/1,000 边中位数 106.29 ms。`make check`、图包 race 及样本校验通过 | 搜索超限或无安全路径时保留空显示几何 |
 | P6-01 | 表节点绘制 | DONE | DeepSeek / GPT | ADR-006。Graph/Renderer 定向测试、vet 与格式检查通过，覆盖字段原始类型、跨包 PK/FK 来源、固定 DIP 文字、裁剪及选中/悬停样式 | 原生截图与交互统一在 P6-05 核验 |
 | P6-02 | 关系线绘制 | DONE | DeepSeek / GPT | Graph/Renderer 定向测试、vet、格式检查通过。三份公开 XML 的 23 条关系、56 个路径点完整保留。验证选中关系和相邻关系高亮、末端方向、DIP 描边及箭头包络裁剪 | 原生截图在 P6-05 核验 |
-| P6-03 | LOD/缓存/裁剪 | IN_PROGRESS | DeepSeek / GPT | 按源图元典型尺寸计算档位，限制文字预排版和背景缓存 | |
-| P6-04 | 多画板与视口工具 | TODO | GPT | | |
+| P6-03 | LOD/缓存/裁剪 | DONE | DeepSeek / GPT | Graph/Renderer/UI/基准包单测、vet 和格式检查通过。760×560 DIP 下本地 8/8 表适应后进入近景并绘制字段。50 节点、100 边密集图原生短测 60.00 FPS，覆盖三档 LOD，网格命中 300/300 | 每画板最多缓存 256 表视觉、512 共享文本条目，超容量表暂显示轮廓。完整长测在 P6-05 |
+| P6-04 | 多画板与视口工具 | IN_PROGRESS | DeepSeek / GPT | 正式图引擎接入和画板级状态切换 | |
 | P6-05 | 画布性能验收 | TODO | GPT | | |
 | P7-01 | 主窗口三栏布局 | TODO | GPT | | |
 | P7-02 | 模型树与 Package | TODO | DeepSeek | | |

@@ -1,8 +1,11 @@
 package renderer
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"pdmview/internal/graph"
 
@@ -74,7 +77,7 @@ func TestRendererSkipsDetailForNodesJustOutsideViewport(t *testing.T) {
 	canvas := New(scene, graph.NewSpatialIndex(scene))
 	var stats FrameStats
 	host(canvas, camera, graph.Hit{}, 200, 100, &stats)
-	if stats.LOD != Near || stats.VisibleNodes != 1 || stats.FieldRows != 1 {
+	if stats.LOD != Medium || stats.VisibleNodes != 1 || stats.FieldRows != 1 {
 		t.Fatalf("detailed work should be limited to the visible node: %+v", stats)
 	}
 }
@@ -150,13 +153,17 @@ func TestRendererRetainsTextLayoutsAndSelection(t *testing.T) {
 	}
 	camera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 400, Y: 300}})
 	renderer := New(scene, graph.NewSpatialIndex(scene))
-	title := renderer.nodes[0].name.full
-	field := renderer.nodes[0].fieldLabels[0].full
+	visual := renderer.nodeVisual(0)
+	if visual == nil {
+		t.Fatal("node 0 was not prepared")
+	}
+	title := visual.name.full
+	field := visual.fieldLabels[0].full
 	stats := FrameStats{}
 	selected := graph.Hit{Kind: graph.HitNode, Index: 0}
 	tt := host(renderer, camera, selected, 400, 300, &stats)
 	tt.Frame()
-	if renderer.nodes[0].name.full != title || renderer.nodes[0].fieldLabels[0].full != field {
+	if renderer.nodeVisual(0).name.full != title || renderer.nodeVisual(0).fieldLabels[0].full != field {
 		t.Fatal("Draw reshaped retained text layouts")
 	}
 	if stats.VisibleNodes == 0 || stats.FieldRows == 0 {
@@ -196,7 +203,10 @@ func TestRendererShowsCodeTypesAndKeyMarkers(t *testing.T) {
 	renderer := New(scene, graph.NewSpatialIndex(scene))
 	var stats FrameStats
 	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 320, 220, &stats)
-	visual := renderer.nodes[0]
+	visual := renderer.nodeVisual(0)
+	if visual == nil {
+		t.Fatal("node 0 was not prepared")
+	}
 	name, code := nodeDisplayText(scene.Nodes[0])
 	if name != "Orders" || code != "ORDERS" ||
 		visual.name.full == nil || visual.code.full == nil {
@@ -263,12 +273,16 @@ func TestRendererClipsTextByRetainedWidthAndHeight(t *testing.T) {
 	renderer := New(scene, graph.NewSpatialIndex(scene))
 	var stats FrameStats
 	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 260, 120, &stats)
-	if renderer.nodes[0].name.pick(2, 93) != nil ||
-		renderer.nodes[0].fieldLabels[0].pick(2, fieldRowHeight) != nil {
+	first, second := renderer.nodeVisual(0), renderer.nodeVisual(1)
+	if first == nil || second == nil {
+		t.Fatal("small-card fixture nodes were not prepared")
+	}
+	if first.name.pick(2, 93) != nil ||
+		first.fieldLabels[0].pick(2, fieldRowHeight) != nil {
 		t.Fatal("too-wide text selected a layout")
 	}
-	if renderer.nodes[1].name.pick(184, 1) != nil ||
-		renderer.nodes[1].code.pick(184, 1) != nil {
+	if second.name.pick(184, 1) != nil ||
+		second.code.pick(184, 1) != nil {
 		t.Fatal("too-short text selected a layout")
 	}
 	if stats.FieldRows != 0 {
@@ -299,8 +313,8 @@ func TestDrawWithHoverMatchesStatsAndRetainsLayouts(t *testing.T) {
 	}
 	camera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 400, Y: 300}})
 	renderer := New(scene, graph.NewSpatialIndex(scene))
-	name := renderer.nodes[0].name.full
-	field := renderer.nodes[0].fieldLabels[0].full
+	name := renderer.nodeVisual(0).name.full
+	field := renderer.nodeVisual(0).fieldLabels[0].full
 	var plain, hover FrameStats
 	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 400, 300, &plain)
 	hostWithHover(
@@ -316,7 +330,7 @@ func TestDrawWithHoverMatchesStatsAndRetainsLayouts(t *testing.T) {
 		plain.FieldRows != hover.FieldRows || plain.LOD != hover.LOD {
 		t.Fatalf("DrawWithHover stats = %+v, plain = %+v", hover, plain)
 	}
-	if renderer.nodes[0].name.full != name || renderer.nodes[0].fieldLabels[0].full != field {
+	if renderer.nodeVisual(0).name.full != name || renderer.nodeVisual(0).fieldLabels[0].full != field {
 		t.Fatal("DrawWithHover reshaped retained layouts")
 	}
 }
@@ -435,6 +449,175 @@ func TestRendererArrowLODAndEndpointCulling(t *testing.T) {
 	}
 }
 
+func TestSceneCalibratedLODNearForScaledPDMUnits(t *testing.T) {
+	scene := graph.Scene{Nodes: []graph.Node{{
+		ID:     0,
+		Bounds: graph.Rect{Min: graph.Point{X: 1_000_000, Y: 2_000_000}, Max: graph.Point{X: 1_002_360, Y: 2_001_440}},
+		Name:   "Scaled PDM Table",
+		Fields: []graph.Field{{Name: "id", DataType: "BIGINT"}, {Name: "name", DataType: "VARCHAR"}},
+	}}}
+	camera := graph.NewDiagramCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 760, Y: 560}})
+	camera.FitBounds(scene.Nodes[0].Bounds, 20)
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	var stats FrameStats
+	host(renderer, camera, graph.Hit{Kind: graph.HitNone, Index: -1}, 760, 560, &stats)
+	if stats.LOD != Near || stats.FieldRows == 0 {
+		t.Fatalf("scaled PDM LOD = %+v, camera scale=%v", stats, camera.Scale())
+	}
+}
+
+func TestPrepareVisibleRetainsDesiredSetAndSkipsFarLOD(t *testing.T) {
+	nodes := make([]graph.Node, 300)
+	for offset := range nodes {
+		x := float64(offset * 40)
+		nodes[offset] = graph.Node{
+			ID:     offset,
+			Bounds: graph.Rect{Min: graph.Point{X: x, Y: 0}, Max: graph.Point{X: x + 20, Y: 10}},
+			Name:   fmt.Sprintf("node-%03d", offset),
+		}
+	}
+	scene := graph.Scene{Nodes: nodes}
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	for offset := 0; offset < 256; offset++ {
+		renderer.PrepareNode(offset)
+	}
+
+	camera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 2000, Y: 100}})
+	camera.ZoomAt(graph.Point{}, 10)
+	camera.Pan(graph.Point{X: 20000, Y: 0})
+	visible := renderer.index.QueryNodes(camera.VisibleWorld(), nil)
+	prepared := renderer.PrepareVisible(camera, graph.Hit{Kind: graph.HitNode, Index: 260})
+	if prepared < 1 {
+		t.Fatalf("selected-node preparation count = %d", prepared)
+	}
+	for _, offset := range visible {
+		if renderer.nodeVisual(offset) == nil {
+			t.Fatalf("visible node %d was evicted", offset)
+		}
+	}
+	if renderer.nodeVisual(260) == nil {
+		t.Fatal("selected node was not retained")
+	}
+	if renderer.nodeVisual(0) != nil {
+		t.Fatal("non-desired cached node was not evicted")
+	}
+	if renderer.nodeVisual(1) == nil || renderer.nodeVisual(255) == nil {
+		t.Fatal("offscreen visuals were discarded while capacity remained")
+	}
+	nodesBeforeReuse := len(renderer.nodes)
+	labelsBeforeReuse := len(renderer.labels.entries)
+	if got := renderer.PrepareVisible(camera, graph.Hit{Kind: graph.HitNode, Index: 260}); got != 0 {
+		t.Fatalf("repeat preparation shaped %d cached nodes", got)
+	}
+	if len(renderer.nodes) != nodesBeforeReuse || len(renderer.labels.entries) != labelsBeforeReuse {
+		t.Fatal("repeat preparation churned cached node or label state")
+	}
+
+	farCamera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 2000, Y: 100}})
+	farCamera.Pan(graph.Point{X: 2000, Y: 0})
+	before := len(renderer.nodes)
+	if got := renderer.PrepareVisible(farCamera, graph.Hit{Kind: graph.HitNone, Index: -1}); got != 0 {
+		t.Fatalf("far-LOD prepared %d nodes", got)
+	}
+	if len(renderer.nodes) != before {
+		t.Fatal("far-LOD preparation churned the cache")
+	}
+}
+
+func TestRendererTextCachesAreBoundedInternedAndDeduplicated(t *testing.T) {
+	nodes := make([]graph.Node, 600)
+	for offset := range nodes {
+		nodes[offset] = graph.Node{
+			ID:     offset,
+			Bounds: graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 100, Y: 100}},
+			Name:   fmt.Sprintf("n%d", offset),
+		}
+	}
+	scene := graph.Scene{Nodes: nodes}
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	if len(renderer.nodes) != prefillNodeLimit ||
+		len(renderer.labels.entries) > prefillNodeLimit {
+		t.Fatalf("eager preparation = nodes:%d labels:%d", len(renderer.nodes), len(renderer.labels.entries))
+	}
+	for offset := 0; offset < len(nodes); offset++ {
+		renderer.PrepareNode(offset)
+	}
+	if len(renderer.nodes) > nodeVisualLimit || len(renderer.labels.entries) > labelInternLimit {
+		t.Fatalf("cache bounds = nodes:%d labels:%d", len(renderer.nodes), len(renderer.labels.entries))
+	}
+	if renderer.nodeVisual(0) != nil || renderer.nodeVisual(599) == nil {
+		t.Fatal("node cache eviction is not deterministic FIFO")
+	}
+
+	duplicate := graph.Scene{Nodes: []graph.Node{
+		{ID: 0, Bounds: graph.Rect{Max: graph.Point{X: 100, Y: 100}}, Name: "Same", Fields: []graph.Field{{Name: "id", DataType: "INT"}}},
+		{ID: 1, Bounds: graph.Rect{Min: graph.Point{X: 120}, Max: graph.Point{X: 220, Y: 100}}, Name: "Same", Fields: []graph.Field{{Name: "id", DataType: "INT"}}},
+	}}
+	shared := New(duplicate, graph.NewSpatialIndex(duplicate))
+	first, second := shared.nodeVisual(0), shared.nodeVisual(1)
+	if first == nil || second == nil ||
+		first.name.full != second.name.full ||
+		first.fieldLabels[0].full != second.fieldLabels[0].full {
+		t.Fatal("identical text/font layouts were not interned")
+	}
+}
+
+func TestPreviewTextCapAndTextBoundsWithoutCardClip(t *testing.T) {
+	long := strings.Repeat("x", maxPreviewRunes+100)
+	cache := newLabelCache(8)
+	visual := cache.label(long, ui.Font{Size: 10})
+	if visual == nil || visual.full == nil {
+		t.Fatal("preview label was not shaped")
+	}
+	for key := range cache.entries {
+		if utf8.RuneCountInString(key.text) > maxPreviewRunes+1 {
+			t.Fatalf("preview key runes = %d", utf8.RuneCountInString(key.text))
+		}
+	}
+	for _, variant := range visual.variants {
+		if variant.layout == visual.full {
+			t.Fatal("full and narrowed layout pointers were duplicated")
+		}
+	}
+
+	scene := graph.Scene{Nodes: []graph.Node{{
+		ID:     0,
+		Bounds: graph.Rect{Min: graph.Point{Y: 10}, Max: graph.Point{X: 120, Y: 85}},
+		Name:   "A very long table name that needs a narrowed layout",
+		Code:   "VERY_LONG_CODE",
+		Fields: []graph.Field{
+			{Name: "identifier", DataType: "BIGINT", PrimaryKey: true},
+			{Name: "description", DataType: "VARCHAR(255)"},
+		},
+	}}}
+	camera := graph.NewCamera(graph.Rect{Min: graph.Point{}, Max: graph.Point{X: 200, Y: 100}})
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	nodeCard := renderer.nodeVisual(0)
+	if nodeCard == nil {
+		t.Fatal("small card was not prepared")
+	}
+	screenMin := camera.WorldToScreen(scene.Nodes[0].Bounds.Min)
+	screenMax := camera.WorldToScreen(scene.Nodes[0].Bounds.Max)
+	rect := ui.Rect{
+		X: float32(screenMin.X),
+		Y: float32(screenMin.Y),
+		W: float32(screenMax.X - screenMin.X),
+		H: float32(screenMax.Y - screenMin.Y),
+	}
+	availableWidth := rect.W - 2*labelInset
+	title := nodeCard.name.pick(availableWidth, rect.H-titleTop-2)
+	if !layoutWithin(title, rect.X+labelInset, rect.Y+titleTop, availableWidth, rect.H-titleTop-2) {
+		t.Fatalf("title escaped card bounds: %+v", rect)
+	}
+	rows := min(len(nodeCard.fieldLabels), int((rect.H-nodeCard.fieldTop-2)/fieldRowHeight))
+	for i := 0; i < rows; i++ {
+		label := nodeCard.fieldLabels[i].pick(availableWidth, fieldRowHeight)
+		if !layoutWithin(label, rect.X+labelInset, rect.Y+nodeCard.fieldTop+float32(i)*fieldRowHeight, availableWidth, fieldRowHeight) {
+			t.Fatalf("field row %d escaped card bounds", i)
+		}
+	}
+}
+
 func host(canvas *Canvas, camera *graph.Camera, selected graph.Hit, width, height int, stats *FrameStats) *ui.Tester {
 	return ui.NewTester(func(c *ui.Context) {
 		ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {
@@ -477,4 +660,12 @@ func near32(a, b float32) bool {
 
 func finite32(v float32) bool {
 	return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0)
+}
+
+func layoutWithin(layout *ui.TextLayout, x, y, width, height float32) bool {
+	if layout == nil {
+		return true
+	}
+	w, h := layout.Size()
+	return w <= width && h <= height && x >= 0 && y >= 0
 }

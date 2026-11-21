@@ -3,6 +3,7 @@ package renderer
 
 import (
 	"math"
+	"sort"
 	"strings"
 	"unicode/utf16"
 
@@ -41,6 +42,12 @@ const (
 	fieldRowHeight     = 16.0
 	maxFieldRows       = 5
 	labelInset         = 8
+
+	referenceNodeWidth = 236.0
+	nodeVisualLimit    = 256
+	prefillNodeLimit   = 64
+	labelInternLimit   = 512
+	maxPreviewRunes    = 256
 )
 
 // FrameStats describes one Draw call. CacheHits and CacheMisses count only
@@ -94,6 +101,51 @@ type nodeVisual struct {
 	fieldTop    float32
 }
 
+type labelKey struct {
+	text string
+	font ui.Font
+}
+
+type labelCache struct {
+	entries  map[labelKey]*labelVisual
+	order    []labelKey
+	ellipsis map[ui.Font]*ui.TextLayout
+	limit    int
+}
+
+func newLabelCache(limit int) labelCache {
+	return labelCache{
+		entries:  make(map[labelKey]*labelVisual),
+		ellipsis: make(map[ui.Font]*ui.TextLayout),
+		limit:    limit,
+	}
+}
+
+func (c *labelCache) label(text string, font ui.Font) *labelVisual {
+	text = previewText(text)
+	if text == "" {
+		return nil
+	}
+	key := labelKey{text: text, font: font}
+	if visual := c.entries[key]; visual != nil {
+		return visual
+	}
+	if c.limit > 0 && len(c.order) >= c.limit {
+		oldest := c.order[0]
+		c.order = c.order[1:]
+		delete(c.entries, oldest)
+	}
+	ellipsis := c.ellipsis[font]
+	if ellipsis == nil {
+		ellipsis = ui.ShapeText("…", font, 0)
+		c.ellipsis[font] = ellipsis
+	}
+	visual := shapeLabelVariants(text, font, ellipsis)
+	c.entries[key] = &visual
+	c.order = append(c.order, key)
+	return &visual
+}
+
 type gridKey struct {
 	scaleBits uint32
 	dark      bool
@@ -101,64 +153,196 @@ type gridKey struct {
 	border    uint32
 }
 
-// Canvas is a retained scene renderer. It owns immutable-shaped text and
-// reusable query/grid buffers; callers mutate only the Camera and selection.
+// Canvas is a retained scene renderer. Text layouts are cached per canvas for
+// the lifetime of one board; replacing the canvas discards them. Node visuals
+// use deterministic FIFO eviction, and identical text/font layouts are interned
+// under a separate bounded cache. Prepare and draw on the same UI thread
+// after handing off the canvas from its constructor.
 type Canvas struct {
-	scene         graph.Scene
-	index         graph.SpatialQuery
-	nodes         []nodeVisual
-	lod           LOD
-	grid          *ui.Canvas
-	gridKey       gridKey
-	hasGrid       bool
-	lastGridTiles int
+	scene          graph.Scene
+	index          graph.SpatialQuery
+	nodes          map[int]*nodeVisual
+	nodeOrder      []int
+	labels         labelCache
+	lodWidthFactor float64
+	lod            LOD
+	grid           *ui.Canvas
+	gridKey        gridKey
+	hasGrid        bool
+	lastGridTiles  int
 
-	nodeOffsets  []int
-	edgeOffsets  []int
-	edgeScratch  [][2]float32
-	arrowScratch [][2]float32
+	nodeOffsets    []int
+	edgeOffsets    []int
+	prepareOffsets []int
+	edgeScratch    [][2]float32
+	arrowScratch   [][2]float32
 }
 
-// New builds retained layouts and converted polyline data. index may be nil,
-// in which case a linear query baseline is used.
+// New prepares a bounded initial set of text layouts. A nil index uses a
+// linear query baseline.
 func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 	if index == nil {
 		index = graph.NewLinearIndex(scene)
 	}
 	canvas := &Canvas{
-		scene: scene,
-		index: index,
-		nodes: make([]nodeVisual, len(scene.Nodes)),
+		scene:          scene,
+		index:          index,
+		nodes:          make(map[int]*nodeVisual),
+		labels:         newLabelCache(labelInternLimit),
+		lodWidthFactor: sceneLODWidthFactor(scene.Nodes),
 	}
+	for offset := 0; offset < min(len(scene.Nodes), prefillNodeLimit); offset++ {
+		canvas.PrepareNode(offset)
+	}
+	return canvas
+}
+
+// PrepareNode builds and retains one node's text outside Draw. It returns false
+// for an invalid offset. When the cache is full, the oldest prepared node is
+// discarded deterministically.
+func (c *Canvas) PrepareNode(offset int) bool {
+	if c == nil || offset < 0 || offset >= len(c.scene.Nodes) {
+		return false
+	}
+	if c.nodes[offset] != nil {
+		return true
+	}
+	if len(c.nodes) >= nodeVisualLimit {
+		oldest := c.nodeOrder[0]
+		c.nodeOrder = c.nodeOrder[1:]
+		delete(c.nodes, oldest)
+	}
+	node := c.scene.Nodes[offset]
 	titleFont := ui.Font{Size: 11.5, Weight: 650}
 	codeFont := ui.Font{Size: 9.5, Weight: 500}
 	fieldFont := ui.Font{Size: 9.5, Weight: 400}
-	titleEllipsis := ui.ShapeText("…", titleFont, 0)
-	codeEllipsis := ui.ShapeText("…", codeFont, 0)
-	fieldEllipsis := ui.ShapeText("…", fieldFont, 0)
-	for i, node := range scene.Nodes {
-		nameText, codeText := nodeDisplayText(node)
-		name := shapeLabelVariants(nameText, titleFont, titleEllipsis)
-		code := shapeLabelVariants(codeText, codeFont, codeEllipsis)
-		fields := node.Fields
-		if len(fields) > maxFieldRows {
-			fields = fields[:maxFieldRows]
-		}
-		labels := make([]labelVisual, len(fields))
-		for j, field := range fields {
-			labels[j] = shapeLabelVariants(fieldDisplayText(field), fieldFont, fieldEllipsis)
-		}
-		canvas.nodes[i] = nodeVisual{
-			name:        name,
-			code:        code,
-			fieldLabels: labels,
-			fieldTop:    fieldTopNoCode,
-		}
-		if code.full != nil {
-			canvas.nodes[i].fieldTop = fieldTopWithCode
+	nameText, codeText := nodeDisplayText(node)
+	name := c.labels.label(nameText, titleFont)
+	code := c.labels.label(codeText, codeFont)
+	fields := node.Fields
+	if len(fields) > maxFieldRows {
+		fields = fields[:maxFieldRows]
+	}
+	labels := make([]labelVisual, len(fields))
+	for offset, field := range fields {
+		if visual := c.labels.label(fieldDisplayText(field), fieldFont); visual != nil {
+			labels[offset] = *visual
 		}
 	}
-	return canvas
+	visual := &nodeVisual{fieldLabels: labels, fieldTop: fieldTopNoCode}
+	if name != nil {
+		visual.name = *name
+	}
+	if code != nil {
+		visual.code = *code
+		visual.fieldTop = fieldTopWithCode
+	}
+	c.nodes[offset] = visual
+	c.nodeOrder = append(c.nodeOrder, offset)
+	return true
+}
+
+// PrepareVisible prepares up to the node-cache capacity of visible nodes and
+// prioritizes the selected node. Existing offscreen visuals stay cached while
+// capacity permits; only the oldest unpinned entries needed for missing desired
+// nodes are evicted. It must be called outside Draw when a board exceeds the
+// eager preparation window.
+func (c *Canvas) PrepareVisible(camera *graph.Camera, selected graph.Hit) int {
+	if c == nil || camera == nil {
+		return 0
+	}
+	if c.nextLOD(camera.Scale()*c.lodWidthFactor) == Far {
+		return 0
+	}
+	c.prepareOffsets = c.index.QueryNodes(camera.VisibleWorld(), c.prepareOffsets[:0])
+	desired := make([]int, 0, nodeVisualLimit)
+	desiredSet := make(map[int]bool)
+	addDesired := func(offset int) {
+		if offset >= 0 && offset < len(c.scene.Nodes) && !desiredSet[offset] &&
+			len(desired) < nodeVisualLimit {
+			desiredSet[offset] = true
+			desired = append(desired, offset)
+		}
+	}
+	if selected.Kind == graph.HitNode && selected.Index >= 0 && selected.Index < len(c.scene.Nodes) {
+		addDesired(selected.Index)
+	}
+	for _, offset := range c.prepareOffsets {
+		addDesired(offset)
+	}
+
+	missing := 0
+	for _, offset := range desired {
+		if c.nodes[offset] == nil {
+			missing++
+		}
+	}
+	evict := max(0, len(c.nodes)+missing-nodeVisualLimit)
+	kept := c.nodeOrder[:0]
+	for _, offset := range c.nodeOrder {
+		if !desiredSet[offset] && evict > 0 {
+			delete(c.nodes, offset)
+			evict--
+		} else {
+			kept = append(kept, offset)
+		}
+	}
+	c.nodeOrder = kept
+
+	prepared := 0
+	for _, offset := range desired {
+		if c.nodes[offset] == nil && c.PrepareNode(offset) {
+			prepared++
+		}
+	}
+	return prepared
+}
+
+func (c *Canvas) nodeVisual(offset int) *nodeVisual {
+	if c == nil {
+		return nil
+	}
+	return c.nodes[offset]
+}
+
+func sceneLODWidthFactor(nodes []graph.Node) float64 {
+	widths := make([]float64, 0, len(nodes))
+	for _, node := range nodes {
+		width := node.Bounds.Width()
+		if finiteFloat(width) && width > 0 {
+			widths = append(widths, width)
+		}
+	}
+	if len(widths) == 0 {
+		return 1
+	}
+	sort.Float64s(widths)
+	median := widths[len(widths)/2]
+	if len(widths)%2 == 0 {
+		median = (widths[len(widths)/2-1] + median) / 2
+	}
+	if median <= 0 || !finiteFloat(median) {
+		return 1
+	}
+	return median / referenceNodeWidth
+}
+
+func previewText(text string) string {
+	if text == "" {
+		return ""
+	}
+	count := 0
+	for offset := range text {
+		if count == maxPreviewRunes {
+			return text[:offset] + "…"
+		}
+		count++
+	}
+	return text
+}
+
+func finiteFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func shapeLabel(text string, font ui.Font, width float32, ellipsis *ui.TextLayout) *ui.TextLayout {
@@ -206,8 +390,13 @@ func shapeLabelVariants(text string, font ui.Font, ellipsis *ui.TextLayout) labe
 	full := ui.ShapeText(text, font, 0)
 	fullWidth, fullHeight := full.Size()
 	visual := labelVisual{full: full, fullWidth: fullWidth, fullHeight: fullHeight}
+	seen := map[*ui.TextLayout]bool{full: true}
 	for _, width := range nodeLabelWidths {
 		if layout := shapeLabelLayout(full, text, font, width, ellipsis); layout != nil {
+			if seen[layout] {
+				continue
+			}
+			seen[layout] = true
 			measuredWidth, height := layout.Size()
 			visual.variants = append(visual.variants, labelVariant{
 				width:  measuredWidth,
@@ -284,7 +473,7 @@ func (c *Canvas) DrawWithHover(
 	if p == nil || camera == nil || area.W <= 0 || area.H <= 0 {
 		return stats
 	}
-	stats.LOD = c.updateLOD(camera.Scale())
+	stats.LOD = c.updateLOD(camera.Scale() * c.lodWidthFactor)
 	t := p.Theme()
 	visible := camera.VisibleWorld()
 
@@ -320,38 +509,42 @@ func (c *Canvas) DrawWithHover(
 }
 
 func (c *Canvas) updateLOD(scale float64) LOD {
+	c.lod = c.nextLOD(scale)
+	return c.lod
+}
+
+func (c *Canvas) nextLOD(scale float64) LOD {
 	if c.lod == "" {
 		switch {
 		case scale > nearEnterScale:
-			c.lod = Near
+			return Near
 		case scale >= farScale:
-			c.lod = Medium
+			return Medium
 		default:
-			c.lod = Far
+			return Far
 		}
-		return c.lod
 	}
 	switch c.lod {
 	case Far:
 		switch {
 		case scale > nearEnterScale:
-			c.lod = Near
+			return Near
 		case scale > mediumEnterScale:
-			c.lod = Medium
+			return Medium
 		}
 	case Medium:
 		switch {
 		case scale < farScale:
-			c.lod = Far
+			return Far
 		case scale > nearEnterScale:
-			c.lod = Near
+			return Near
 		}
 	case Near:
 		switch {
 		case scale < farScale:
-			c.lod = Far
+			return Far
 		case scale < nearExitScale:
-			c.lod = Medium
+			return Medium
 		}
 	}
 	return c.lod
@@ -523,7 +716,10 @@ func (c *Canvas) drawNode(
 		return 0
 	}
 
-	visual := &c.nodes[offset]
+	visual := c.nodeVisual(offset)
+	if visual == nil {
+		return 0
+	}
 	availableWidth := max(0, rect.W-2*labelInset)
 	availableHeight := max(0, rect.H-visual.fieldTop-2)
 	rows := min(len(visual.fieldLabels), int(availableHeight/fieldRowHeight))
@@ -531,27 +727,20 @@ func (c *Canvas) drawNode(
 	if lod == Medium {
 		rows = min(rows, 2)
 	}
-	p.Clip(ui.Rect{
-		X: rect.X + 4,
-		Y: rect.Y + 2,
-		W: max(0, rect.W-8),
-		H: max(0, rect.H-4),
-	}, 0, func() {
-		if title := visual.name.pick(availableWidth, rect.H-titleTop-2); title != nil {
-			p.TextLayout(title, rect.X+labelInset, rect.Y+titleTop, t.Text)
+	if title := visual.name.pick(availableWidth, rect.H-titleTop-2); title != nil {
+		p.TextLayout(title, rect.X+labelInset, rect.Y+titleTop, t.Text)
+	}
+	if code := visual.code.pick(availableWidth, rect.H-codeTop-2); code != nil {
+		p.TextLayout(code, rect.X+labelInset, rect.Y+codeTop, t.TextMuted)
+	}
+	for i := 0; i < rows; i++ {
+		label := visual.fieldLabels[i].pick(availableWidth, fieldRowHeight)
+		if label == nil {
+			continue
 		}
-		if code := visual.code.pick(availableWidth, rect.H-codeTop-2); code != nil {
-			p.TextLayout(code, rect.X+labelInset, rect.Y+codeTop, t.TextMuted)
-		}
-		for i := 0; i < rows; i++ {
-			label := visual.fieldLabels[i].pick(availableWidth, fieldRowHeight)
-			if label == nil {
-				continue
-			}
-			p.TextLayout(label, rect.X+labelInset, rect.Y+visual.fieldTop+float32(i)*fieldRowHeight, t.TextMuted)
-			drawnRows++
-		}
-	})
+		p.TextLayout(label, rect.X+labelInset, rect.Y+visual.fieldTop+float32(i)*fieldRowHeight, t.TextMuted)
+		drawnRows++
+	}
 	return drawnRows
 }
 
