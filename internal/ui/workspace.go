@@ -106,6 +106,7 @@ func NewWorkspace() *Workspace {
 		NavigationPercent: 25,
 		CanvasPercent:     60,
 		canvas:            newCanvasView(),
+		activeBoard:       -1,
 		pendingBoard:      -1,
 		navSelected:       -1,
 		openBefore:        make(map[string]struct{}),
@@ -329,9 +330,6 @@ func (w *Workspace) ActiveBoard() int {
 }
 
 func (w *Workspace) BoardCount() int {
-	if !w.hasModel {
-		return 1
-	}
 	return len(w.boards)
 }
 
@@ -693,35 +691,32 @@ func (w *Workspace) diagramNavigation(c *ui.Context, state *app.State, t *ui.The
 	c.Key(SearchKey)
 	field := ui.SearchField(c, &w.searchQuery).
 		FillWidth().Placeholder(search).Label(search).
-		Disabled(w.loading)
+		Disabled(!w.hasModel || w.loading)
 	if field.Changed() {
 		w.requestSearch()
 	}
-	paneHeading(c, state.Text(i18n.KeyDiagramsHeading, nil), t, lang)
-	ui.Scroll(c.Key(DiagramListKey)).FillWidth().Height(96).KeepScrollbars(true).Children(func() {
-		ui.Column(c).Role(ui.RoleTabList).Gap(4).Children(func() {
-			for index := 0; index < w.BoardCount(); index++ {
-				label := state.Text(i18n.KeySampleDiagram, nil)
-				if w.hasModel {
-					board := w.boards[index]
-					label = board.Name
+	if len(w.boards) > 0 {
+		paneHeading(c, state.Text(i18n.KeyDiagramsHeading, nil), t, lang)
+		ui.Scroll(c.Key(DiagramListKey)).FillWidth().Height(96).KeepScrollbars(true).Children(func() {
+			ui.Column(c).Role(ui.RoleTabList).Gap(4).Children(func() {
+				for index, board := range w.boards {
+					label := board.Name
 					if label == "" {
 						label = state.Text(i18n.KeyDiagramFallback, map[string]string{
 							"index": fmt.Sprintf("%d", index),
 						})
 					}
+					button := ui.Button(c, label).Key(DiagramButtonKey(index)).
+						FillWidth().Role(ui.RoleTab).
+						AccessSelected(index == w.activeBoard).
+						OnClick(func() { w.ActivateBoard(index) })
+					if index == w.activeBoard {
+						button.Background(t.Accent).TextColor(t.AccentText).Bold()
+					}
 				}
-				index := index
-				button := ui.Button(c, label).Key(DiagramButtonKey(index)).
-					FillWidth().Role(ui.RoleTab).
-					AccessSelected(index == w.activeBoard).
-					OnClick(func() { w.ActivateBoard(index) })
-				if index == w.activeBoard {
-					button.Background(t.Accent).TextColor(t.AccentText).Bold()
-				}
-			}
+			})
 		})
-	})
+	}
 	if w.searchActive() {
 		w.searchNavigation(c, state, t, lang)
 	} else {

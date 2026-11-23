@@ -42,7 +42,6 @@ type canvasView struct {
 	pointerDown      bool
 	dragging         bool
 	lastPointer      graph.Point
-	demo             bool
 	initialFit       bool
 	prepareAfterFit  bool
 	cameraTween      *cameraTween
@@ -51,21 +50,11 @@ type canvasView struct {
 }
 
 func newCanvasView() *canvasView {
-	scene, err := graph.GenerateDefault(50, graph.DensityDense)
-	if err != nil {
-		panic(err)
-	}
-	index := graph.NewSpatialIndex(scene)
-	camera := graph.NewCamera(graph.Rect{})
-	camera.Pan(graph.Point{X: -canvasPadding, Y: -canvasPadding})
 	return &canvasView{
-		scene:     scene,
-		index:     index,
-		camera:    camera,
-		renderer:  renderer.New(scene, index),
+		camera:    graph.NewCamera(graph.Rect{}),
+		renderer:  renderer.New(graph.Scene{}, nil),
 		selection: graph.Hit{Kind: graph.HitNone, Index: -1},
 		hovered:   graph.Hit{Kind: graph.HitNone, Index: -1},
-		demo:      true,
 	}
 }
 
@@ -77,7 +66,6 @@ func (view *canvasView) activatePrepared(prepared PreparedBoard) {
 	view.renderer = prepared.Renderer
 	view.selection = graph.Hit{Kind: graph.HitNone, Index: -1}
 	view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}
-	view.demo = false
 	view.viewport = viewport
 	view.camera = graph.NewDiagramCamera(viewport)
 	view.pointerDown = false
@@ -101,6 +89,7 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 		c.AnimationFrame()
 	}
 	heading := state.Text(i18n.KeyCanvasHeading, nil)
+	hasBoard := view.index != nil
 	ui.Column(c).Fill().Background(theme.Background).Children(func() {
 		ui.Row(c).FillWidth().Height(28).Padding(2, 8).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
 			paneHeading(c, heading, theme, lang).Grow(1)
@@ -109,17 +98,19 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 		ui.Row(c).FillWidth().Height(38).Padding(4, 8).Gap(4).
 			AlignItems(ui.Center).Background(theme.Surface).
 			Children(func() {
-				ui.Button(c, "−").Key(zoomOutKey).Label(state.Text(i18n.KeyZoomOut, nil)).OnClick(func() { view.zoomCentered(1 / 1.25) })
-				ui.Button(c, "+").Key(zoomInKey).Label(state.Text(i18n.KeyZoomIn, nil)).OnClick(func() { view.zoomCentered(1.25) })
+				ui.Button(c, "−").Key(zoomOutKey).Label(state.Text(i18n.KeyZoomOut, nil)).
+					Disabled(!hasBoard).OnClick(func() { view.zoomCentered(1 / 1.25) })
+				ui.Button(c, "+").Key(zoomInKey).Label(state.Text(i18n.KeyZoomIn, nil)).
+					Disabled(!hasBoard).OnClick(func() { view.zoomCentered(1.25) })
 				ui.Button(c, state.Text(i18n.KeyFitShort, nil)).Key(fitCanvasKey).
 					Label(state.Text(i18n.KeyFitSelection, nil)).
 					Disabled(view.selection.Kind == graph.HitNone).OnClick(view.fitSelection)
 				ui.Button(c, state.Text(i18n.KeyShowAllShort, nil)).Key(showAllKey).
 					Label(state.Text(i18n.KeyShowAll, nil)).
-					OnClick(view.showAll)
+					Disabled(!hasBoard).OnClick(view.showAll)
 				ui.Button(c, state.Text(i18n.KeyResetShort, nil)).Key(ResetViewKey).
 					Label(state.Text(i18n.KeyResetView, nil)).
-					OnClick(view.resetView)
+					Disabled(!hasBoard).OnClick(view.resetView)
 			})
 		canvas := ui.Box(c).Grow(1).FillWidth().Clip().Key(CanvasKey).Label(heading).
 			HandleInput(view.handleInput).Draw(view.draw)
@@ -152,7 +143,7 @@ func (view *canvasView) selectedNode() *graph.Node {
 }
 
 func (view *canvasView) tableNodeOffset(tableID string) (int, bool) {
-	if tableID == "" || view.demo {
+	if tableID == "" {
 		return 0, false
 	}
 	for offset := range view.scene.Nodes {
@@ -234,6 +225,9 @@ func (view *canvasView) prepareVisible() {
 }
 
 func (view *canvasView) handleInput(event ui.InputEvent) bool {
+	if view.index == nil {
+		return false
+	}
 	pointer := graph.Point{X: float64(event.X), Y: float64(event.Y)}
 	switch event.Kind {
 	case ui.InputPointerDown:
@@ -360,7 +354,7 @@ func (view *canvasView) reportTableSelection() {
 }
 
 func (view *canvasView) tableID(hit graph.Hit) string {
-	if view.demo || hit.Kind != graph.HitNode {
+	if hit.Kind != graph.HitNode {
 		return ""
 	}
 	if source, ok := view.diagram.NodeSource(hit.Index); ok {
@@ -370,9 +364,6 @@ func (view *canvasView) tableID(hit graph.Hit) string {
 }
 
 func (view *canvasView) hitTest(pointer graph.Point) graph.Hit {
-	if view.demo {
-		return graph.HitTest(view.scene, view.index, view.camera, pointer, 5)
-	}
 	screen := view.camera.ViewportToScreen(pointer)
 	return view.diagram.HitTest(view.index, view.camera, screen, 5).Hit
 }

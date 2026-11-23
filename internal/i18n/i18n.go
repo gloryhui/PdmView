@@ -43,7 +43,6 @@ const (
 	KeyLoadPDMFailed     Key = "workspace.load_pdm_failed"
 	KeyNoDiagramFallback Key = "workspace.no_diagram_fallback"
 	KeyAutoLayoutStatus  Key = "workspace.auto_layout"
-	KeySampleDiagram     Key = "canvas.sample"
 	KeyFitSelection      Key = "canvas.fit_selection"
 	KeyFitShort          Key = "canvas.fit_short"
 	KeyShowAll           Key = "canvas.show_all"
@@ -178,7 +177,6 @@ var resources = map[Locale]map[Key]message{
 		KeyLoadPDMFailed:     {text: "Could not open PDM file"},
 		KeyNoDiagramFallback: {text: "No diagrams · Auto layout"},
 		KeyAutoLayoutStatus:  {text: "Includes automatically arranged tables"},
-		KeySampleDiagram:     {text: "Sample diagram"},
 		KeyFitSelection:      {text: "Fit selection"},
 		KeyFitShort:          {text: "Fit"},
 		KeyShowAll:           {text: "Show all"},
@@ -305,7 +303,6 @@ var resources = map[Locale]map[Key]message{
 		KeyLoadPDMFailed:     {text: "无法打开 PDM 文件"},
 		KeyNoDiagramFallback: {text: "无画板 · 自动布局"},
 		KeyAutoLayoutStatus:  {text: "含自动布局的表"},
-		KeySampleDiagram:     {text: "模拟图表"},
 		KeyFitSelection:      {text: "适应选中"},
 		KeyFitShort:          {text: "适应"},
 		KeyShowAll:           {text: "显示全部"},

@@ -63,11 +63,12 @@ func TestTablePropertiesDoubleClickEvent(t *testing.T) {
 		t.Fatalf("blank double click opened %v", opened)
 	}
 
-	view.demo = true
-	view.handleInput(ui.InputEvent{Kind: ui.InputPointerDown, X: 50, Y: 50, Button: 0})
-	view.handleInput(ui.InputEvent{Kind: ui.InputPointerUp, X: 50, Y: 50, Button: 0, Clicks: 2})
+	empty := newCanvasView()
+	empty.onTableOpen = view.onTableOpen
+	empty.handleInput(ui.InputEvent{Kind: ui.InputPointerDown, X: 50, Y: 50, Button: 0})
+	empty.handleInput(ui.InputEvent{Kind: ui.InputPointerUp, X: 50, Y: 50, Button: 0, Clicks: 2})
 	if len(opened) != 1 {
-		t.Fatalf("sample double click opened %v", opened)
+		t.Fatalf("empty-canvas double click opened %v", opened)
 	}
 }
 

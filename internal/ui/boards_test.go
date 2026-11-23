@@ -70,8 +70,19 @@ func TestBuildBoardSetFallbackWhenModelHasNoDiagrams(t *testing.T) {
 func TestWorkspacePublishesRealBoardsAndStaleSwitchCompletion(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
-	if workspace.BoardCount() != 1 || workspace.ActiveBoard() != 0 {
-		t.Fatal("workspace did not start with only the demo")
+	tester := ui.NewTester(View(state, workspace), 800, 600)
+	if workspace.BoardCount() != 0 || workspace.ActiveBoard() != -1 ||
+		len(workspace.canvas.scene.Nodes) != 0 || len(workspace.canvas.scene.Edges) != 0 {
+		t.Fatal("workspace did not start with an empty canvas")
+	}
+	if tester.HasText("Sample diagram") || tester.HasText(state.Text(i18n.KeyDiagramsHeading, nil)) {
+		t.Fatal("startup still shows a board catalog")
+	}
+	mutableActions := []string{"Search", "Zoom out", "Zoom in", "Show all", "Reset view"}
+	for _, label := range mutableActions {
+		if element, ok := tester.Access(label); !ok || !element.Disabled {
+			t.Fatalf("%q was available before opening a diagram", label)
+		}
 	}
 	document := testBoardDocument()
 	document.Model.Contents.Diagrams[0].TableSymbols[1].Rect = boardRect(200, 200, 300, 300)
@@ -84,7 +95,7 @@ func TestWorkspacePublishesRealBoardsAndStaleSwitchCompletion(t *testing.T) {
 		t.Fatalf("real catalog after open = %d boards, active %d", workspace.BoardCount(), workspace.ActiveBoard())
 	}
 
-	tester := ui.NewTester(View(state, workspace), 800, 600)
+	tester.Frame()
 	view := workspace.canvas
 	if view.viewport.Min.X <= 0 {
 		t.Fatalf("canvas origin is not offset: %+v", view.viewport)
@@ -94,8 +105,13 @@ func TestWorkspacePublishesRealBoardsAndStaleSwitchCompletion(t *testing.T) {
 		visible.Max.X < bounds.Max.X || visible.Max.Y < bounds.Max.Y {
 		t.Fatalf("default real board is not fitted: visible=%+v bounds=%+v", visible, bounds)
 	}
-	if tester.HasText(state.Text(i18n.KeySampleDiagram, nil)) {
-		t.Fatal("demo remained in the catalog after opening a model")
+	if !tester.HasText("Diagram A") || !tester.HasText("Diagram B") {
+		t.Fatal("real diagram catalog did not appear after loading")
+	}
+	for _, label := range mutableActions {
+		if element, ok := tester.Access(label); !ok || element.Disabled {
+			t.Fatalf("%q was unavailable after opening a diagram", label)
+		}
 	}
 
 	screen := view.camera.WorldToScreen(graph.Point{X: 50, Y: -50})

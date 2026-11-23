@@ -20,7 +20,7 @@ func TestWorkspaceLayoutBothLocalesAndWidths(t *testing.T) {
 		height    int
 		headings  []string
 	}{
-		{name: "english wide", systemTag: "en-US", width: 1200, height: 800, headings: []string{"Navigation", "Diagram canvas", "Details"}},
+		{name: "english wide", systemTag: "en-US", width: 1280, height: 900, headings: []string{"Navigation", "Diagram canvas", "Details"}},
 		{name: "chinese minimum", systemTag: "zh-Hans-CN", width: 800, height: 600, headings: []string{"导航", "图表画布", "详情"}},
 	}
 	for _, tc := range tests {
@@ -111,6 +111,7 @@ func TestLongWarningClampsAtMinimumWidth(t *testing.T) {
 func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(testBoardDocument()))
 	tester := ui.NewTester(View(state, workspace), 800, 600)
 	splitters := splitterBounds(tester)
 	if len(splitters) != 2 {
@@ -138,7 +139,7 @@ func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 	}
 
 	view := workspace.canvas
-	point := view.camera.WorldToScreen(graph.Point{X: 100, Y: 55})
+	point := view.camera.WorldToScreen(graph.Point{X: 50, Y: -50})
 	tester.ClickAt(float32(point.X), float32(point.Y))
 	if view.selection.Kind != graph.HitNode {
 		t.Fatalf("selection before resize = %+v", view.selection)
