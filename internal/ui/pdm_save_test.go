@@ -2,13 +2,58 @@ package appui
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"pdmview/internal/i18n"
 	"pdmview/internal/pdm"
+	"pdmview/internal/sqlgen"
 
 	"github.com/egoist/mygo/ui"
 )
+
+func TestPDMSaveRefreshesGeneratedPreviewsAndRetainsSQLDrafts(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	set := BuildBoardSet(tablePropertiesDocument())
+	set.SourcePath = "/workspace/orders.pdm"
+	workspace.PublishBoards(workspace.BeginOpen(), set)
+	workspace.OpenTableProperties("orders")
+	var request *PDMSaveRequest
+	workspace.SetPDMSaveStarter(func(next *PDMSaveRequest) { request = next })
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 640, 480)
+	for _, label := range []string{"Preview", "Standard SQL", "Full SQL"} {
+		if err := tester.Click(label); err != nil {
+			t.Fatal(err)
+		}
+	}
+	full := workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor
+	const draftSQL = "SELECT 42;"
+	full.Buffer.Set(draftSQL)
+
+	updated := tablePropertiesDocument()
+	const newComment = "Saved column comment"
+	table := &updated.Model.Contents.Packages[0].Contents.Tables[0]
+	table.Columns[0].Comment = pdm.OptionalText{Present: true, Value: newComment}
+	workspace.tableProperties.draft.Columns[0].Comment = newComment
+	workspace.savePDM()
+	if request == nil {
+		t.Fatal("expected a PDM save request")
+	}
+	saved := BuildBoardSet(updated)
+	workspace.PublishPDMSaveResult(request, i18n.KeyPDMSaved, &saved)
+	tester.Frame()
+	if preview, ok := tester.AccessByRole(ui.RoleTextField, "SQL preview"); !ok || preview.Value != draftSQL {
+		t.Fatal("saving PDM discarded an edited SQL preview")
+	}
+	if err := tester.Click("Standard SQL"); err != nil {
+		t.Fatal(err)
+	}
+	preview, ok := tester.AccessByRole(ui.RoleTextField, "SQL preview")
+	if !ok || !strings.Contains(preview.Value, "COMMENT '"+newComment+"'") {
+		t.Fatal("generated SQL preview did not reflect the saved column comment")
+	}
+}
 
 func TestPDMSaveCollectsOnlySupportedEdits(t *testing.T) {
 	state := newState(t, "en-US")

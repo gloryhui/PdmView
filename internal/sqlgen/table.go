@@ -68,6 +68,24 @@ type Result struct {
 	Diagnostics []Diagnostic
 }
 
+// TablePreviewMode selects how comments are rendered in a table preview.
+type TablePreviewMode int
+
+const (
+	TablePreviewFull TablePreviewMode = iota
+	TablePreviewStandard
+	TablePreviewBare
+)
+
+type commentRenderMode uint8
+
+const (
+	renderLegacyComments commentRenderMode = iota
+	renderFullPreviewComments
+	renderStandardPreviewComments
+	renderBarePreviewComments
+)
+
 // HasErrors reports whether any diagnostic blocks SQL generation.
 func (result Result) HasErrors() bool {
 	return containsError(result.Diagnostics)
@@ -91,7 +109,23 @@ func GenerateTable(table pdm.Table) Result {
 	return Result{SQL: sql, Diagnostics: diagnostics}
 }
 
+// GenerateTablePreview creates one deterministic MySQL 8.0 CREATE TABLE
+// statement using the requested preview comment policy.
+func GenerateTablePreview(table pdm.Table, mode TablePreviewMode) Result {
+	_, sql, diagnostics := compileAndRenderTableWithComments(
+		table, previewCommentRenderMode(mode),
+	)
+	return Result{SQL: sql, Diagnostics: diagnostics}
+}
+
 func compileAndRenderTable(table pdm.Table) (compiledTable, string, []Diagnostic) {
+	return compileAndRenderTableWithComments(table, renderLegacyComments)
+}
+
+func compileAndRenderTableWithComments(
+	table pdm.Table,
+	comments commentRenderMode,
+) (compiledTable, string, []Diagnostic) {
 	compiled, diagnostics := compileTable(table)
 	defaults := make([]string, len(compiled.columns))
 	for offset, column := range compiled.columns {
@@ -104,7 +138,7 @@ func compileAndRenderTable(table pdm.Table) (compiledTable, string, []Diagnostic
 	if containsError(diagnostics) {
 		return compiled, "", diagnostics
 	}
-	return compiled, renderCreateTable(compiled, defaults), diagnostics
+	return compiled, renderCreateTable(compiled, defaults, comments), diagnostics
 }
 
 type compiledTable struct {
@@ -348,7 +382,11 @@ func (compiled *compiledTable) hasTail() bool {
 	return compiled.primary >= 0 || len(compiled.indexes) > 0
 }
 
-func renderCreateTable(table compiledTable, defaults []string) string {
+func renderCreateTable(
+	table compiledTable,
+	defaults []string,
+	comments commentRenderMode,
+) string {
 	var sql strings.Builder
 	sql.WriteString("CREATE TABLE ")
 	sql.WriteString(quoteIdentifier(table.identifier))
@@ -370,9 +408,9 @@ func renderCreateTable(table compiledTable, defaults []string) string {
 		if column.source.Identity != nil && *column.source.Identity {
 			sql.WriteString(" AUTO_INCREMENT")
 		}
-		if column.source.Comment.Present {
+		if comment, present := renderColumnComment(column.source, comments); present {
 			sql.WriteString(" COMMENT ")
-			sql.WriteString(quoteSQLString(column.source.Comment.Value))
+			sql.WriteString(quoteSQLString(comment))
 		}
 		if offset != len(table.columns)-1 || table.hasTail() {
 			sql.WriteByte(',')
@@ -395,19 +433,56 @@ func renderCreateTable(table compiledTable, defaults []string) string {
 	}
 	for offset, index := range table.indexes {
 		sql.WriteString("  ")
-		sql.WriteString(renderIndex(table, index))
+		sql.WriteString(renderIndex(table, index, comments))
 		if offset != len(table.indexes)-1 {
 			sql.WriteByte(',')
 		}
 		sql.WriteByte('\n')
 	}
 	sql.WriteString(") ENGINE=InnoDB")
-	if table.source.Comment.Present {
+	if comments.rendersObjectComments() && table.source.Comment.Present {
 		sql.WriteString(" COMMENT=")
 		sql.WriteString(quoteSQLString(table.source.Comment.Value))
 	}
 	sql.WriteByte(';')
 	return sql.String()
+}
+
+func previewCommentRenderMode(mode TablePreviewMode) commentRenderMode {
+	switch mode {
+	case TablePreviewStandard:
+		return renderStandardPreviewComments
+	case TablePreviewBare:
+		return renderBarePreviewComments
+	default:
+		return renderFullPreviewComments
+	}
+}
+
+func (mode commentRenderMode) rendersObjectComments() bool {
+	return mode == renderLegacyComments || mode == renderFullPreviewComments
+}
+
+func renderColumnComment(column pdm.Column, mode commentRenderMode) (string, bool) {
+	switch mode {
+	case renderBarePreviewComments:
+		return "", false
+	case renderLegacyComments, renderStandardPreviewComments:
+		return column.Comment.Value, column.Comment.Present
+	default:
+		hasName := strings.TrimSpace(column.Name) != ""
+		hasComment := column.Comment.Present
+		switch {
+		case hasName && hasComment:
+			return column.Name + "：" + column.Comment.Value, true
+		case hasName:
+			return column.Name, true
+		case column.Comment.Present:
+			return column.Comment.Value, true
+		default:
+			return "", false
+		}
+	}
 }
 
 func sqlIdentifier(code, name string) (string, bool, error) {

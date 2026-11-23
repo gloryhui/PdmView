@@ -22,6 +22,7 @@ const (
 	TablePropertiesIndexesKey     = "pdmview.table-properties.indexes"
 	TablePropertiesKeysKey        = "pdmview.table-properties.keys"
 	TablePropertiesPreviewKey     = "pdmview.table-properties.preview"
+	TablePropertiesSQLModeKey     = "pdmview.table-properties.preview.mode"
 	TablePropertiesSQLKey         = "pdmview.table-properties.preview.sql"
 	TablePropertiesCopyKey        = "pdmview.table-properties.preview.copy"
 	TablePropertiesCopyStatusKey  = "pdmview.table-properties.preview.status"
@@ -30,6 +31,12 @@ const (
 	TablePropertiesSaveKey        = "pdmview.table-properties.save"
 	tablePropertiesPadding        = 12
 )
+
+var tablePreviewModeKeys = [...]i18n.Key{
+	sqlgen.TablePreviewFull:     i18n.KeyPreviewSQL,
+	sqlgen.TablePreviewStandard: i18n.KeyTablePreviewStandardSQL,
+	sqlgen.TablePreviewBare:     i18n.KeyTablePreviewBareSQL,
+}
 
 func TablePropertiesTabKey(index int) string {
 	return "pdmview.table-properties.tab." + strconv.Itoa(index)
@@ -87,15 +94,17 @@ type tablePropertiesState struct {
 	columnsList       ui.ListState
 	indexesList       ui.ListState
 	keysList          ui.ListState
-	previewResult     sqlgen.Result
-	previewTableID    string
-	previewLoaded     bool
-	previewEditor     *editor.State
+	previewMode       int
+	previews          [len(tablePreviewModeKeys)]tableSQLPreview
 	diagnosticsScroll ui.ScrollState
-	copyFeedback      copyFeedback
 	copyToken         uint64
-	copiedVersion     uint64
-	copyVersion       uint64
+}
+
+type tableSQLPreview struct {
+	result        sqlgen.Result
+	editor        *editor.State
+	copyFeedback  copyFeedback
+	copiedVersion uint64
 }
 
 type tablePropertiesDraft struct {
@@ -609,82 +618,86 @@ func (w *Workspace) tablePropertiesPreview(
 	lang string,
 	detail TableDetail,
 ) {
-	w.ensureTablePropertiesPreview(detail)
-	result := w.tableProperties.previewResult
-	preview := w.tableProperties.previewEditor
+	properties := &w.tableProperties
+	preview := w.ensureTablePropertiesPreview(detail)
+	labels := make([]string, len(tablePreviewModeKeys))
+	for index, key := range tablePreviewModeKeys {
+		labels[index] = state.Text(key, nil)
+	}
 	ui.Column(c.Key(TablePropertiesPreviewKey)).FillWidth().Grow(1).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Segmented(c.Key(TablePropertiesSQLModeKey), &properties.previewMode, labels...).
+				Label(state.Text(i18n.KeyTablePreviewSQLMode, nil)).Lang(lang)
 			label := state.Text(i18n.KeyPreviewCopySQL, nil)
 			ui.Button(c, label).Key(TablePropertiesCopyKey).Label(label).Lang(lang).
-				Disabled(preview == nil || preview.Buffer.Len() == 0).
+				Disabled(preview.editor == nil || preview.editor.Buffer.Len() == 0).
 				OnClick(w.copyTablePropertiesSQL)
-			if status := w.tablePropertiesCopyStatus(state); status != "" {
+			if status := preview.copyStatus(state); status != "" {
 				ui.Text(c, status).Key(TablePropertiesCopyStatusKey).Grow(1).
 					FontSize(11).TextColor(theme.TextMuted).Lang(lang).Role(ui.RoleStatus)
 			}
 		})
-		w.tablePropertiesDiagnostics(c, state, theme, lang, result)
-		if preview != nil {
-			preview.Label = state.Text(i18n.KeyPreviewSQL, nil)
-			editor.View(c.Key(TablePropertiesSQLKey), preview).
+		w.tablePropertiesDiagnostics(c, state, theme, lang, preview.result)
+		if preview.editor != nil {
+			preview.editor.Label = state.Text(i18n.KeyPreviewSQLTab, nil)
+			editor.View(c.Key(TablePropertiesSQLKey), preview.editor).
 				Grow(1).FillWidth()
 		}
 	})
 }
 
-func (w *Workspace) ensureTablePropertiesPreview(detail TableDetail) {
-	if w.tableProperties.previewLoaded && w.tableProperties.previewTableID == detail.ID {
-		return
-	}
-	w.tableProperties.previewLoaded = true
-	w.tableProperties.previewTableID = detail.ID
-	w.tableProperties.previewResult = sqlgen.Result{}
-	w.tableProperties.previewEditor = nil
-	if w.detailIndex == nil {
-		return
+func (w *Workspace) ensureTablePropertiesPreview(detail TableDetail) *tableSQLPreview {
+	mode := w.tableProperties.previewMode
+	preview := &w.tableProperties.previews[mode]
+	if preview.editor != nil || w.detailIndex == nil {
+		return preview
 	}
 	table, ok := w.detailIndex.tables[detail.ID]
 	if !ok {
-		return
+		return preview
 	}
-	w.tableProperties.previewResult = sqlgen.GenerateTable(*table)
-	buffer := editor.NewBuffer(w.tableProperties.previewResult.SQL)
+	preview.result = sqlgen.GenerateTablePreview(*table, sqlgen.TablePreviewMode(mode))
+	buffer := editor.NewBuffer(preview.result.SQL)
 	buffer.SetLanguage(editor.LanguageFor("database.sql"))
-	w.tableProperties.previewEditor = &editor.State{
+	preview.editor = &editor.State{
 		Buffer:          buffer,
 		SoftWrap:        false,
 		KeepScrollbars:  true,
 		NoScrollPastEnd: true,
 	}
+	return preview
 }
 
 func (w *Workspace) copyTablePropertiesSQL() {
-	preview := w.tableProperties.previewEditor
-	if preview == nil || preview.Buffer.Len() == 0 {
+	properties := &w.tableProperties
+	mode := properties.previewMode
+	preview := &properties.previews[mode]
+	activeEditor := preview.editor
+	if activeEditor == nil || activeEditor.Buffer.Len() == 0 {
 		return
 	}
-	text := preview.Buffer.String()
-	version := preview.Buffer.Version()
-	w.tableProperties.copyToken++
-	token := w.tableProperties.copyToken
+	text := activeEditor.Buffer.String()
+	version := activeEditor.Buffer.Version()
+	properties.copyToken++
+	token := properties.copyToken
 	writer := w.clipboardWriter
 	feedback := copyFeedbackSucceeded
 	if writer == nil || writer(text) != nil {
 		feedback = copyFeedbackFailed
 	}
-	if token != w.tableProperties.copyToken || preview != w.tableProperties.previewEditor {
+	if token != properties.copyToken || mode != properties.previewMode || activeEditor != preview.editor {
 		return
 	}
-	w.tableProperties.copyFeedback = feedback
-	w.tableProperties.copiedVersion = version
+	preview.copyFeedback = feedback
+	preview.copiedVersion = version
 	w.notifyChanged()
 }
 
-func (w *Workspace) tablePropertiesCopyStatus(state *app.State) string {
-	if preview := w.tableProperties.previewEditor; preview == nil || preview.Buffer.Version() != w.tableProperties.copiedVersion {
+func (preview *tableSQLPreview) copyStatus(state *app.State) string {
+	if preview.editor == nil || preview.editor.Buffer.Version() != preview.copiedVersion {
 		return ""
 	}
-	switch w.tableProperties.copyFeedback {
+	switch preview.copyFeedback {
 	case copyFeedbackSucceeded:
 		return state.Text(i18n.KeyPreviewSQLCopied, nil)
 	case copyFeedbackFailed:

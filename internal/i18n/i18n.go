@@ -94,6 +94,9 @@ const (
 	KeyTablePropertiesTitle     Key = "table_properties.title"
 	KeyTablePropertiesGeneral   Key = "table_properties.general"
 	KeyTablePropertiesPreview   Key = "table_properties.preview"
+	KeyTablePreviewSQLMode      Key = "table_properties.sql_mode"
+	KeyTablePreviewStandardSQL  Key = "table_properties.sql_standard"
+	KeyTablePreviewBareSQL      Key = "table_properties.sql_bare"
 	KeyTablePropertiesClose     Key = "table_properties.close"
 	KeyTablePropertiesName      Key = "table_properties.name"
 	KeyTablePropertiesMandatory Key = "table_properties.mandatory"
@@ -231,6 +234,9 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesTitle:     {text: "Table properties"},
 		KeyTablePropertiesGeneral:   {text: "General"},
 		KeyTablePropertiesPreview:   {text: "Preview"},
+		KeyTablePreviewSQLMode:      {text: "SQL format"},
+		KeyTablePreviewStandardSQL:  {text: "Standard SQL"},
+		KeyTablePreviewBareSQL:      {text: "Bare SQL"},
 		KeyTablePropertiesClose:     {text: "Close"},
 		KeyTablePropertiesName:      {text: "Name"},
 		KeyPDMSave:                  {text: "Save"},
@@ -360,6 +366,9 @@ var resources = map[Locale]map[Key]message{
 		KeyTablePropertiesTitle:     {text: "表属性"},
 		KeyTablePropertiesGeneral:   {text: "常规"},
 		KeyTablePropertiesPreview:   {text: "预览"},
+		KeyTablePreviewSQLMode:      {text: "SQL 格式"},
+		KeyTablePreviewStandardSQL:  {text: "一般 SQL"},
+		KeyTablePreviewBareSQL:      {text: "裸 SQL"},
 		KeyTablePropertiesClose:     {text: "关闭"},
 		KeyTablePropertiesName:      {text: "名称"},
 		KeyPDMSave:                  {text: "保存"},

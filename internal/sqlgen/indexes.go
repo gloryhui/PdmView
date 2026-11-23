@@ -324,7 +324,11 @@ func (index compiledIndex) signature() string {
 	return signature.String()
 }
 
-func renderIndex(table compiledTable, index compiledIndex) string {
+func renderIndex(
+	table compiledTable,
+	index compiledIndex,
+	comments commentRenderMode,
+) string {
 	var sql strings.Builder
 	if index.unique {
 		sql.WriteString("UNIQUE KEY ")
@@ -352,7 +356,7 @@ func renderIndex(table compiledTable, index compiledIndex) string {
 	if index.explicitMethod {
 		sql.WriteString(" USING BTREE")
 	}
-	if index.comment.Present {
+	if comments.rendersObjectComments() && index.comment.Present {
 		sql.WriteString(" COMMENT ")
 		sql.WriteString(quoteSQLString(index.comment.Value))
 	}

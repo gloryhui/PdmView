@@ -68,8 +68,11 @@ func (w *Workspace) PublishPDMSaveResult(request *PDMSaveRequest, status i18n.Ke
 		w.refreshSelectedDetail()
 		if properties.open {
 			properties.detail, properties.hasDetail = w.detailIndex.resolve(properties.tableID)
-			if properties.previewEditor == nil || properties.previewEditor.Buffer.String() == properties.previewResult.SQL {
-				properties.previewLoaded = false
+			for index := range properties.previews {
+				preview := &properties.previews[index]
+				if preview.editor != nil && preview.editor.Buffer.String() == preview.result.SQL {
+					*preview = tableSQLPreview{}
+				}
 			}
 		}
 		w.clearCopyFeedback()

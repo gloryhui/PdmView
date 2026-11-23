@@ -146,13 +146,11 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	wantSQL := sqlgen.GenerateTable(*originalTable).SQL
-	if !workspace.tableProperties.previewLoaded || workspace.tableProperties.previewEditor == nil ||
-		workspace.tableProperties.previewEditor.ReadOnly ||
-		workspace.tableProperties.previewEditor.Buffer.String() != wantSQL {
+	wantSQL := sqlgen.GenerateTablePreview(*originalTable, sqlgen.TablePreviewFull).SQL
+	editor := workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor
+	if editor == nil || editor.ReadOnly || editor.Buffer.String() != wantSQL {
 		t.Fatalf("preview state = %+v", workspace.tableProperties)
 	}
-	editor := workspace.tableProperties.previewEditor
 	const draftSQL = "-- SQL draft\nSELECT 1;"
 	editor.Buffer.Set(draftSQL)
 	tester.Frame()
@@ -171,13 +169,12 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 
 	state.SelectLanguage(i18n.ZHCN)
 	tester.Frame()
-	for _, text := range []string{"常规", "字段", "索引", "键", "预览", "关闭", "复制 SQL"} {
+	for _, text := range []string{"常规", "字段", "索引", "键", "预览", "关闭", "复制 SQL", "完整 SQL", "一般 SQL", "裸 SQL"} {
 		if !tester.HasText(text) {
 			t.Fatalf("missing Chinese table properties text %q: %q", text, tester.Texts())
 		}
 	}
-	if workspace.tableProperties.previewEditor != editor ||
-		workspace.tableProperties.previewEditor.Buffer.String() != draftSQL {
+	if workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != editor || editor.Buffer.String() != draftSQL {
 		t.Fatal("locale change reset the SQL draft")
 	}
 	if got := workspace.TablePropertiesTitle(state); got != "表属性 — Orders" {
@@ -187,7 +184,7 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 	workspace.OpenTableProperties("other")
 	tester.Frame()
 	if workspace.tableProperties.tableID != "other" || workspace.tableProperties.tab != 0 ||
-		workspace.tableProperties.previewLoaded || !workspace.tableProperties.hasDetail {
+		workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != nil || !workspace.tableProperties.hasDetail {
 		t.Fatalf("new table retained old state: %+v", workspace.tableProperties)
 	}
 	if !tester.HasText("常规") {
@@ -202,7 +199,7 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 		t.Fatal("close button left the modal open")
 	}
 	if workspace.tableProperties.tableID != "" || workspace.tableProperties.tab != 0 ||
-		workspace.tableProperties.previewLoaded || workspace.tableProperties.hasDetail {
+		workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != nil || workspace.tableProperties.hasDetail {
 		t.Fatalf("close did not clear table properties: %+v", workspace.tableProperties)
 	}
 	workspace.OpenTableProperties("orders")
@@ -214,6 +211,76 @@ func TestTablePropertiesWindowTabsRowsPreviewAndLocale(t *testing.T) {
 	tester.Frame()
 	if workspace.tableProperties.open {
 		t.Fatal("Escape left the modal open")
+	}
+}
+
+func TestTablePropertiesSQLModesSwitchAndCopy(t *testing.T) {
+	state := newState(t, "zh-Hans-CN")
+	document := tablePropertiesDocument()
+	table := &document.Model.Contents.Packages[0].Contents.Tables[0]
+	table.Columns[0].Name = "订单编号"
+	table.Columns[0].Comment = pdm.OptionalText{Present: true, Value: "外部单号"}
+	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(document))
+	workspace.OpenTableProperties("orders")
+	var copied string
+	workspace.SetClipboardWriter(func(text string) error {
+		copied = text
+		return nil
+	})
+	tester := ui.NewTester(workspace.TablePropertiesView(state), 640, 480)
+	if err := tester.Click("预览"); err != nil {
+		t.Fatal(err)
+	}
+	if choice, ok := tester.AccessByRole(ui.RoleRadio, "完整 SQL"); !ok || !choice.Checked {
+		t.Fatalf("Full SQL should be selected by default: %+v", choice)
+	}
+	for _, mode := range []struct {
+		label string
+		want  []string
+		omit  []string
+	}{
+		{label: "完整 SQL", want: []string{"COMMENT '订单编号：外部单号'", "COMMENT='Order records'"}},
+		{label: "一般 SQL", want: []string{"COMMENT '外部单号'"}, omit: []string{"订单编号", "Order records"}},
+		{label: "裸 SQL", omit: []string{"COMMENT"}},
+	} {
+		t.Run(mode.label, func(t *testing.T) {
+			if err := tester.Click(mode.label); err != nil {
+				t.Fatal(err)
+			}
+			if choice, ok := tester.AccessByRole(ui.RoleRadio, mode.label); !ok || !choice.Checked {
+				t.Fatalf("SQL mode not selected: %+v", choice)
+			}
+			preview, ok := tester.AccessByRole(ui.RoleTextField, "SQL 预览")
+			if !ok || !strings.Contains(preview.Value, "CREATE TABLE `orders`") {
+				t.Fatal("SQL preview is missing CREATE TABLE")
+			}
+			for _, text := range mode.want {
+				if !strings.Contains(preview.Value, text) {
+					t.Fatalf("SQL preview missing %q", text)
+				}
+			}
+			for _, text := range mode.omit {
+				if strings.Contains(preview.Value, text) {
+					t.Fatalf("SQL preview contains %q", text)
+				}
+			}
+			if err := tester.Click("复制 SQL"); err != nil {
+				t.Fatal(err)
+			}
+			if copied != preview.Value {
+				t.Fatal("copied SQL differs from the selected preview")
+			}
+			if mode.label == "完整 SQL" {
+				workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor.Buffer.Set("SELECT 42;")
+			}
+		})
+	}
+	if err := tester.Click("完整 SQL"); err != nil {
+		t.Fatal(err)
+	}
+	if preview, ok := tester.AccessByRole(ui.RoleTextField, "SQL 预览"); !ok || preview.Value != "SELECT 42;" {
+		t.Fatal("switching SQL modes discarded an edited preview")
 	}
 }
 
@@ -251,22 +318,22 @@ func TestTablePropertiesClearsForNewDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
-	if !workspace.tableProperties.previewLoaded {
+	if workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor == nil {
 		t.Fatal("preview was not generated")
 	}
 
 	token := workspace.BeginOpen()
-	if workspace.tableProperties.open || workspace.tableProperties.previewLoaded ||
+	if workspace.tableProperties.open || workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != nil ||
 		workspace.tableProperties.tableID != "" {
 		t.Fatalf("new open retained table properties: %+v", workspace.tableProperties)
 	}
 	workspace.PublishBoards(token, BuildBoardSet(tablePropertiesDocument()))
-	if workspace.tableProperties.open || workspace.tableProperties.previewLoaded {
+	if workspace.tableProperties.open || workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != nil {
 		t.Fatalf("new document retained table properties: %+v", workspace.tableProperties)
 	}
 	workspace.OpenTableProperties("orders")
 	if !workspace.tableProperties.open || workspace.tableProperties.tab != 0 ||
-		workspace.tableProperties.previewLoaded {
+		workspace.tableProperties.previews[sqlgen.TablePreviewFull].editor != nil {
 		t.Fatalf("same table ID reused old preview: %+v", workspace.tableProperties)
 	}
 }
