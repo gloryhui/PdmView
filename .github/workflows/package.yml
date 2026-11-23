@@ -1,0 +1,119 @@
+name: Package PdmView
+run-name: Package PdmView ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version in x.y.z form
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  GOTOOLCHAIN: local
+
+jobs:
+  packages:
+    name: Package ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-15
+            make-target: package-macos
+            extension: zip
+          - target: windows-amd64
+            runner: macos-15
+            make-target: package-windows
+            extension: zip
+          - target: linux-amd64
+            runner: ubuntu-24.04
+            make-target: package-linux
+            extension: deb
+    runs-on: ${{ matrix.runner }}
+    env:
+      TARGET: ${{ matrix.target }}
+      MAKE_TARGET: ${{ matrix.make-target }}
+      EXTENSION: ${{ matrix.extension }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Build archive and checksum
+        shell: bash
+        run: |
+          make "$MAKE_TARGET" VERSION="$VERSION"
+          file="PdmView-$VERSION-$TARGET.$EXTENSION"
+          mkdir "$RUNNER_TEMP/pdmview-artifact"
+          cp ".out/release/$VERSION/$TARGET/$file" "$RUNNER_TEMP/pdmview-artifact/"
+          cd "$RUNNER_TEMP/pdmview-artifact"
+          shasum -a 256 "$file" > "$file.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: PdmView-${{ inputs.version }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/pdmview-artifact/
+          if-no-files-found: error
+
+  source:
+    name: Archive corresponding source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Archive project and Go dependencies
+        shell: bash
+        env:
+          GOMODCACHE: ${{ runner.temp }}/pdmview-source-modules
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must be in x.y.z form"
+            exit 1
+          fi
+
+          source_name="PdmView-$VERSION-source"
+          mkdir "$RUNNER_TEMP/pdmview-source" "$RUNNER_TEMP/pdmview-artifact" "$RUNNER_TEMP/pdmview-go-mod"
+          git archive --prefix="$source_name/" HEAD | tar -xf - -C "$RUNNER_TEMP/pdmview-source"
+          source_root="$RUNNER_TEMP/pdmview-source/$source_name"
+          cp "$source_root/go.mod" "$source_root/go.sum" "$RUNNER_TEMP/pdmview-go-mod/"
+          cd "$RUNNER_TEMP/pdmview-go-mod"
+          go mod download
+
+          # Include complete module sources and metadata without shared cache files.
+          cd "$source_root"
+          cache="$GOMODCACHE/cache/download"
+          mkdir go-module-proxy
+          find "$cache" -type f -path '*/@v/*' \( -name '*.zip' -o -name '*.mod' -o -name '*.info' \) -print0 |
+            while IFS= read -r -d '' file; do
+              dest="go-module-proxy/${file#"$cache"/}"
+              mkdir -p "$(dirname "$dest")"
+              cp "$file" "$dest"
+            done
+
+          export GOMODCACHE="$RUNNER_TEMP/pdmview-source-offline"
+          export GOPROXY="file://$source_root/go-module-proxy" GOSUMDB=off CGO_ENABLED=0
+          GOOS=darwin GOARCH=arm64 go list -deps -mod=readonly -tags mygo_noinspector ./cmd/pdmview >/dev/null
+          GOOS=windows GOARCH=amd64 go list -deps -mod=readonly -tags mygo_noinspector,mygo_nowebview ./cmd/pdmview >/dev/null
+          GOOS=linux GOARCH=amd64 go list -deps -mod=readonly -tags mygo_noinspector ./cmd/pdmview >/dev/null
+
+          cd "$RUNNER_TEMP/pdmview-artifact"
+          tar -czf "$source_name.tar.gz" -C "$RUNNER_TEMP/pdmview-source" "$source_name"
+          shasum -a 256 "$source_name.tar.gz" > "$source_name.tar.gz.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: PdmView-${{ inputs.version }}-source
+          path: ${{ runner.temp }}/pdmview-artifact/
+          if-no-files-found: error

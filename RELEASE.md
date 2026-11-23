@@ -17,16 +17,31 @@ make package-macos VERSION=1.0.0
 
 2026-11-21 在 macOS Apple Silicon 上构建本地候选。平台验收范围见 [Phase 10 验收](docs/PHASE_10_ACCEPTANCE.md)。完整 Gate 5 待通过。
 
+## GitHub Actions 构建与发行
+
+将 [Package PdmView](.github/workflows/package.yml) 同步到 GitHub 默认分支后，在 Actions 中选择要构建的提交所在分支或标签，手动运行工作流并输入 `x.y.z` 版本号。工作流在私有仓库中也能运行。
+
+| 构建目标 | 发行文件 |
+| --- | --- |
+| macOS Apple Silicon | `PdmView-<版本>-macos-arm64.zip`，含 `PdmView.app` 和 ad hoc 签名 |
+| Windows x64 | `PdmView-<版本>-windows-amd64.zip`，含 `PdmView.exe` |
+| Linux x64 | `PdmView-<版本>-linux-amd64.deb`，目标为 Ubuntu 24.04 LTS 桌面版，可用 `sudo apt install ./文件名.deb` 安装 |
+| 对应源码 | `PdmView-<版本>-source.tar.gz`，含构建提交的源码、脚本和 Go 依赖模块源码 |
+
+每个文件附 SHA-256 校验文件。下载 Actions 产物进行验收，并记录运行对应的提交 SHA。验收后，用该提交创建发行标签，将包、校验文件和对应源码一起附到 GitHub Release。macOS 包尚未完成 Apple 公证，Windows 和 Ubuntu 的桌面验收须单独记录。
+
 ## 构建与校验
 
-从仓库根目录运行。两个打包命令目前均在 macOS 上执行。
+从仓库根目录运行。macOS 和 Windows 打包命令均在 macOS 上执行。
 
 ```sh
 make package-macos VERSION=0.1.0
 make package-windows VERSION=0.1.0
 ```
 
-产物在 `.out/release/0.1.0/` 下。脚本输出本次生成的完整路径。已有同版本产物时会为新构建分配独立目录。
+在 Ubuntu 24.04 LTS x64 上可运行 `make package-linux VERSION=x.y.z` 构建 `.deb`，其中 `x.y.z` 替换为发行版本号。
+
+产物在 `.out/release/<版本>/` 下。脚本输出本次生成的完整路径。已有同版本产物时会为新构建分配独立目录。
 
 | 目标 | 归档与启动入口 | 签名与验收范围 |
 |---|---|---|
@@ -45,7 +60,7 @@ macOS 上可用 `shasum -a 256` 核对归档，并在解压后运行 `codesign -
 
 ## 依赖与许可证
 
-PdmView 自有代码采用 GNU GPL v3.0（仅第 3 版，`GPL-3.0-only`），正文见 [LICENSE](LICENSE)。采用新打包脚本生成的 macOS 归档在 `PdmView.app/Contents/Resources/LICENSE` 提供许可文本，Windows 归档将 `LICENSE` 放在 `PdmView.exe` 旁边。
+PdmView 自有代码采用 GNU GPL v3.0（仅第 3 版，`GPL-3.0-only`），正文见 [LICENSE](LICENSE)。macOS 归档在 `PdmView.app/Contents/Resources/LICENSE` 提供许可文本，Windows 归档将 `LICENSE` 放在 `PdmView.exe` 旁边，Linux 包安装到 `/usr/share/doc/pdmview/LICENSE`。旧版归档内容以上方构建记录为准。
 
 正式候选使用 Go 1.27.4 和 MyGo v0.10.0。Lobe MyGo 只用于 Phase 0 的隔离验证。
 
@@ -58,11 +73,13 @@ PdmView 自有代码采用 GNU GPL v3.0（仅第 3 版，`GPL-3.0-only`），正
 | x/image、x/text | v0.46.0、v0.43.0 | BSD-3-Clause 和 PATENTS |
 | x/net | v0.59.0 | Windows 候选实际链接，附 BSD-3-Clause 和 PATENTS |
 
-macOS 第三方许可证位于应用包的 `Contents/Resources/ThirdPartyNotices/`，Windows 第三方许可证位于 ZIP 根目录的 `ThirdPartyNotices/`。其中的 `modules.txt` 列出版本和原文校验和。归档按清单验证，排除 PDM、测试夹具和本地日志。
+macOS 第三方许可证位于应用包的 `Contents/Resources/ThirdPartyNotices/`，Windows 位于 ZIP 根目录的 `ThirdPartyNotices/`，Linux 安装后位于 `/usr/share/doc/pdmview/ThirdPartyNotices/`。其中的 `modules.txt` 列出版本和原文校验和。二进制发行包排除 PDM、测试夹具和本地日志。
 
 ### 公开发行的对应源码
 
 从确定的 Git 提交构建，并在二进制下载旁提供可免费获取的同版本对应源码。源码归档应包含该提交的项目源码、必要的构建与打包脚本，以及构建该发行包所需的第三方依赖源码与许可证。按 `go.mod`、`go.sum` 和各平台发行包内的 `modules.txt` 核对依赖版本，并用发行标签记录源码提交。历史构建的文件与校验和以上方版本记录为准。
+
+Actions 生成的源码归档附带 `go-module-proxy/`。解压后，在源码根目录可以将 `GOPROXY` 指向 `file://` 加该目录的绝对路径，使用随包模块构建。离线时设置 `GOSUMDB=off`，Go 仍会核对 `go.sum` 中已记录的校验和。系统图形库和构建工具按对应平台的要求准备。
 
 ## Windows 本机验收交接
 
