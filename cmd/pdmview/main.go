@@ -73,6 +73,9 @@ func showMainWindow() {
 	var properties *mygo.Window
 	var refresh func()
 	refresh = func() {
+		if mygo.Theme.Source() != state.Theme() {
+			mygo.Theme.SetSource(state.Theme())
+		}
 		mygo.App.SetMenu(state.Menu(refresh))
 		if win != nil {
 			win.Invalidate()

@@ -13,6 +13,10 @@ const (
 	MenuIDLanguage     = "pdmview.menu.language"
 	MenuIDLanguageZHCN = "pdmview.language.zh-CN"
 	MenuIDLanguageEN   = "pdmview.language.en"
+	MenuIDTheme        = "pdmview.menu.theme"
+	MenuIDThemeSystem  = "pdmview.theme.system"
+	MenuIDThemeLight   = "pdmview.theme.light"
+	MenuIDThemeDark    = "pdmview.theme.dark"
 )
 
 type Status uint8
@@ -22,11 +26,13 @@ const (
 	StatusSaved
 	StatusSaveFailed
 	StatusLoadFailed
+	StatusThemeSaveFailed
 )
 
 type State struct {
 	store  *Store
 	locale i18n.Locale
+	theme  mygo.ThemeSource
 	status Status
 }
 
@@ -37,6 +43,7 @@ func New(store *Store, systemTag string) *State {
 	state := &State{
 		store:  store,
 		locale: i18n.Resolve("", systemTag),
+		theme:  mygo.ThemeSystem,
 		status: StatusLanguage,
 	}
 	snapshot, err := store.Load()
@@ -49,11 +56,18 @@ func New(store *Store, systemTag string) *State {
 		saved = string(snapshot.Language)
 	}
 	state.locale = i18n.Resolve(saved, systemTag)
+	if snapshot.Theme != "" {
+		state.theme = snapshot.Theme
+	}
 	return state
 }
 
 func (s *State) Locale() i18n.Locale {
 	return s.locale
+}
+
+func (s *State) Theme() mygo.ThemeSource {
+	return s.theme
 }
 
 func (s *State) Status() Status {
@@ -77,6 +91,8 @@ func (s *State) StatusText() string {
 		return s.Text(i18n.KeyStatusSaveFailed, params)
 	case StatusLoadFailed:
 		return s.Text(i18n.KeyStatusLoadFailed, params)
+	case StatusThemeSaveFailed:
+		return s.Text(i18n.KeyThemeSaveFailed, nil)
 	default:
 		return s.Text(i18n.KeyStatusLanguage, params)
 	}
@@ -94,6 +110,15 @@ func (s *State) SelectLanguage(locale i18n.Locale) {
 	s.status = StatusSaved
 }
 
+func (s *State) selectTheme(theme mygo.ThemeSource) {
+	s.theme = theme
+	if err := s.store.SaveTheme(theme); err != nil {
+		s.status = StatusThemeSaveFailed
+		return
+	}
+	s.status = StatusLanguage
+}
+
 func (s *State) Menu(onChanged func()) *mygo.Menu {
 	brand := s.Text(i18n.KeyAppBrand, nil)
 	selectLanguage := func(locale i18n.Locale) func(*mygo.MenuItem, *mygo.Window) {
@@ -102,6 +127,17 @@ func (s *State) Menu(onChanged func()) *mygo.Menu {
 			if onChanged != nil {
 				onChanged()
 			}
+		}
+	}
+	themeItem := func(id string, key i18n.Key, theme mygo.ThemeSource) *mygo.MenuItem {
+		return &mygo.MenuItem{
+			ID: id, Label: s.Text(key, nil), Type: mygo.MenuItemRadio, Checked: s.theme == theme,
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				s.selectTheme(theme)
+				if onChanged != nil {
+					onChanged()
+				}
+			},
 		}
 	}
 
@@ -121,6 +157,15 @@ func (s *State) Menu(onChanged func()) *mygo.Menu {
 			ID:    MenuIDSettings,
 			Label: s.Text(i18n.KeyMenuSettings, nil),
 			Submenu: []*mygo.MenuItem{
+				{
+					ID:    MenuIDTheme,
+					Label: s.Text(i18n.KeyMenuTheme, nil),
+					Submenu: []*mygo.MenuItem{
+						themeItem(MenuIDThemeSystem, i18n.KeyThemeSystem, mygo.ThemeSystem),
+						themeItem(MenuIDThemeLight, i18n.KeyThemeLight, mygo.ThemeLight),
+						themeItem(MenuIDThemeDark, i18n.KeyThemeDark, mygo.ThemeDark),
+					},
+				},
 				{
 					ID:    MenuIDLanguage,
 					Label: s.Text(i18n.KeyMenuLanguage, nil),

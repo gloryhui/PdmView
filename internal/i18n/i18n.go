@@ -14,6 +14,11 @@ type Key string
 const (
 	KeyAppBrand          Key = "app.brand"
 	KeyMenuSettings      Key = "menu.settings"
+	KeyMenuTheme         Key = "menu.theme"
+	KeyThemeSystem       Key = "theme.system"
+	KeyThemeLight        Key = "theme.light"
+	KeyThemeDark         Key = "theme.dark"
+	KeyThemeSaveFailed   Key = "status.theme_save_failed"
 	KeyMenuLanguage      Key = "menu.language"
 	KeyMenuQuit          Key = "menu.quit"
 	KeyLanguageZHCN      Key = "language.zh-CN"
@@ -144,6 +149,11 @@ var resources = map[Locale]map[Key]message{
 	EN: {
 		KeyAppBrand:          {text: "PdmView"},
 		KeyMenuSettings:      {text: "Settings"},
+		KeyMenuTheme:         {text: "Appearance"},
+		KeyThemeSystem:       {text: "System"},
+		KeyThemeLight:        {text: "Light"},
+		KeyThemeDark:         {text: "Dark"},
+		KeyThemeSaveFailed:   {text: "Could not save the appearance preference. It applies to this session."},
 		KeyMenuLanguage:      {text: "Language"},
 		KeyMenuQuit:          {text: "Quit {app}", params: []string{"app"}},
 		KeyLanguageZHCN:      {text: "简体中文"},
@@ -266,6 +276,11 @@ var resources = map[Locale]map[Key]message{
 	ZHCN: {
 		KeyAppBrand:          {text: "PdmView"},
 		KeyMenuSettings:      {text: "设置"},
+		KeyMenuTheme:         {text: "外观"},
+		KeyThemeSystem:       {text: "跟随系统"},
+		KeyThemeLight:        {text: "亮色"},
+		KeyThemeDark:         {text: "暗色"},
+		KeyThemeSaveFailed:   {text: "外观偏好保存失败，本次会话继续使用所选主题。"},
 		KeyMenuLanguage:      {text: "语言"},
 		KeyMenuQuit:          {text: "退出 {app}", params: []string{"app"}},
 		KeyLanguageZHCN:      {text: "简体中文"},

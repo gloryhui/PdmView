@@ -188,3 +188,28 @@ func TestMenuLabelsIDsAndCheckedState(t *testing.T) {
 		t.Fatalf("Chinese checked state = %+v", item)
 	}
 }
+
+func TestThemeMenuRestoresPreferenceAndPreservesLanguage(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "preferences.json"))
+	state := New(store, "zh-Hans")
+	state.SelectLanguage(i18n.EN)
+	changed := 0
+	menu := state.Menu(func() { changed++ })
+	if !menu.ItemByID(MenuIDThemeSystem).Checked {
+		t.Fatal("expected the system appearance to be selected by default")
+	}
+	menu.ItemByID(MenuIDThemeLight).Click(nil, nil)
+	if changed != 1 || state.Theme() != mygo.ThemeLight {
+		t.Fatalf("selection: refreshes=%d theme=%q", changed, state.Theme())
+	}
+	reloaded := New(store, "zh-Hans")
+	menu = reloaded.Menu(nil)
+	if reloaded.Locale() != i18n.EN || !menu.ItemByID(MenuIDThemeLight).Checked || menu.ItemByID(MenuIDThemeSystem).Checked {
+		t.Fatalf("reloaded choices: locale=%q theme=%q", reloaded.Locale(), reloaded.Theme())
+	}
+	menu.ItemByID(MenuIDThemeDark).Click(nil, nil)
+	reloaded.SelectLanguage(i18n.ZHCN)
+	if got := New(store, "en").Theme(); got != mygo.ThemeDark {
+		t.Fatalf("language change dropped the selected theme: %q", got)
+	}
+}

@@ -9,12 +9,15 @@ import (
 	"path/filepath"
 
 	"pdmview/internal/i18n"
+
+	"github.com/egoist/mygo"
 )
 
 const (
 	configDirectory = "PdmView"
 	preferencesFile = "preferences.json"
 	languageField   = "language"
+	themeField      = "theme"
 )
 
 var (
@@ -27,6 +30,7 @@ type Snapshot struct {
 	Values      map[string]json.RawMessage
 	Language    i18n.Locale
 	HasLanguage bool
+	Theme       mygo.ThemeSource
 }
 
 type Store struct {
@@ -84,6 +88,10 @@ func (s *Store) Load() (Snapshot, error) {
 			}
 		}
 	}
+	var theme mygo.ThemeSource
+	if rawTheme, ok := values[themeField]; ok && json.Unmarshal(rawTheme, &theme) == nil && validTheme(theme) {
+		snapshot.Theme = theme
+	}
 	return snapshot, nil
 }
 
@@ -91,6 +99,21 @@ func (s *Store) Save(locale i18n.Locale) error {
 	if !locale.Valid() {
 		return fmt.Errorf("preferences: invalid language %q", locale)
 	}
+	return s.saveField(languageField, string(locale))
+}
+
+func (s *Store) SaveTheme(theme mygo.ThemeSource) error {
+	if !validTheme(theme) {
+		return fmt.Errorf("preferences: invalid theme %q", theme)
+	}
+	return s.saveField(themeField, string(theme))
+}
+
+func validTheme(theme mygo.ThemeSource) bool {
+	return theme == mygo.ThemeSystem || theme == mygo.ThemeLight || theme == mygo.ThemeDark
+}
+
+func (s *Store) saveField(field, value string) error {
 	if s.path == "" {
 		return ErrPreferencesPath
 	}
@@ -102,11 +125,11 @@ func (s *Store) Save(locale i18n.Locale) error {
 	for key, value := range snapshot.Values {
 		values[key] = value
 	}
-	encodedLanguage, err := json.Marshal(string(locale))
+	encoded, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("preferences: encode language: %w", err)
+		return fmt.Errorf("preferences: encode %s: %w", field, err)
 	}
-	values[languageField] = encodedLanguage
+	values[field] = encoded
 	data, err := json.MarshalIndent(values, "", "  ")
 	if err != nil {
 		return fmt.Errorf("preferences: encode document: %w", err)
