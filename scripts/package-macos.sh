@@ -7,6 +7,7 @@ VERSION=${VERSION-0.1.0}
 APP_NAME=PdmView
 ICON_NAME="$APP_NAME.icns"
 ICON_SOURCE="$ROOT/assets/$ICON_NAME"
+LICENSE_SOURCE="$ROOT/LICENSE"
 OUT="$ROOT/.out/release"
 
 die() {
@@ -25,6 +26,7 @@ printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
 [ "$(uname -s)" = Darwin ] || die "macOS is required for app-bundle signing and ditto"
 command -v "$GO" >/dev/null 2>&1 || die "Go command not found: $GO"
 [ -s "$ICON_SOURCE" ] || die "app icon missing or empty: $ICON_SOURCE"
+[ -s "$LICENSE_SOURCE" ] || die "repository license missing or empty: $LICENSE_SOURCE"
 
 VERSION_DIR="$OUT/$VERSION"
 BASE_OUTPUT="$VERSION_DIR/macos-arm64"
@@ -75,6 +77,7 @@ chmod 755 "$BINARY"
 
 sh "$ROOT/scripts/package-notices.sh" macos "$NOTICES" "$BINARY" "$AUDIT"
 cp "$ICON_SOURCE" "$RESOURCES/$ICON_NAME"
+cp "$LICENSE_SOURCE" "$RESOURCES/LICENSE"
 
 cat >"$CONTENTS/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -134,6 +137,7 @@ plutil -lint "$CONTENTS/Info.plist" >/dev/null
 Contents/Info.plist
 Contents/MacOS/PdmView
 Contents/PkgInfo
+Contents/Resources/LICENSE
 EOF
 	printf 'Contents/Resources/%s\n' "$ICON_NAME"
 	while IFS= read -r name; do
@@ -188,6 +192,7 @@ PdmView.app/Contents/Info.plist
 PdmView.app/Contents/MacOS/PdmView
 PdmView.app/Contents/PkgInfo
 PdmView.app/Contents/_CodeSignature/CodeResources
+PdmView.app/Contents/Resources/LICENSE
 EOF
 	printf 'PdmView.app/Contents/Resources/%s\n' "$ICON_NAME"
 	while IFS= read -r name; do
@@ -197,6 +202,9 @@ EOF
 LC_ALL=C sort "$AUDIT/zip-expected.txt" >"$AUDIT/zip-expected.sorted.txt"
 cmp -s "$AUDIT/zip-expected.sorted.txt" "$AUDIT/zip-regular.txt" ||
 	die "zip regular files do not match the exact whitelist"
+unzip -p "$STAGE/$ZIP_NAME" "PdmView.app/Contents/Resources/LICENSE" |
+	cmp -s - "$LICENSE_SOURCE" ||
+	die "zip LICENSE does not match the repository license"
 cat >"$AUDIT/zip-expected-dirs.txt" <<'EOF'
 PdmView.app/
 PdmView.app/Contents/

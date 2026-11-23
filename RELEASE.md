@@ -45,6 +45,8 @@ macOS 上可用 `shasum -a 256` 核对归档，并在解压后运行 `codesign -
 
 ## 依赖与许可证
 
+PdmView 自有代码采用 GNU GPL v3.0（仅第 3 版，`GPL-3.0-only`），正文见 [LICENSE](LICENSE)。采用新打包脚本生成的 macOS 归档在 `PdmView.app/Contents/Resources/LICENSE` 提供许可文本，Windows 归档将 `LICENSE` 放在 `PdmView.exe` 旁边。
+
 正式候选使用 Go 1.27.4 和 MyGo v0.10.0。Lobe MyGo 只用于 Phase 0 的隔离验证。
 
 | 组件 | 版本 | 随包许可证 |
@@ -56,7 +58,11 @@ macOS 上可用 `shasum -a 256` 核对归档，并在解压后运行 `codesign -
 | x/image、x/text | v0.46.0、v0.43.0 | BSD-3-Clause 和 PATENTS |
 | x/net | v0.59.0 | Windows 候选实际链接，附 BSD-3-Clause 和 PATENTS |
 
-macOS 许可证位于应用包的 `Contents/Resources/ThirdPartyNotices/`，Windows 许可证位于 ZIP 中同级的 `ThirdPartyNotices/`。其中的 `modules.txt` 列出版本和原文校验和。归档按清单验证，仅含应用和依赖声明，排除 PDM、测试夹具和本地日志。
+macOS 第三方许可证位于应用包的 `Contents/Resources/ThirdPartyNotices/`，Windows 第三方许可证位于 ZIP 根目录的 `ThirdPartyNotices/`。其中的 `modules.txt` 列出版本和原文校验和。归档按清单验证，排除 PDM、测试夹具和本地日志。
+
+### 公开发行的对应源码
+
+从确定的 Git 提交构建，并在二进制下载旁提供可免费获取的同版本对应源码。源码归档应包含该提交的项目源码、必要的构建与打包脚本，以及构建该发行包所需的第三方依赖源码与许可证。按 `go.mod`、`go.sum` 和各平台发行包内的 `modules.txt` 核对依赖版本，并用发行标签记录源码提交。历史构建的文件与校验和以上方版本记录为准。
 
 ## Windows 本机验收交接
 

@@ -5,6 +5,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 GO=${GO:-go}
 VERSION=${VERSION-0.1.0}
 APP_NAME=PdmView
+LICENSE_SOURCE="$ROOT/LICENSE"
 OUT="$ROOT/.out/release"
 
 die() {
@@ -22,6 +23,7 @@ printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
 
 [ "$(uname -s)" = Darwin ] || die "macOS is required for ZIP/PE verification"
 command -v "$GO" >/dev/null 2>&1 || die "Go command not found: $GO"
+[ -s "$LICENSE_SOURCE" ] || die "repository license missing or empty: $LICENSE_SOURCE"
 
 VERSION_DIR="$OUT/$VERSION"
 BASE_OUTPUT="$VERSION_DIR/windows-amd64"
@@ -107,11 +109,12 @@ printf 'WebView2 markers: none\n' >"$AUDIT/webview2.txt"
 NOTICES="$STAGE/ThirdPartyNotices"
 mkdir "$NOTICES"
 sh "$ROOT/scripts/package-notices.sh" windows "$NOTICES" "$STAGE/$APP_NAME.exe" "$AUDIT"
+cp "$LICENSE_SOURCE" "$STAGE/LICENSE"
 
 EXE_SHA=$(shasum -a 256 "$STAGE/$APP_NAME.exe" | awk '{ print $1 }')
 (
 	cd "$STAGE"
-	/usr/bin/zip -X -q -r "$ZIP_NAME" "$APP_NAME.exe" ThirdPartyNotices
+	/usr/bin/zip -X -q -r "$ZIP_NAME" "$APP_NAME.exe" LICENSE ThirdPartyNotices
 )
 unzip -t "$STAGE/$ZIP_NAME" >"$AUDIT/unzip-test.txt" ||
 	die "zip integrity check failed"
@@ -123,6 +126,7 @@ if awk -F '\t' '$1 != "-" && $1 != "d" { found = 1 } END { exit found ? 0 : 1 }'
 fi
 {
 	printf '%s\n' "$APP_NAME.exe"
+	printf '%s\n' "LICENSE"
 	while IFS= read -r name; do
 		printf 'ThirdPartyNotices/%s\n' "$name"
 	done <"$AUDIT/notices-files.txt"
@@ -141,6 +145,10 @@ cmp -s "$AUDIT/zip-expected-dirs.sorted.txt" "$AUDIT/zip-dirs.txt" ||
 
 ZIP_EXE_SHA=$(unzip -p "$STAGE/$ZIP_NAME" "$APP_NAME.exe" | shasum -a 256 | awk '{ print $1 }')
 [ "$EXE_SHA" = "$ZIP_EXE_SHA" ] || die "zip payload hash does not match the executable"
+LICENSE_SHA=$(shasum -a 256 "$LICENSE_SOURCE" | awk '{ print $1 }')
+ZIP_LICENSE_SHA=$(unzip -p "$STAGE/$ZIP_NAME" LICENSE | shasum -a 256 | awk '{ print $1 }')
+[ "$LICENSE_SHA" = "$ZIP_LICENSE_SHA" ] ||
+	die "zip LICENSE hash does not match the repository license"
 while IFS= read -r name; do
 	zip_notice_sha=$(unzip -p "$STAGE/$ZIP_NAME" "ThirdPartyNotices/$name" |
 		shasum -a 256 | awk '{ print $1 }')
