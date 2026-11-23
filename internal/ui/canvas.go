@@ -45,6 +45,7 @@ type canvasView struct {
 	initialFit       bool
 	prepareAfterFit  bool
 	cameraTween      *cameraTween
+	focusNextFrame   bool
 	onTableSelection func(string)
 	onTableOpen      func(string)
 }
@@ -112,8 +113,15 @@ func (view *canvasView) view(c *ui.Context, state *app.State, theme *ui.Theme, l
 					Label(state.Text(i18n.KeyResetView, nil)).
 					Disabled(!hasBoard).OnClick(view.resetView)
 			})
-		canvas := ui.Box(c).Grow(1).FillWidth().Clip().Key(CanvasKey).Label(heading).
-			HandleInput(view.handleInput).Draw(view.draw)
+		canvas := ui.Box(c).Grow(1).FillWidth().Clip().Key(CanvasKey).Label(heading)
+		if hasBoard {
+			canvas.TabStop(false)
+		}
+		if view.focusNextFrame {
+			canvas.Focus(ui.FocusOptions{PreventScroll: true})
+			view.focusNextFrame = false
+		}
+		canvas.HandleInput(view.handleInput).Draw(view.draw)
 		view.animateCamera(canvas)
 		if !canvas.Hovered() && !view.pointerDown {
 			view.hovered = graph.Hit{Kind: graph.HitNone, Index: -1}

@@ -158,6 +158,7 @@ func (w *Workspace) BeginOpen() uint64 {
 	w.switching = false
 	w.loadFailed = false
 	w.pendingBoard = -1
+	w.canvas.focusNextFrame = false
 	w.notifyChanged()
 	return w.loadToken
 }
@@ -205,6 +206,7 @@ func (w *Workspace) PublishBoards(token uint64, set BoardSet) bool {
 	w.pendingTableToken = 0
 	w.pendingSmoothTable = false
 	w.canvas.activatePrepared(set.Prepared)
+	w.canvas.focusNextFrame = true
 	w.invalidateDatabasePreview()
 	w.notifyChanged()
 	return true

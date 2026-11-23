@@ -108,6 +108,43 @@ func TestLongWarningClampsAtMinimumWidth(t *testing.T) {
 	}
 }
 
+func TestWorkspaceFocusesCanvasAfterOpeningPDM(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	var token uint64
+	openCount := 0
+	workspace.SetOpenHandler(func() {
+		openCount++
+		token = workspace.BeginOpen()
+	})
+	tester := ui.NewTester(View(state, workspace), 1280, 900)
+	openLabel := state.Text(i18n.KeyOpenPDM, nil)
+	if err := tester.Click(openLabel); err != nil {
+		t.Fatal(err)
+	}
+	if button, ok := tester.AccessByRole(ui.RoleButton, openLabel); !ok || !button.Focused {
+		t.Fatalf("open button should hold focus while loading: %+v", button)
+	}
+	if !workspace.PublishBoards(token, BuildBoardSet(testBoardDocument())) {
+		t.Fatal("test PDM did not load")
+	}
+	tester.Frame()
+	tester.Key(0, ui.KeySpace)
+	if openCount != 1 {
+		t.Fatalf("Space reopened the PDM chooser: %d open requests", openCount)
+	}
+	if button, ok := tester.AccessByRole(ui.RoleButton, openLabel); !ok || button.Focused {
+		t.Fatalf("open button retained focus after loading: %+v", button)
+	}
+	canvasLabel := state.Text(i18n.KeyCanvasHeading, nil)
+	for _, info := range tester.AccessAll() {
+		if info.Focusable && info.Focused && info.Name == canvasLabel {
+			return
+		}
+	}
+	t.Fatal("diagram canvas did not receive focus")
+}
+
 func TestWorkspacePaneBoundsToolbarAndCanvasState(t *testing.T) {
 	state := newState(t, "en-US")
 	workspace := NewWorkspace()
