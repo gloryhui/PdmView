@@ -15,6 +15,8 @@ PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm`
 
 ## 快速开始
 
+从 [GitHub Releases](https://github.com/gloryhui/PdmView/releases/latest) 下载对应平台的发行包。发布页也提供对应源码和 SHA-256 校验文件。
+
 启动 PdmView 后，点「打开 PDM…」，选择 UTF-8 XML 格式的 `.pdm` 文件。选中画板就能浏览模型，按住 `Ctrl` 滚动鼠标滚轮可按指针位置缩放。需要生成全库脚本时，打开「数据库 SQL」。
 
 输入格式和已验证样本见 [PDM 格式验证](docs/PDM_FORMAT.md)，SQL 生成范围见 [MySQL 类型映射](docs/MYSQL_TYPE_MAPPING.md)。
