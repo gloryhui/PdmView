@@ -208,13 +208,31 @@ if [ -n "$(find "$AUDIT/extracted" ! -type d ! -type f -print)" ]; then
 	die "extracted .deb contains symlinks or special files"
 fi
 
+EXTRACTED_DESKTOP="$AUDIT/extracted/usr/share/applications/$PACKAGE_NAME.desktop"
+EXTRACTED_ICON="$AUDIT/extracted/usr/share/icons/hicolor/1024x1024/apps/$PACKAGE_NAME.png"
+grep -Fqx 'Icon=pdmview' "$EXTRACTED_DESKTOP" ||
+	die "desktop launcher does not bind Icon=pdmview"
+ICON_HEADER=$(od -An -tx1 -N8 "$EXTRACTED_ICON" | tr -d ' \n')
+[ "$ICON_HEADER" = 89504e470d0a1a0a ] || die "packaged icon has no PNG signature"
+ICON_TYPE=$(file -b "$EXTRACTED_ICON")
+case "$ICON_TYPE" in
+"PNG image data, 1024 x 1024,"*) ;;
+*) die "packaged icon has unexpected type or dimensions: $ICON_TYPE" ;;
+esac
+
 cmp -s "$LICENSE_SOURCE" "$AUDIT/extracted/usr/share/doc/$PACKAGE_NAME/LICENSE" ||
 	die "packaged LICENSE differs from the repository license"
 cmp -s "$ICON_SOURCE" \
-	"$AUDIT/extracted/usr/share/icons/hicolor/1024x1024/apps/$PACKAGE_NAME.png" ||
+	"$EXTRACTED_ICON" ||
 	die "packaged icon differs from the repository icon"
+{
+	printf 'desktop-binding: Icon=pdmview\n'
+	printf 'type: %s\n' "$ICON_TYPE"
+	printf 'signature: %s\n' "$ICON_HEADER"
+	printf 'source-match: yes\n'
+} >"$AUDIT/icon.txt"
 cmp -s "$AUDIT/$PACKAGE_NAME.desktop" \
-	"$AUDIT/extracted/usr/share/applications/$PACKAGE_NAME.desktop" ||
+	"$EXTRACTED_DESKTOP" ||
 	die "packaged desktop launcher differs from the audited launcher"
 cmp -s "$BIN_TARGET" "$AUDIT/extracted/usr/bin/$PACKAGE_NAME" ||
 	die "packaged executable differs from the audited binary"
@@ -237,6 +255,7 @@ NOTICE_COUNT=$(wc -l <"$AUDIT/notices-files.txt" | tr -d ' ')
 	printf 'deb-sha256: %s\n' "$DEB_SHA"
 	printf 'notices: %s files\n' "$NOTICE_COUNT"
 	printf 'build-tags: mygo_noinspector\n'
+	printf 'icon: Icon=pdmview, 1024x1024 PNG, matches source\n'
 } >"$AUDIT/summary.txt"
 
 DEB="$OUTPUT/$DEB_NAME"
@@ -250,3 +269,4 @@ rmdir "$STAGE" 2>/dev/null || true
 printf 'Deb: %s\n' "$DEB"
 printf 'Audit: %s\n' "$OUTPUT/audit"
 printf 'SHA-256 (deb): %s\n' "$DEB_SHA"
+printf 'Icon: Icon=pdmview (1024x1024 PNG, matches source)\n'

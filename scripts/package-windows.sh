@@ -195,3 +195,4 @@ rmdir "$STAGE" 2>/dev/null || true
 printf 'Exe: %s\nZip: %s\n' "$EXE" "$ZIP"
 printf 'Audit: %s\n' "$OUTPUT/audit"
 printf 'SHA-256 (exe): %s\nSHA-256 (zip): %s\n' "$EXE_SHA" "$ZIP_SHA"
+cat "$OUTPUT/audit/windows-icon.txt"

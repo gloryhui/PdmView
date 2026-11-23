@@ -218,6 +218,33 @@ awk -F '\t' '$1 == "d" { print $2 }' "$AUDIT/zip-types.txt" |
 LC_ALL=C sort "$AUDIT/zip-expected-dirs.txt" >"$AUDIT/zip-expected-dirs.sorted.txt"
 cmp -s "$AUDIT/zip-expected-dirs.sorted.txt" "$AUDIT/zip-dirs.txt" ||
 	die "zip directory entries do not match the packaging manifest"
+unzip -p "$STAGE/$ZIP_NAME" "PdmView.app/Contents/Info.plist" |
+	cmp -s - "$CONTENTS/Info.plist" ||
+	die "zip Info.plist does not match the verified app bundle"
+ARCHIVE_ICON="$AUDIT/archive-$ICON_NAME"
+unzip -p "$STAGE/$ZIP_NAME" "PdmView.app/Contents/Resources/$ICON_NAME" >"$ARCHIVE_ICON" ||
+	die "zip icon could not be read"
+[ -s "$ARCHIVE_ICON" ] || die "zip icon is empty"
+cmp -s "$ICON_SOURCE" "$ARCHIVE_ICON" ||
+	die "zip icon does not match the repository icon"
+ICON_HEADER=$(od -An -tx1 -N4 "$ARCHIVE_ICON" | tr -d ' \n')
+[ "$ICON_HEADER" = 69636e73 ] || die "zip icon has no ICNS signature"
+ICON_SIZE=$(wc -c <"$ARCHIVE_ICON" | tr -d ' ')
+ICON_HEADER_SIZE=$(od -An -tu1 -j4 -N4 "$ARCHIVE_ICON" |
+	awk 'NF == 4 { print $1 * 16777216 + $2 * 65536 + $3 * 256 + $4 }')
+[ "$ICON_HEADER_SIZE" = "$ICON_SIZE" ] ||
+	die "zip icon ICNS length does not match its file size"
+ICON_TYPE=$(file -b "$ARCHIVE_ICON")
+case "$ICON_TYPE" in
+*"Mac OS X icon"*) ;;
+*) die "zip icon has unexpected type: $ICON_TYPE" ;;
+esac
+{
+	printf 'type: %s\n' "$ICON_TYPE"
+	printf 'signature: %s\n' "$ICON_HEADER"
+	printf 'bytes: %s\n' "$ICON_SIZE"
+	printf 'source-match: yes\n'
+} >"$AUDIT/icon.txt"
 
 [ ! -e "$APP" ] || die "refusing to overwrite existing $APP"
 [ ! -e "$ZIP" ] || die "refusing to overwrite existing $ZIP"
@@ -233,3 +260,4 @@ rmdir "$STAGE" 2>/dev/null || true
 printf 'App: %s\nZip: %s\n' "$APP" "$ZIP"
 printf 'Audit: %s\n' "$OUTPUT/audit"
 printf 'Files: %s\n' "$(wc -l <"$OUTPUT/audit/manifest.txt" | tr -d ' ') manifest files plus ad-hoc signature"
+printf 'Icon: %s (ICNS, %s bytes, matches source)\n' "$ICON_NAME" "$ICON_SIZE"

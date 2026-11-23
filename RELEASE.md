@@ -30,7 +30,11 @@ make package-macos VERSION=1.0.0
 
 每个文件附 SHA-256 校验文件。下载 Actions 产物进行验收，并记录运行对应的提交 SHA。验收后，用该提交创建发行标签，将包、校验文件和对应源码一起附到 GitHub Release。macOS 包尚未完成 Apple 公证，Windows 和 Ubuntu 的桌面验收须单独记录。
 
-`v1.0.1` 的 Windows EXE 缺少产品图标资源。更新后的打包流程将猫头鹰图标嵌入 EXE，并在生成 ZIP 前校验 Windows 图标组和尺寸。
+每个平台都必须通过主图标检查才会上传产物。
+
+- macOS 校验 `Info.plist` 中的图标引用，以及 ZIP 内的 `PdmView.icns`。
+- Windows 校验 EXE 内嵌的图标组和多尺寸图像，并核对 ZIP 内的 EXE。此检查覆盖 `v1.0.1` 缺少图标资源的问题。
+- Linux 校验 `.deb` 内的桌面启动器引用和 hicolor 图标文件。
 
 ## 构建与校验
 
