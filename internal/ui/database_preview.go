@@ -15,13 +15,16 @@ import (
 )
 
 const (
-	DatabasePreviewRootKey        = "pdmview.database-preview.root"
-	DatabasePreviewOpenKey        = "pdmview.workspace.database-preview.open"
-	DatabasePreviewBackKey        = "pdmview.workspace.database-preview.back"
-	DatabasePreviewSQLKey         = "pdmview.workspace.database-preview.sql"
-	DatabasePreviewDiagnosticsKey = "pdmview.workspace.database-preview.diagnostics"
-	DatabasePreviewCopySQLKey     = "pdmview.workspace.database-preview.copy-sql"
-	DatabasePreviewExportSQLKey   = "pdmview.workspace.database-preview.export-sql"
+	DatabasePreviewRootKey           = "pdmview.database-preview.root"
+	DatabasePreviewOpenKey           = "pdmview.workspace.database-preview.open"
+	DatabasePreviewBackKey           = "pdmview.workspace.database-preview.back"
+	DatabasePreviewTabsKey           = "pdmview.database-preview.tabs"
+	DatabasePreviewDiagnosticsTabKey = "pdmview.database-preview.tab.diagnostics"
+	DatabasePreviewSQLTabKey         = "pdmview.database-preview.tab.sql"
+	DatabasePreviewSQLKey            = "pdmview.workspace.database-preview.sql"
+	DatabasePreviewDiagnosticsKey    = "pdmview.workspace.database-preview.diagnostics"
+	DatabasePreviewCopySQLKey        = "pdmview.workspace.database-preview.copy-sql"
+	DatabasePreviewExportSQLKey      = "pdmview.workspace.database-preview.export-sql"
 )
 
 type databasePreviewStats struct {
@@ -39,6 +42,7 @@ type databasePreviewState struct {
 	stats             databasePreviewStats
 	editor            *editor.State
 	diagnosticsScroll ui.ScrollState
+	tab               int
 	actionFeedback    previewActionFeedback
 	actionToken       uint64
 	exporting         bool
@@ -87,6 +91,7 @@ func (w *Workspace) BeginDatabasePreview() (DatabasePreviewRequest, bool) {
 	w.preview.actionFeedback = previewActionNone
 	w.preview.actionToken++
 	w.preview.exporting = false
+	w.preview.tab = 0
 	w.preview.stats = countDatabasePreview(w.document)
 	w.preview.diagnosticsScroll.ScrollTo(0, 0, ui.Animation{})
 	request := DatabasePreviewRequest{
@@ -113,6 +118,11 @@ func (w *Workspace) PublishDatabasePreview(request DatabasePreviewRequest, resul
 	w.preview.result = sqlgen.Result{
 		SQL:         result.SQL,
 		Diagnostics: append([]sqlgen.Diagnostic(nil), result.Diagnostics...),
+	}
+	if result.HasErrors() {
+		w.preview.tab = 0
+	} else {
+		w.preview.tab = 1
 	}
 	w.preview.editor = nil
 	if !result.HasErrors() && result.SQL != "" {
@@ -146,6 +156,7 @@ func (w *Workspace) invalidateDatabasePreview() {
 	w.preview.actionFeedback = previewActionNone
 	w.preview.actionToken++
 	w.preview.exporting = false
+	w.preview.tab = 0
 	w.preview.diagnosticsScroll.ScrollTo(0, 0, ui.Animation{})
 }
 
@@ -305,14 +316,68 @@ func (w *Workspace) databasePreviewView(
 				ui.Text(c, state.Text(i18n.KeyPreviewKeys, countParam(w.preview.stats.foreignKeys))).
 					FontSize(11).TextColor(theme.TextMuted).Lang(lang)
 			})
-			w.databasePreviewActions(c, state, theme, lang)
-			w.databasePreviewDiagnostics(c, state, theme, lang)
-			if w.preview.editor != nil {
-				w.preview.editor.Label = state.Text(i18n.KeyPreviewSQL, nil)
-				c.Key(DatabasePreviewSQLKey)
-				editor.View(c, w.preview.editor).Grow(1).FillWidth()
-			}
+			w.databasePreviewTabs(c, state, theme, lang)
+			ui.Column(c).Grow(1).FillWidth().MinHeight(0).
+				Role(ui.RoleTabPanel).Children(func() {
+				switch w.preview.tab {
+				case 0:
+					w.databasePreviewDiagnostics(c, state, theme, lang)
+				case 1:
+					w.databasePreviewSQL(c, state, theme, lang)
+				}
+			})
 		})
+	})
+}
+
+func (w *Workspace) databasePreviewTabs(
+	c *ui.Context,
+	state *app.State,
+	theme *ui.Theme,
+	lang string,
+) {
+	labels := []string{
+		state.Text(i18n.KeyPreviewDiagnostics, nil),
+		state.Text(i18n.KeyPreviewSQLTab, nil),
+	}
+	tabs := ui.TabsBase(c.Key(DatabasePreviewTabsKey), &w.preview.tab, len(labels))
+	tabs.List.Gap(4).Children(func() {
+		for index, label := range labels {
+			switch index {
+			case 0:
+				c.Key(DatabasePreviewDiagnosticsTabKey)
+			case 1:
+				c.Key(DatabasePreviewSQLTabKey)
+			}
+			tab := tabs.Tab(index).Padding(4, 8).Radius(4)
+			if index == w.preview.tab {
+				tab.Background(theme.Surface).TextColor(theme.Text).Bold()
+			} else {
+				tab.TextColor(theme.TextMuted)
+			}
+			tab.Children(func() {
+				ui.Text(c, label).SingleLine().Lang(lang)
+			})
+		}
+	})
+}
+
+func (w *Workspace) databasePreviewSQL(
+	c *ui.Context,
+	state *app.State,
+	theme *ui.Theme,
+	lang string,
+) {
+	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Gap(8).Children(func() {
+		w.databasePreviewActions(c, state, theme, lang)
+		if w.preview.result.HasErrors() {
+			ui.Text(c, state.Text(i18n.KeyPreviewSQLBlocked, nil)).
+				FillWidth().FontSize(11).TextColor(theme.Danger).Lang(lang).Role(ui.RoleAlert)
+		}
+		if w.preview.editor != nil {
+			w.preview.editor.Label = state.Text(i18n.KeyPreviewSQL, nil)
+			editor.View(c.Key(DatabasePreviewSQLKey), w.preview.editor).Grow(1).FillWidth().MinHeight(0)
+		}
 	})
 }
 
@@ -386,13 +451,14 @@ func (w *Workspace) databasePreviewDiagnostics(
 ) {
 	diagnostics := w.preview.result.Diagnostics
 	if len(diagnostics) == 0 {
+		if !w.preview.loading {
+			ui.Text(c, state.Text(i18n.KeyPreviewNoDiagnostics, nil)).
+				FontSize(11).TextColor(theme.TextMuted).Lang(lang).Role(ui.RoleStatus)
+		}
 		return
 	}
-	ui.Text(c, state.Text(i18n.KeyPreviewDiagnostics, nil)).
-		FontSize(12).Bold().TextColor(theme.Text).Lang(lang).
-		Role(ui.RoleHeading).Level(2)
 	ui.Scroll(c.Key(DatabasePreviewDiagnosticsKey)).TrackScroll(&w.preview.diagnosticsScroll).
-		FillWidth().Height(112).KeepScrollbars(true).Children(func() {
+		Grow(1).FillWidth().MinHeight(0).KeepScrollbars(true).Children(func() {
 		ui.Column(c).FillWidth().Gap(6).Children(func() {
 			for _, diagnostic := range diagnostics {
 				severity := state.Text(i18n.KeyPreviewWarning, nil)
@@ -422,7 +488,7 @@ func (w *Workspace) databasePreviewDiagnostics(
 					ui.Text(c, detail).SingleLine().FontSize(10).
 						Font("monospace").TextColor(theme.TextMuted).Lang(lang)
 					if location != "" {
-						ui.Text(c, location).Wrap().MaxLines(2).FontSize(10).
+						ui.Text(c, location).Wrap().FontSize(10).
 							Font("monospace").TextColor(theme.TextMuted).Selectable().Lang(lang)
 					}
 				})

@@ -114,7 +114,10 @@ const (
 	KeyPreviewKeys              Key = "preview.foreign_keys"
 	KeyPreviewSummary           Key = "preview.summary"
 	KeyPreviewDiagnostics       Key = "preview.diagnostics"
+	KeyPreviewNoDiagnostics     Key = "preview.no_diagnostics"
+	KeyPreviewSQLTab            Key = "preview.sql_tab"
 	KeyPreviewSQL               Key = "preview.sql"
+	KeyPreviewSQLBlocked        Key = "preview.sql_blocked"
 	KeyPreviewError             Key = "preview.error"
 	KeyPreviewWarning           Key = "preview.warning"
 	KeyPreviewLine              Key = "preview.line"
@@ -247,7 +250,10 @@ var resources = map[Locale]map[Key]message{
 		KeyPreviewKeys:              {text: "Foreign keys {count}", params: []string{"count"}},
 		KeyPreviewSummary:           {text: "Errors {errors} · Warnings {warnings}", params: []string{"errors", "warnings"}},
 		KeyPreviewDiagnostics:       {text: "Diagnostics"},
+		KeyPreviewNoDiagnostics:     {text: "No diagnostics"},
+		KeyPreviewSQLTab:            {text: "SQL preview"},
 		KeyPreviewSQL:               {text: "Full SQL"},
+		KeyPreviewSQLBlocked:        {text: "Fix the errors on Diagnostics to generate SQL."},
 		KeyPreviewError:             {text: "Error"},
 		KeyPreviewWarning:           {text: "Warning"},
 		KeyPreviewLine:              {text: "line {line}", params: []string{"line"}},
@@ -373,7 +379,10 @@ var resources = map[Locale]map[Key]message{
 		KeyPreviewKeys:              {text: "外键 {count}", params: []string{"count"}},
 		KeyPreviewSummary:           {text: "{errors} 个错误 · {warnings} 个警告", params: []string{"errors", "warnings"}},
 		KeyPreviewDiagnostics:       {text: "诊断"},
+		KeyPreviewNoDiagnostics:     {text: "暂无诊断"},
+		KeyPreviewSQLTab:            {text: "SQL 预览"},
 		KeyPreviewSQL:               {text: "完整 SQL"},
+		KeyPreviewSQLBlocked:        {text: "请修复“诊断”中的错误以生成 SQL。"},
 		KeyPreviewError:             {text: "错误"},
 		KeyPreviewWarning:           {text: "警告"},
 		KeyPreviewLine:              {text: "行 {line}", params: []string{"line"}},

@@ -1,6 +1,7 @@
 package appui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,6 +30,11 @@ func TestDatabasePreviewGenerationLocaleAndEditor(t *testing.T) {
 	if !workspace.preview.open || workspace.preview.loading || workspace.preview.editor == nil {
 		t.Fatalf("preview state = %+v", workspace.preview)
 	}
+	if workspace.preview.tab != 1 {
+		t.Fatalf("successful preview tab = %d, want SQL preview", workspace.preview.tab)
+	}
+	assertPreviewTabSelected(t, tester, "Diagnostics", false)
+	assertPreviewTabSelected(t, tester, "SQL preview", true)
 	wantSQL := sqlgen.GenerateDatabase(document, sqlgen.DatabaseOptions{}).SQL
 	if workspace.preview.result.SQL != wantSQL ||
 		workspace.preview.editor.Buffer.String() != wantSQL {
@@ -44,7 +50,7 @@ func TestDatabasePreviewGenerationLocaleAndEditor(t *testing.T) {
 			workspace.preview.editor.NoScrollPastEnd)
 	}
 	for _, text := range []string{
-		"Database SQL", "Back", "Tables 2", "Columns 4", "Foreign keys 1",
+		"Database SQL", "Back", "Tables 2", "Columns 4", "Foreign keys 1", "SQL preview",
 	} {
 		if !tester.HasText(text) {
 			t.Fatalf("missing English preview text %q: %q", text, tester.Texts())
@@ -54,6 +60,21 @@ func TestDatabasePreviewGenerationLocaleAndEditor(t *testing.T) {
 		back.Bounds.X < 0 || back.Bounds.Y < 0 ||
 		back.Bounds.X+back.Bounds.W > 801 || back.Bounds.Y+back.Bounds.H > 601 {
 		t.Fatalf("back button outside minimum window: %+v, %v", back, ok)
+	}
+	if _, ok := tester.AccessByRole(ui.RoleButton, "Copy SQL"); !ok {
+		t.Fatal("SQL tab has no copy action")
+	}
+	if err := tester.Click("Diagnostics"); err != nil {
+		t.Fatal(err)
+	}
+	if !tester.HasText("No diagnostics") {
+		t.Fatalf("empty diagnostics feedback missing: %q", tester.Texts())
+	}
+	if _, ok := tester.AccessByRole(ui.RoleButton, "Copy SQL"); ok {
+		t.Fatal("Diagnostics tab retained SQL actions")
+	}
+	if err := tester.Click("SQL preview"); err != nil {
+		t.Fatal(err)
 	}
 
 	editorState := workspace.preview.editor
@@ -84,7 +105,8 @@ func TestDatabasePreviewLoadingStaleAndModelInvalidation(t *testing.T) {
 	if err := tester.Click("Database SQL"); err != nil {
 		t.Fatal(err)
 	}
-	if !workspace.preview.loading || !tester.HasText("Generating database SQL…") {
+	if !workspace.preview.loading || !tester.HasText("Generating database SQL…") ||
+		countTextsContaining(tester.Texts(), "Generating database SQL…") != 1 {
 		t.Fatalf("loading preview = %+v, texts %q", workspace.preview, tester.Texts())
 	}
 
@@ -99,6 +121,9 @@ func TestDatabasePreviewLoadingStaleAndModelInvalidation(t *testing.T) {
 	}
 	if !workspace.PublishDatabasePreview(second, secondResult) {
 		t.Fatal("current preview request was rejected")
+	}
+	if workspace.preview.tab != 1 {
+		t.Fatalf("current success tab = %d, want SQL preview", workspace.preview.tab)
 	}
 
 	third, ok := workspace.BeginDatabasePreview()
@@ -142,6 +167,11 @@ func TestDatabasePreviewDiagnosticsSummaryAndLocation(t *testing.T) {
 	if workspace.preview.result.SQL != "" || workspace.preview.editor != nil {
 		t.Fatalf("failed preview kept SQL: %+v", workspace.preview.result)
 	}
+	if workspace.preview.tab != 0 {
+		t.Fatalf("error tab = %d, want Diagnostics", workspace.preview.tab)
+	}
+	assertPreviewTabSelected(t, tester, "Diagnostics", true)
+	assertPreviewTabSelected(t, tester, "SQL preview", false)
 	for _, text := range []string{
 		"Errors 1 · Warnings 0",
 		"Source parsing · Error",
@@ -154,6 +184,9 @@ func TestDatabasePreviewDiagnosticsSummaryAndLocation(t *testing.T) {
 	}
 	if count := countTextsContaining(tester.Texts(), "Errors 1 · Warnings 0"); count != 1 {
 		t.Fatalf("summary shown %d times, want one", count)
+	}
+	if count := countTextsContaining(tester.Texts(), "Diagnostics"); count != 1 {
+		t.Fatalf("diagnostics heading shown %d times, want tab label only", count)
 	}
 
 	state.SelectLanguage(i18n.ZHCN)
@@ -285,6 +318,7 @@ func TestDatabasePreviewActionsBlockedAndWarningOnly(t *testing.T) {
 	if !tester.HasText("Errors 0 · Warnings 1") {
 		t.Fatalf("warning summary missing: %q", tester.Texts())
 	}
+	assertPreviewTabSelected(t, tester, "SQL preview", true)
 	for _, label := range []string{"Copy SQL", "Export .sql"} {
 		if info, ok := tester.AccessByRole(ui.RoleButton, label); !ok || info.Disabled {
 			t.Fatalf("warning-only action %q = %+v, %v", label, info, ok)
@@ -304,10 +338,98 @@ func TestDatabasePreviewActionsBlockedAndWarningOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	tester.Frame()
+	assertPreviewTabSelected(t, tester, "Diagnostics", true)
+	if err := tester.Click("SQL preview"); err != nil {
+		t.Fatal(err)
+	}
 	for _, label := range []string{"Copy SQL", "Export .sql"} {
 		if info, ok := tester.AccessByRole(ui.RoleButton, label); !ok || !info.Disabled {
 			t.Fatalf("blocked action %q = %+v, %v", label, info, ok)
 		}
+	}
+	if !tester.HasText("Fix the errors on Diagnostics to generate SQL.") {
+		t.Fatalf("blocked recovery reason missing: %q", tester.Texts())
+	}
+	state.SelectLanguage(i18n.ZHCN)
+	tester.Frame()
+	if !tester.HasText("请修复“诊断”中的错误以生成 SQL。") {
+		t.Fatalf("Chinese blocked recovery reason missing: %q", tester.Texts())
+	}
+}
+
+func TestDatabasePreviewTabsSwitchAndPreserveEditorAndScrollPositions(t *testing.T) {
+	state := newState(t, "en-US")
+	workspace := NewWorkspace()
+	workspace.PublishBoards(workspace.BeginOpen(), BuildBoardSet(previewDocument()))
+	diagnostics := make([]sqlgen.Diagnostic, 12)
+	for index := range diagnostics {
+		diagnostics[index] = sqlgen.Diagnostic{
+			Code:     "database-warning",
+			Severity: sqlgen.SeverityWarning,
+			Path:     fmt.Sprintf("/Model/RootObject/Children/object:Model/collection:Tables/object:Table%d", index),
+			Line:     index + 1,
+		}
+	}
+	request, ok := workspace.BeginDatabasePreview()
+	if !ok || !workspace.PublishDatabasePreview(request, sqlgen.Result{
+		SQL:         strings.Repeat("SELECT 1;\n", 120),
+		Diagnostics: diagnostics,
+	}) {
+		t.Fatal("warning preview did not publish")
+	}
+	tester := ui.NewTester(View(state, workspace), 800, 600)
+	tester.Frame()
+	if workspace.preview.tab != 1 {
+		t.Fatalf("warning preview tab = %d, want SQL preview", workspace.preview.tab)
+	}
+	diagnosticsTab, ok := tester.AccessByRole(ui.RoleTab, "Diagnostics")
+	if !ok {
+		t.Fatalf("diagnostics tab missing: %q", tester.Texts())
+	}
+	sqlTab, ok := tester.AccessByRole(ui.RoleTab, "SQL preview")
+	if !ok || sqlTab.Bounds.X <= diagnosticsTab.Bounds.X ||
+		diagnosticsTab.Selected || !sqlTab.Selected {
+		t.Fatalf("tab order/selection = diagnostics:%+v sql:%+v", diagnosticsTab, sqlTab)
+	}
+
+	editorState := workspace.preview.editor
+	if editorState == nil {
+		t.Fatal("SQL editor is missing")
+	}
+	editorState.SetScrollY(40)
+	tester.Frame()
+	editorScroll := editorState.ScrollY()
+	if editorScroll <= 0 {
+		t.Fatalf("editor did not scroll: %v", editorScroll)
+	}
+	if err := tester.Click("Diagnostics"); err != nil {
+		t.Fatal(err)
+	}
+	panel, ok := tester.AccessByRole(ui.RoleTabPanel, "")
+	if !ok || panel.Bounds.H <= 112 {
+		t.Fatalf("diagnostics panel bounds = %+v, %v", panel.Bounds, ok)
+	}
+	workspace.preview.diagnosticsScroll.Y = 24
+	tester.Frame()
+	diagnosticsScroll := workspace.preview.diagnosticsScroll.Y
+	if diagnosticsScroll <= 0 {
+		t.Fatalf("diagnostics did not scroll: %v", diagnosticsScroll)
+	}
+
+	if err := tester.Click("SQL preview"); err != nil {
+		t.Fatal(err)
+	}
+	if workspace.preview.editor != editorState || editorState.ScrollY() != editorScroll ||
+		workspace.preview.diagnosticsScroll.Y != diagnosticsScroll {
+		t.Fatalf("tab switch changed editor/scroll state: editor=%p scroll=%v diagnostics=%v",
+			workspace.preview.editor, editorState.ScrollY(), workspace.preview.diagnosticsScroll.Y)
+	}
+	if err := tester.Click("Diagnostics"); err != nil {
+		t.Fatal(err)
+	}
+	if workspace.preview.editor != editorState || editorState.ScrollY() != editorScroll ||
+		workspace.preview.diagnosticsScroll.Y != diagnosticsScroll {
+		t.Fatal("second tab switch changed retained SQL or diagnostics scroll")
 	}
 }
 
@@ -386,4 +508,12 @@ func countTextsContaining(texts []string, want string) int {
 		}
 	}
 	return count
+}
+
+func assertPreviewTabSelected(t *testing.T, tester *ui.Tester, label string, want bool) {
+	t.Helper()
+	tab, ok := tester.AccessByRole(ui.RoleTab, label)
+	if !ok || tab.Selected != want {
+		t.Fatalf("tab %q selected = %v, want %v (%+v, %v)", label, tab.Selected, want, tab, ok)
+	}
 }
