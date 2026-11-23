@@ -1,68 +1,47 @@
 # PdmView
 
-PdmView 是使用 Go 与 MyGo Native UI 的 PowerDesigner `.pdm` 查看器，支持编辑表和字段的名称、编码、注释。
+PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm` 数据库模型、编辑表和字段的基础信息，以及生成 MySQL 8.0 建表脚本。
 
-- 查看原始画板、关系线、Package、表和字段。支持缩放、平移、搜索和定位。
-- 复制完整表信息或单表建表 SQL。预览、复制和导出 MySQL 8.0 全库初始化脚本。
-- 在「设置 → 语言」/「Settings → Language」切换简体中文和英文。首次启动使用系统首选界面语言，之后恢复已保存的选择。
+![PdmView 工作区，展示合成 PDM 模型的画板、对象树和表详情](docs/screenshots/workspace-zh.png)
 
-![PdmView 原生工作区，显示合成模型](docs/screenshots/workspace-zh.png)
+## 主要功能
 
-## 开发与验证
+- **查看模型**。浏览原始画板、表关系和 Package，缩放或平移画布，搜索并定位表。
+- **查看表属性**。检查字段、主键、外键和索引，沿外键关系跳到关联表。双击画布中的表打开表属性。
+- **写回 PDM**。在表属性中保存表和字段的名称、编码与注释。窗口中的其他修改只保留为草稿。
+- **生成 MySQL 8.0 SQL**。单表支持「完整 SQL」「一般 SQL」「裸 SQL」三种预览。全库可查看生成诊断、预览、复制或导出 `.sql`。
+- **界面偏好**。支持简体中文和英文，可选择亮色、暗色或跟随系统。
 
-在本目录运行命令。项目要求 Go 1.27.3，已用 Go 1.27.4 和 MyGo `v0.10.0` 验证。默认准备 macOS Apple Silicon 开发环境。
+## 快速开始
+
+启动 PdmView 后，点「打开 PDM…」，选择 UTF-8 XML 格式的 `.pdm` 文件。选中画板就能浏览模型，按住 `Ctrl` 滚动鼠标滚轮可按指针位置缩放。需要生成全库脚本时，打开「数据库 SQL」。
+
+| 平台 | 运行与验收状态 |
+| --- | --- |
+| macOS Apple Silicon | 需要 macOS 13.0 或更新版本。解压 ZIP 后打开 `PdmView.app`。已有本地构建和桌面验收记录。 |
+| Windows x64 | 解压 ZIP 后运行 `PdmView.exe`。已有交叉构建记录，Windows 桌面验收待完成。 |
+
+打包命令、签名状态和产物校验见[发布记录](RELEASE.md)。输入格式和已验证样本见 [PDM 格式验证](docs/PDM_FORMAT.md)，SQL 生成范围见 [MySQL 类型映射](docs/MYSQL_TYPE_MAPPING.md)。
+
+## 从源码运行
+
+项目使用 Go 和 MyGo Native UI。最低需要 Go 1.27.3，已用 Go 1.27.4 构建。以下命令在仓库根目录执行。
+
+**macOS**
 
 ```sh
-make env    # 复查机器、构建工具和本地样本元信息
-make fmt    # 格式化 Go 源码
-make check  # 验证格式，运行 go test ./... 和 go vet ./...
-make probe  # 启动 Phase 0 独立原生探针
-CGO_ENABLED=0 go run ./cmd/pdmview  # 启动原生应用
-CGO_ENABLED=0 go run ./cmd/pdmview /path/to/model.pdm  # 直接打开本地模型
+CGO_ENABLED=0 go run ./cmd/pdmview
 ```
 
-`cmd/mygo-probe/` 是技术验证入口，显示两张模拟表。正式应用的目录边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，验证步骤见 [MyGo API 验证](docs/MYGO_API_VERIFICATION.md)，任务进展见 [任务状态](tasks/TASK_STATUS.md)。
+**Windows PowerShell**
 
-应用启动时展示模拟图。使用导航栏的「打开 PDM…」/「Open PDM…」选择本地模型，或在命令行直接传入文件路径。选择画板后可拖动画布或滚轮平移，用 Ctrl 加滚轮或触控板捏合按指针位置缩放。工具栏提供缩放、适应选中、显示全部和重置视图。
+```powershell
+$env:CGO_ENABLED = '0'
+go run -tags 'mygo_noinspector,mygo_nowebview' ./cmd/pdmview
+```
 
-选中表后，右栏显示摘要、表属性和两项复制操作。有外键关系时，可以点击关联表跳到对应画板并选中它。用画布工具栏的「隐藏详情」和「显示详情」切换右栏。
+可以在命令末尾传入 `.pdm` 路径，启动时直接打开模型。开发入口、测试和项目结构分别见[开发指南](DEVELOPMENT.md)和[架构说明](ARCHITECTURE.md)。
 
-双击画布中的表可打开独立的原生表属性窗口。拖动窗口边缘可调整大小，编辑框支持选取、复制和修改。点击「保存」会将当前表和所属字段的名称、编码、注释直接写回打开的 `.pdm`。其他编辑是窗口内草稿，关闭窗口后丢弃。
+## 许可证
 
-画板、语言和系统服务的跨平台验收见 [Phase 10 验收](docs/PHASE_10_ACCEPTANCE.md)。
-
-真实样本放在 `.local/fixtures/`。本地日志、运行截图和二进制放在 `.out/`。
-
-## 平台与兼容范围
-
-- macOS Apple Silicon 候选的最低系统版本为 13.0，桌面验收使用 macOS 15.8.1。Windows x64 的构建和桌面验收进度分别记录在 [发布记录](RELEASE.md)。
-- 输入为 UTF-8 XML `.pdm`。本地真实样本为 PowerDesigner `16.5.0.3982`，另对照 `12.5.0.2169`、`15.1.0.2850`、`16.5.0.3982` 的公开 XML 导出。P4-03 的 PowerDesigner 应用内坐标与路径对照待完成。具体结构和样本边界见 [PDM 格式验证](docs/PDM_FORMAT.md)。
-- SQL 以 MySQL 8.0 为目标，已在隔离的 MySQL 8.0.46 实测。未知类型或有冲突的类型参数会阻止生成。完整白名单和限制见 [类型映射](docs/MYSQL_TYPE_MAPPING.md)。
-- 导出的 SQL 由用户在目标数据库环境中执行。
-
-## 文档索引
-
-- `CODEX_START_PROMPT.md`：直接粘贴给 Codex 的启动指令。
-- `PROJECT_BRIEF.md`：产品范围、技术边界和验收口径。
-- `ARCHITECTURE.md`：模块边界、数据流、关键设计约束。
-- `AGENT_WORKFLOW.md`：双模型分工、交接和冲突处理。
-- `QUALITY_GATES.md`：阶段门禁、测试及性能验收。
-- `DEVELOPMENT.md`：开发环境、构建入口和测试。
-- `RELEASE.md`：候选产物、校验和、签名及平台验收。
-- `tasks/00_ROADMAP.md`：阶段顺序与依赖。
-- `tasks/TASK_STATUS.md`：任务状态登记表。
-- `tasks/PHASE_*.md`：各阶段任务卡。
-- `templates/AGENT_HANDOFF.md`：执行 Agent 交接模板。
-- `templates/BUG_REPORT.md`：问题报告模板。
-- `templates/DECISION_RECORD.md`：技术决策记录模板。
-
-## 重要约束
-
-- 保存仅更新现有表和字段的名称、编码与注释，保留其他 XML 字节。发现文件内容已在磁盘上改变时，会提示重新打开。
-- 先验证 MyGo Native UI 和绘制 API，再开发正式界面。
-- 原始 Diagram 布局优先；只有缺少有效布局时才使用自动布局。
-- 未知 XML 节点、属性和对象引用不得静默忽略，必须产生诊断。
-- SQL 生成必须有明确的类型映射规则；未知类型不得擅自降级成 VARCHAR。
-- 单表 SQL 与全库 SQL 必须共用同一套 Generator。
-- 不把 Draw 回调当作业务计算入口；布局、解析、文本测量和空间索引更新必须在绘制前完成。
-- 不允许用模拟 PDM 解析结果冒充真实 PDM 兼容性。
+PdmView 自有代码采用 **GNU GPL v3.0（仅第 3 版，`GPL-3.0-only`）**，完整条款见 [LICENSE](LICENSE)。对外发行二进制时，请按许可证提供同版本对应源码。第三方许可证和源码发行方式见[发布记录](RELEASE.md#依赖与许可证)。
