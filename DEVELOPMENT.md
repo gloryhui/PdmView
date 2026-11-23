@@ -4,7 +4,7 @@
 
 - Go 模块最低版本为 1.27.3，验收工具链为 1.27.4。MyGo 固定为 v0.10.0，构建使用 `CGO_ENABLED=0`。
 - macOS 打包在 macOS 上执行，需要 Xcode 命令行工具以及 `plutil`、`codesign`、`ditto` 和 `unzip`。Go 1.27 生成的 macOS 可执行文件最低版本为 macOS 13.0。
-- Windows x64 支持交叉构建。启动、Direct3D 11、系统 DPI、文件面板和剪贴板在 Windows x64 桌面上验收。
+- Windows x64 支持交叉构建。打包脚本使用 Python 3 校验 EXE 中的产品图标。启动、图标显示、Direct3D 11、系统 DPI、文件面板和剪贴板在 Windows x64 桌面上验收。
 - Lobe MyGo 在 Phase 0 使用 `v0.0.0-20261116124832-d88b4ad7f238` 验证过隔离示例。正式应用使用 MyGo 原生控件。参见 [API 验证记录](docs/MYGO_API_VERIFICATION.md)。
 
 ## 启动与测试

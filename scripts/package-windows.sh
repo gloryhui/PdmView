@@ -23,6 +23,7 @@ printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
 
 [ "$(uname -s)" = Darwin ] || die "macOS is required for ZIP/PE verification"
 command -v "$GO" >/dev/null 2>&1 || die "Go command not found: $GO"
+command -v python3 >/dev/null 2>&1 || die "Python 3 is required for the Windows icon check"
 [ -s "$LICENSE_SOURCE" ] || die "repository license missing or empty: $LICENSE_SOURCE"
 
 VERSION_DIR="$OUT/$VERSION"
@@ -62,6 +63,8 @@ FILE_INFO=$(file -b "$STAGE/$APP_NAME.exe")
 printf '%s\n' "$FILE_INFO" >"$AUDIT/file.txt"
 printf '%s\n' "$FILE_INFO" | grep -q 'PE32+ executable (GUI) x86-64' ||
 	die "unexpected PE format: $FILE_INFO"
+python3 "$ROOT/scripts/check-windows-icon.py" "$STAGE/$APP_NAME.exe" >"$AUDIT/windows-icon.txt" ||
+	die "PE product icon check failed"
 
 "$GO" version -m "$STAGE/$APP_NAME.exe" >"$AUDIT/go-version-m.txt"
 for setting in \
@@ -162,6 +165,7 @@ NOTICE_COUNT=$(wc -l <"$AUDIT/notices-files.txt" | tr -d ' ')
 	printf 'file: %s\n' "$FILE_INFO"
 	printf 'exe-sha256: %s\n' "$EXE_SHA"
 	printf 'zip-sha256: %s\n' "$ZIP_SHA"
+	cat "$AUDIT/windows-icon.txt"
 	printf 'notices: %s files\n' "$NOTICE_COUNT"
 	printf 'webview2-markers: none\n'
 	printf 'vcs-info: none\n'

@@ -30,6 +30,8 @@ make package-macos VERSION=1.0.0
 
 每个文件附 SHA-256 校验文件。下载 Actions 产物进行验收，并记录运行对应的提交 SHA。验收后，用该提交创建发行标签，将包、校验文件和对应源码一起附到 GitHub Release。macOS 包尚未完成 Apple 公证，Windows 和 Ubuntu 的桌面验收须单独记录。
 
+`v1.0.1` 的 Windows EXE 缺少产品图标资源。更新后的打包流程将猫头鹰图标嵌入 EXE，并在生成 ZIP 前校验 Windows 图标组和尺寸。
+
 ## 构建与校验
 
 从仓库根目录运行。macOS 和 Windows 打包命令均在 macOS 上执行。
