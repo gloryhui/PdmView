@@ -11,7 +11,7 @@ func BuildDiagramGraph(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 	}
 	assignEdgeDirections(&result, model)
 	routeMissingEdges(&result.Scene)
-	result.Scene.Bounds = sceneBounds(result.Scene.Nodes, result.Scene.Edges)
+	result.Scene.Bounds = sceneBounds(result.Scene.Nodes, result.Scene.Edges, result.Scene.Annotations)
 	return result
 }
 

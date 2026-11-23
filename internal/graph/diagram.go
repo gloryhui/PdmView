@@ -69,7 +69,7 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 			return result
 		}
 		result.Scene.Nodes, result.NodeSources, result.AutoLayout = fallbackNodes(orderedTables, decorations, pdm.TableAppearance{})
-		result.Scene.Bounds = sceneBounds(result.Scene.Nodes, nil)
+		result.Scene.Bounds = sceneBounds(result.Scene.Nodes, nil, nil)
 		return result
 	}
 
@@ -84,7 +84,8 @@ func MapDiagram(model *pdm.Model, diagram *pdm.Diagram) DiagramGraph {
 
 	symbolIndex := uniqueSymbolNodeIndex(diagram.TableSymbols)
 	result.Scene.Edges, result.EdgeSources = diagramEdges(diagram.ReferenceSymbols, symbolIndex)
-	result.Scene.Bounds = sceneBounds(result.Scene.Nodes, result.Scene.Edges)
+	result.Scene.Annotations = diagramAnnotations(diagram.AnnotationSymbols)
+	result.Scene.Bounds = sceneBounds(result.Scene.Nodes, result.Scene.Edges, result.Scene.Annotations)
 	return result
 }
 
@@ -271,6 +272,23 @@ func diagramEdges(symbols []pdm.ReferenceSymbol, symbolIndex map[string]int) ([]
 	return edges, sources
 }
 
+func diagramAnnotations(symbols []pdm.AnnotationSymbol) []Annotation {
+	var annotations []Annotation
+	for _, symbol := range symbols {
+		if strings.TrimSpace(symbol.Text) == "" || !validNodeRect(symbol.Rect) {
+			continue
+		}
+		annotations = append(annotations, Annotation{
+			Bounds:    graphRect(*symbol.Rect),
+			Text:      symbol.Text,
+			Fill:      cloneRGBColor(symbol.Fill),
+			Border:    cloneRGBColor(symbol.Border),
+			TextColor: cloneRGBColor(symbol.TextColor),
+		})
+	}
+	return annotations
+}
+
 func uniqueSymbolNodeIndex(symbols []pdm.TableSymbol) map[string]int {
 	index := make(map[string]int)
 	duplicates := make(map[string]bool)
@@ -346,6 +364,14 @@ func clonePDMPoints(points []pdm.Point) []pdm.Point {
 		return nil
 	}
 	return append([]pdm.Point(nil), points...)
+}
+
+func cloneRGBColor(color *pdm.RGBColor) *pdm.RGBColor {
+	if color == nil {
+		return nil
+	}
+	copy := *color
+	return &copy
 }
 
 func tableDisplayName(table pdm.Table) string {
@@ -505,7 +531,7 @@ func packageContents(packages []pdm.Package, ownerID string) (pdm.Contents, bool
 	return pdm.Contents{}, false
 }
 
-func sceneBounds(nodes []Node, edges []Edge) Rect {
+func sceneBounds(nodes []Node, edges []Edge, annotations []Annotation) Rect {
 	var bounds Rect
 	hasBounds := false
 	for _, node := range nodes {
@@ -524,6 +550,13 @@ func sceneBounds(nodes []Node, edges []Edge) Rect {
 			bounds, hasBounds = edgeBounds, true
 		} else {
 			bounds = bounds.Union(edgeBounds)
+		}
+	}
+	for _, annotation := range annotations {
+		if !hasBounds {
+			bounds, hasBounds = annotation.Bounds, true
+		} else {
+			bounds = bounds.Union(annotation.Bounds)
 		}
 	}
 	if !hasBounds {

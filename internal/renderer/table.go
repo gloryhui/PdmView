@@ -117,8 +117,12 @@ func (c *Canvas) drawTable(
 ) int {
 	style := node.Presentation.Style
 	fill := colorFromPDM(style.Fill, theme.Surface)
-	border := colorFromPDM(style.Border, theme.Border)
+	border := canvasOutline(colorFromPDM(style.Border, theme.Border), theme)
+	drawCardShadow(p, rect, 0, theme)
 	if !style.Transparent {
+		if border == fill {
+			border = canvasOutlineFallback(theme)
+		}
 		end := colorFromPDM(style.GradientEnd, fill)
 		if (style.GradientMode == 64 || style.GradientMode == 65) && fill != end {
 			p.FillGradient(rect, ui.LinearGradient{From: fill, To: end, Angle: 180}, 0)

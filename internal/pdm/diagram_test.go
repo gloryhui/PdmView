@@ -156,6 +156,43 @@ func TestParseDiagramsAcrossScopesAndNestedPackage(t *testing.T) {
 	}
 }
 
+func TestParseRectangleAnnotationTextGeometryAndColors(t *testing.T) {
+	body := `
+        <col:PhysicalDiagrams>
+          <obj:PhysicalDiagram Id="annotation-diagram">
+            <col:Symbols>
+              <obj:RectangleSymbol Id="annotation">
+                <attr:Text>第一行
+第二行</attr:Text>
+                <attr:Rect>((-20, 40), (120, -10))</attr:Rect>
+                <attr:FillColor>0</attr:FillColor>
+                <attr:LineColor>0</attr:LineColor>
+                <attr:FontColor>16777215</attr:FontColor>
+              </obj:RectangleSymbol>
+            </col:Symbols>
+          </obj:PhysicalDiagram>
+        </col:PhysicalDiagrams>`
+
+	document, err := Parse(strings.NewReader(testDocument(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	diagram := diagramByID(t, document.Model.Contents, "annotation-diagram")
+	if len(diagram.AnnotationSymbols) != 1 {
+		t.Fatalf("annotation symbols = %+v", diagram.AnnotationSymbols)
+	}
+	annotation := diagram.AnnotationSymbols[0]
+	if annotation.ID != "annotation" ||
+		annotation.Text != "第一行\n第二行" ||
+		annotation.Rect == nil ||
+		*annotation.Rect != (Rect{Min: Point{X: -20, Y: -10}, Max: Point{X: 120, Y: 40}}) {
+		t.Fatalf("annotation = %+v", annotation)
+	}
+	assertAnnotationColor(t, "fill", annotation.Fill, RGBColor{})
+	assertAnnotationColor(t, "border", annotation.Border, RGBColor{})
+	assertAnnotationColor(t, "text", annotation.TextColor, RGBColor{R: 255, G: 255, B: 255})
+}
+
 func TestParsePointTuplesStrictGrammar(t *testing.T) {
 	valid, ok := parsePointTuples(" (( -10, 20 ) , ( +30, -40 ), (0,0)) ", 2, 0)
 	if !ok || !pointsEqual(valid, []Point{{X: -10, Y: 20}, {X: 30, Y: -40}, {X: 0, Y: 0}}) {
@@ -402,4 +439,11 @@ func hasRawObject(element *Element, local string) bool {
 		}
 	}
 	return false
+}
+
+func assertAnnotationColor(t *testing.T, name string, got *RGBColor, want RGBColor) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Fatalf("%s color = %+v, want %+v", name, got, want)
+	}
 }

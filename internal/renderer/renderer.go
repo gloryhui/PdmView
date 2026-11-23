@@ -151,8 +151,6 @@ func (c *labelCache) label(text string, font ui.Font) *labelVisual {
 type gridKey struct {
 	scaleBits uint32
 	dark      bool
-	bg        uint32
-	border    uint32
 }
 
 // Canvas is a retained scene renderer. Text layouts are cached per canvas for
@@ -166,6 +164,7 @@ type Canvas struct {
 	nodes          map[int]*nodeVisual
 	nodeOrder      []int
 	labels         labelCache
+	annotations    []annotationVisual
 	lodWidthFactor float64
 	lod            LOD
 	grid           *ui.Canvas
@@ -191,6 +190,7 @@ func New(scene graph.Scene, index graph.SpatialQuery) *Canvas {
 		index:          index,
 		nodes:          make(map[int]*nodeVisual),
 		labels:         newLabelCache(labelInternLimit),
+		annotations:    prepareAnnotations(scene.Annotations),
 		lodWidthFactor: sceneLODWidthFactor(scene.Nodes),
 	}
 	for offset := 0; offset < min(len(scene.Nodes), prefillNodeLimit); offset++ {
@@ -485,8 +485,7 @@ func (c *Canvas) DrawWithHover(
 	visible := camera.VisibleWorld()
 
 	p.Clip(area, 0, func() {
-		p.Fill(area, t.Background, 0)
-		c.drawGrid(p, area, t, &stats)
+		c.drawGrid(p, area, camera, t, &stats)
 		edgePadding := edgeCullPaddingDIP(stats.LOD) / camera.Scale()
 		edgeArea := graph.Rect{
 			Min: graph.Point{X: visible.Min.X - edgePadding, Y: visible.Min.Y - edgePadding},
@@ -514,6 +513,7 @@ func (c *Canvas) DrawWithHover(
 			}
 			stats.FieldRows += c.drawNode(p, offset, selected, hovered, camera, t, stats.LOD)
 		}
+		c.drawAnnotations(p, camera, visible, t)
 	})
 	return stats
 }
@@ -560,16 +560,22 @@ func (c *Canvas) nextLOD(scale float64) LOD {
 	return c.lod
 }
 
-func (c *Canvas) drawGrid(p *ui.Painter, area ui.Rect, t *ui.Theme, stats *FrameStats) {
+func (c *Canvas) drawGrid(p *ui.Painter, area ui.Rect, camera *graph.Camera, t *ui.Theme, stats *FrameStats) {
 	key := makeGridKey(t, p.Scale())
 	if !c.hasGrid || c.grid == nil || key != c.gridKey {
-		c.grid = ui.NewCanvas(gridPixels(p.Scale()), gridPixels(p.Scale()))
+		pixels := gridPixels(p.Scale())
+		c.grid = ui.NewCanvas(pixels, pixels)
 		c.grid.Draw(p, func(cp *ui.Painter) {
-			size := float32(gridPixels(p.Scale()))
-			cp.Fill(ui.Rect{W: size, H: size}, t.Background, 0)
-			line := t.Background.Mix(t.Border, 0.28)
-			cp.Line(0, 0, size, 0, 1, line)
-			cp.Line(0, 0, 0, size, 1, line)
+			size := float32(pixels)
+			bg := canvasBackground(t)
+			ink := ui.RGB(0, 0, 0)
+			if t.Dark {
+				ink = ui.RGB(255, 255, 255)
+			}
+			line := bg.Mix(ink, 0.14)
+			cp.Fill(ui.Rect{W: size, H: size}, bg, 0)
+			cp.Fill(ui.Rect{W: size, H: 1}, line, 0)
+			cp.Fill(ui.Rect{W: 1, H: size}, line, 0)
 		})
 		c.gridKey, c.hasGrid = key, true
 		stats.CacheMisses++
@@ -577,12 +583,25 @@ func (c *Canvas) drawGrid(p *ui.Painter, area ui.Rect, t *ui.Theme, stats *Frame
 		stats.CacheHits++
 	}
 
+	// Doubling the world spacing as zoom decreases retains shared grid lines
+	// while keeping the screen-space tile size between 64 and 128 DIPs.
+	mantissa, _ := math.Frexp(camera.Scale())
+	step := gridTileDIP * 2 * mantissa
+	worldMin := camera.VisibleWorld().Min
+	phaseX := math.Mod(worldMin.X*camera.Scale(), step)
+	phaseY := math.Mod(worldMin.Y*camera.Scale(), step)
+	if phaseX < 0 {
+		phaseX += step
+	}
+	if phaseY < 0 {
+		phaseY += step
+	}
 	c.lastGridTiles = 0
-	for y := area.Y; y < area.Y+area.H; y += gridTileDIP {
-		for x := area.X; x < area.X+area.W; x += gridTileDIP {
+	for y := float64(area.Y) - phaseY; y < float64(area.Y+area.H); y += step {
+		for x := float64(area.X) - phaseX; x < float64(area.X+area.W); x += step {
 			p.Image(c.grid.Bitmap(), ui.Rect{
 				X: float32(x), Y: float32(y),
-				W: gridTileDIP, H: gridTileDIP,
+				W: float32(step), H: float32(step),
 			}, ui.FillBox)
 			c.lastGridTiles++
 		}
@@ -602,7 +621,7 @@ func (c *Canvas) drawEdge(
 	c.edgeScratch = points
 	highlighted := edgeHighlighted(edge, offset, selected)
 	width := edgeLineWidth(lod, highlighted)
-	color := t.Border
+	color := canvasOutline(t.Border, t)
 	if highlighted {
 		color = t.Accent
 	}
@@ -707,14 +726,7 @@ func (c *Canvas) drawNode(
 	lod LOD,
 ) int {
 	node := c.scene.Nodes[offset]
-	screenMin := camera.WorldToScreen(node.Bounds.Min)
-	screenMax := camera.WorldToScreen(node.Bounds.Max)
-	rect := ui.Rect{
-		X: float32(screenMin.X),
-		Y: float32(screenMin.Y),
-		W: float32(screenMax.X - screenMin.X),
-		H: float32(screenMax.Y - screenMin.Y),
-	}
+	rect := canvasRect(camera, node.Bounds)
 	if node.Presentation != nil {
 		return c.drawTable(p, rect, node, c.nodeVisual(offset), t, lod, camera,
 			selected.Kind == graph.HitNode && selected.Index == offset,
@@ -726,8 +738,9 @@ func (c *Canvas) drawNode(
 		selected.Kind == graph.HitNode && selected.Index == offset,
 		hovered.Kind == graph.HitNode && hovered.Index == offset,
 	)
+	drawCardShadow(p, rect, 5, t)
 	p.Fill(rect, fill, 5)
-	p.Stroke(rect, border, 5, width)
+	p.Stroke(rect, canvasOutline(border, t), 5, width)
 	if lod == Far {
 		return 0
 	}
@@ -784,11 +797,14 @@ func makeGridKey(t *ui.Theme, scale float32) gridKey {
 	return gridKey{
 		scaleBits: math.Float32bits(scale),
 		dark:      t.Dark,
-		bg:        colorBits(t.Background),
-		border:    colorBits(t.Border),
 	}
 }
 
-func colorBits(c ui.Color) uint32 {
-	return uint32(c.R)<<24 | uint32(c.G)<<16 | uint32(c.B)<<8 | uint32(c.A)
+func canvasRect(camera *graph.Camera, bounds graph.Rect) ui.Rect {
+	screenMin := camera.WorldToScreen(bounds.Min)
+	screenMax := camera.WorldToScreen(bounds.Max)
+	return ui.Rect{
+		X: float32(screenMin.X), Y: float32(screenMin.Y),
+		W: float32(screenMax.X - screenMin.X), H: float32(screenMax.Y - screenMin.Y),
+	}
 }

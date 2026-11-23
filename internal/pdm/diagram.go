@@ -24,10 +24,11 @@ type Rect struct {
 // Diagram contains the symbols drawn on one physical diagram.
 type Diagram struct {
 	Metadata
-	OwnerID          string
-	TableAppearance  TableAppearance
-	TableSymbols     []TableSymbol
-	ReferenceSymbols []ReferenceSymbol
+	OwnerID           string
+	TableAppearance   TableAppearance
+	TableSymbols      []TableSymbol
+	ReferenceSymbols  []ReferenceSymbol
+	AnnotationSymbols []AnnotationSymbol
 }
 
 // TableSymbol represents one table or external shortcut on a diagram.
@@ -47,6 +48,16 @@ type ReferenceSymbol struct {
 	Rect                *Rect
 	Points              []Point
 	ControlPoints       []Point
+}
+
+// AnnotationSymbol represents a rectangle annotation on one diagram.
+type AnnotationSymbol struct {
+	Metadata
+	Text      string
+	Rect      *Rect
+	Fill      *RGBColor
+	Border    *RGBColor
+	TextColor *RGBColor
 }
 
 type diagramState struct {
@@ -128,7 +139,14 @@ func (p *projector) projectDiagrams(collection *Element, ownerID string, diagnos
 					)
 
 				case "RectangleSymbol":
-					// Annotation symbols stay available through Diagram.Raw.
+					text, _ := symbol.Property("Text")
+					if !p.isDefinition(symbol) || text == "" {
+						continue
+					}
+					diagram.AnnotationSymbols = append(
+						diagram.AnnotationSymbols,
+						p.projectAnnotationSymbol(symbol, text, diagnostics),
+					)
 				}
 			}
 		}
@@ -200,6 +218,25 @@ func (p *projector) projectReferenceSymbol(symbol *Element, diagnostics *[]Diagn
 	return result
 }
 
+func (p *projector) projectAnnotationSymbol(symbol *Element, text string, diagnostics *[]Diagnostic) AnnotationSymbol {
+	result := AnnotationSymbol{
+		Metadata: p.metadata(symbol, true, diagnostics),
+		Text:     text,
+		// PowerDesigner can write the top corner first for annotations.
+		Rect: p.normalizedRectProperty(symbol, "Rect", true, diagnostics),
+	}
+	if value, ok := symbol.Property("FillColor"); ok {
+		result.Fill, _ = parseColorRef(value)
+	}
+	if value, ok := symbol.Property("LineColor"); ok {
+		result.Border, _ = parseColorRef(value)
+	}
+	if value, ok := symbol.Property("FontColor"); ok {
+		result.TextColor, _ = parseColorRef(value)
+	}
+	return result
+}
+
 func (p *projector) symbolEndpoint(symbol *Element, collectionLocal string, diagnostics *[]Diagnostic) string {
 	collection := symbol.Child(NamespaceCollection, collectionLocal)
 	if collection == nil {
@@ -215,6 +252,20 @@ func (p *projector) symbolEndpoint(symbol *Element, collectionLocal string, diag
 }
 
 func (p *projector) rectProperty(element *Element, local string, required bool, diagnostics *[]Diagnostic) *Rect {
+	return p.rectPropertyWithOrder(element, local, required, false, diagnostics)
+}
+
+func (p *projector) normalizedRectProperty(element *Element, local string, required bool, diagnostics *[]Diagnostic) *Rect {
+	return p.rectPropertyWithOrder(element, local, required, true, diagnostics)
+}
+
+func (p *projector) rectPropertyWithOrder(
+	element *Element,
+	local string,
+	required bool,
+	normalize bool,
+	diagnostics *[]Diagnostic,
+) *Rect {
 	property := element.Child(NamespaceAttribute, local)
 	if property == nil {
 		if required {
@@ -223,9 +274,18 @@ func (p *projector) rectProperty(element *Element, local string, required bool, 
 		return nil
 	}
 	points, valid := parsePointTuples(property.Text, 2, 2)
-	if !valid || !orderedRect(points[0], points[1]) {
+	if !valid || (!normalize && !orderedRect(points[0], points[1])) {
 		p.invalidGeometry(property, diagnostics)
 		return nil
+	}
+	if normalize {
+		points[0], points[1] = Point{
+			X: min(points[0].X, points[1].X),
+			Y: min(points[0].Y, points[1].Y),
+		}, Point{
+			X: max(points[0].X, points[1].X),
+			Y: max(points[0].Y, points[1].Y),
+		}
 	}
 	return &Rect{Min: points[0], Max: points[1]}
 }

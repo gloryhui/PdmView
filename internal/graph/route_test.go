@@ -248,7 +248,7 @@ func TestBuildDiagramGraphExplicitUsesOnlyReferenceSymbols(t *testing.T) {
 		t.Fatalf("existing source geometry changed: %+v", result.EdgeSources[0])
 	}
 	assertRouteClear(t, result.Scene, 1)
-	if result.Scene.Bounds != sceneBounds(result.Scene.Nodes, result.Scene.Edges) {
+	if result.Scene.Bounds != sceneBounds(result.Scene.Nodes, result.Scene.Edges, result.Scene.Annotations) {
 		t.Fatalf("bounds not recomputed: %+v", result.Scene.Bounds)
 	}
 }

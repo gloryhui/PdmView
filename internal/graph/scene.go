@@ -61,9 +61,19 @@ func (e Edge) Bounds() Rect {
 	return bounds
 }
 
+// Annotation is one source rectangle annotation.
+type Annotation struct {
+	Bounds    Rect
+	Text      string
+	Fill      *pdm.RGBColor
+	Border    *pdm.RGBColor
+	TextColor *pdm.RGBColor
+}
+
 // Scene is a deterministic graph scene.
 type Scene struct {
-	Nodes  []Node
-	Edges  []Edge
-	Bounds Rect
+	Nodes       []Node
+	Edges       []Edge
+	Annotations []Annotation
+	Bounds      Rect
 }

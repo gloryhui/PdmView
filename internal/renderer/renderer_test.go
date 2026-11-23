@@ -188,7 +188,7 @@ func TestRendererGridTileCacheReuseThemeAndDPIInvalidation(t *testing.T) {
 	}
 }
 
-func TestRendererGridTilesAreScreenSpaceAndBoundedAtFarZoom(t *testing.T) {
+func TestRendererGridTilesAreBoundedAtNearAndFarZoom(t *testing.T) {
 	scene, err := graph.GenerateDefault(500, graph.DensityDense)
 	if err != nil {
 		t.Fatal(err)
@@ -204,14 +204,83 @@ func TestRendererGridTilesAreScreenSpaceAndBoundedAtFarZoom(t *testing.T) {
 	setScale(camera, 0.02)
 	tt.Frame()
 	farTiles := renderer.lastGridTiles
-	if nearTiles != farTiles {
-		t.Fatalf("grid density changed with camera zoom: 1x=%d .02x=%d", nearTiles, farTiles)
-	}
-	if farTiles < 1 || farTiles > 200 {
-		t.Fatalf("far-zoom grid tiles = %d outside bounded screen-space count", farTiles)
+	if nearTiles < 1 || nearTiles > 200 || farTiles < 1 || farTiles > 200 {
+		t.Fatalf("grid tiles outside bounded screen-space count: 1x=%d .02x=%d", nearTiles, farTiles)
 	}
 	if stats.VisibleNodes == 0 {
 		t.Fatal("far zoom unexpectedly culled the whole scene")
+	}
+}
+
+func TestRendererGridFollowsWorldCoordinates(t *testing.T) {
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 180, Y: 160}})
+	renderer := New(graph.Scene{}, nil)
+	tt := host(renderer, camera, graph.Hit{}, 180, 160, &FrameStats{})
+	tt.SetDark(false)
+	assertLine := func(x int) {
+		t.Helper()
+		img := tt.Image()
+		if line, bg := img.RGBAAt(x, 20), img.RGBAAt(x+4, 20); line.R >= bg.R {
+			t.Fatalf("expected a grid line at x=%d: line=%v background=%v", x, line, bg)
+		}
+	}
+	assertLine(64)
+	camera.Pan(graph.Point{X: 29})
+	tt.Frame()
+	assertLine(35)
+	camera.ZoomAt(graph.Point{}, 2)
+	tt.Frame()
+	assertLine(6)
+}
+
+func TestRendererThemeKeepsWhiteTableAndBlackMultilineNoteVisible(t *testing.T) {
+	white := &pdm.RGBColor{R: 255, G: 255, B: 255}
+	black := &pdm.RGBColor{}
+	scene := graph.Scene{
+		Nodes: []graph.Node{{
+			Bounds: graph.Rect{Min: graph.Point{X: 16, Y: 72}, Max: graph.Point{X: 148, Y: 122}},
+			Presentation: &graph.TablePresentation{
+				Style: pdm.TableAppearance{Fill: white, Border: white},
+			},
+		}},
+		Annotations: []graph.Annotation{{
+			Bounds: graph.Rect{Min: graph.Point{X: 16, Y: 16}, Max: graph.Point{X: 148, Y: 66}},
+			Text:   "Stock\r\nWarehouse", Fill: black, Border: black, TextColor: black,
+		}},
+	}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 180, Y: 160}})
+	tt := host(New(scene, nil), camera, graph.Hit{}, 180, 160, &FrameStats{})
+	for _, dark := range []bool{false, true} {
+		tt.SetDark(dark)
+		img := tt.Image()
+		bg, grid := img.RGBAAt(170, 30), img.RGBAAt(128, 10)
+		if bg.R == 255 || bg.R == 0 || (grid.R > bg.R) != dark || grid == bg {
+			t.Fatalf("dark=%t unexpected canvas colors: background=%v grid=%v", dark, bg, grid)
+		}
+		fill, border, shadow := img.RGBAAt(20, 84), img.RGBAAt(16, 84), img.RGBAAt(40, 123)
+		if fill.R != 255 || border == fill || border == bg || shadow.R >= bg.R {
+			t.Fatalf("dark=%t expected original white fill, distinct border and shadow: fill=%v border=%v shadow=%v", dark, fill, border, shadow)
+		}
+		if pixel := img.RGBAAt(20, 25); pixel.R != 0 || pixel.G != 0 || pixel.B != 0 {
+			t.Fatalf("dark=%t black annotation fill changed: %v", dark, pixel)
+		}
+		if edge := img.RGBAAt(16, 37); dark && edge.R <= bg.R {
+			t.Fatalf("dark canvas needs a brighter annotation outline: outline=%v background=%v", edge, bg)
+		}
+		for _, band := range [][2]int{{22, 41}, {42, 62}} {
+			visibleText := false
+			for y := band[0]; y < band[1] && !visibleText; y++ {
+				for x := 36; x < 128; x++ {
+					if img.RGBAAt(x, y).R > 180 {
+						visibleText = true
+						break
+					}
+				}
+			}
+			if !visibleText {
+				t.Fatalf("dark=%t missing contrasting annotation text in band %v", dark, band)
+			}
+		}
 	}
 }
 

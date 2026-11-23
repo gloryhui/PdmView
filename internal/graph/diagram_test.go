@@ -165,6 +165,73 @@ func TestMapDiagramMirrorsPDMYCoordinates(t *testing.T) {
 	}
 }
 
+func TestMapAndBuildDiagramGraphAnnotationsAndBounds(t *testing.T) {
+	black := &pdm.RGBColor{}
+	white := &pdm.RGBColor{R: 255, G: 255, B: 255}
+	model := &pdm.Model{
+		Contents: pdm.Contents{Tables: []pdm.Table{
+			mappingTable("table", "Table", "TABLE"),
+		}},
+	}
+	diagram := &pdm.Diagram{
+		Metadata: pdm.Metadata{ID: "annotations"},
+		TableSymbols: []pdm.TableSymbol{{
+			Metadata: pdm.Metadata{ID: "table-symbol"},
+			TableID:  "table",
+			Rect:     mappingRect(0, 0, 100, 50),
+		}},
+		AnnotationSymbols: []pdm.AnnotationSymbol{
+			{
+				Metadata:  pdm.Metadata{ID: "visible"},
+				Text:      "第一行\n第二行",
+				Rect:      mappingRect(200, 100, 350, 260),
+				Fill:      black,
+				Border:    black,
+				TextColor: white,
+			},
+			{
+				Metadata: pdm.Metadata{ID: "blank"},
+				Text:     " \n\t ",
+				Rect:     mappingRect(400, 0, 500, 100),
+			},
+			{
+				Metadata: pdm.Metadata{ID: "zero-width"},
+				Text:     "zero",
+				Rect:     mappingRect(600, 0, 600, 100),
+			},
+		},
+	}
+
+	mapped := MapDiagram(model, diagram)
+	if len(mapped.Scene.Nodes) != 1 || mapped.Scene.Nodes[0].ID != 0 {
+		t.Fatalf("node indexing changed: %+v", mapped.Scene.Nodes)
+	}
+	if len(mapped.Scene.Annotations) != 1 {
+		t.Fatalf("annotations = %+v", mapped.Scene.Annotations)
+	}
+	annotation := mapped.Scene.Annotations[0]
+	if annotation.Bounds != (Rect{Min: Point{X: 200, Y: -260}, Max: Point{X: 350, Y: -100}}) ||
+		annotation.Text != "第一行\n第二行" ||
+		annotation.Fill == nil || *annotation.Fill != (pdm.RGBColor{}) ||
+		annotation.Border == nil || *annotation.Border != (pdm.RGBColor{}) ||
+		annotation.TextColor == nil || *annotation.TextColor != *white {
+		t.Fatalf("annotation = %+v", annotation)
+	}
+	wantBounds := Rect{Min: Point{X: 0, Y: -260}, Max: Point{X: 350, Y: 0}}
+	if mapped.Scene.Bounds != wantBounds {
+		t.Fatalf("mapped bounds = %+v, want %+v", mapped.Scene.Bounds, wantBounds)
+	}
+
+	built := BuildDiagramGraph(model, diagram)
+	if len(built.Scene.Nodes) != 1 || built.Scene.Nodes[0].ID != 0 ||
+		len(built.Scene.Annotations) != 1 {
+		t.Fatalf("built scene indexes changed: %+v", built.Scene)
+	}
+	if built.Scene.Bounds != wantBounds {
+		t.Fatalf("built bounds = %+v, want %+v", built.Scene.Bounds, wantBounds)
+	}
+}
+
 func TestMapDiagramProjectsEachSymbolPresentation(t *testing.T) {
 	table := mappingTable("table", "Table Name", "TABLE_CODE",
 		pdm.Column{Metadata: pdm.Metadata{ID: "nonkey", Name: "First"}},
