@@ -26,8 +26,8 @@ func TestWindowOptions(t *testing.T) {
 	if opts.Title != appName {
 		t.Fatalf("title = %q, want %q", opts.Title, appName)
 	}
-	if opts.Width != defaultWidth || opts.Height != defaultHeight {
-		t.Fatalf("initial size = %dx%d, want %dx%d", opts.Width, opts.Height, defaultWidth, defaultHeight)
+	if opts.Width != 1280 || opts.Height != 900 {
+		t.Fatalf("initial size = %dx%d, want 1280x900", opts.Width, opts.Height)
 	}
 	if opts.MinWidth != minWidth || opts.MinHeight != minHeight {
 		t.Fatalf("minimum size = %dx%d, want %dx%d", opts.MinWidth, opts.MinHeight, minWidth, minHeight)
@@ -37,6 +37,26 @@ func TestWindowOptions(t *testing.T) {
 	}
 	if opts.Content == nil {
 		t.Fatal("WindowOptions.Content is nil")
+	}
+}
+
+func TestTablePropertiesSizeUsesLiveParentAndClampsMinimum(t *testing.T) {
+	tests := []struct {
+		name                      string
+		parentWidth, parentHeight int
+		wantWidth, wantHeight     int
+	}{
+		{name: "three quarters", parentWidth: 1600, parentHeight: 1000, wantWidth: 1200, wantHeight: 750},
+		{name: "minimum clamp", parentWidth: 800, parentHeight: 600, wantWidth: 640, wantHeight: 480},
+		{name: "fallback", parentWidth: 0, parentHeight: 0, wantWidth: 960, wantHeight: 675},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			width, height := tablePropertiesSize(test.parentWidth, test.parentHeight)
+			if width != test.wantWidth || height != test.wantHeight {
+				t.Fatalf("size = %dx%d, want %dx%d", width, height, test.wantWidth, test.wantHeight)
+			}
+		})
 	}
 }
 
@@ -80,11 +100,12 @@ func TestApplyBoardResultGuardsStaleDestroyedAndFailure(t *testing.T) {
 	stale := workspace.BeginOpen()
 	current := workspace.BeginOpen()
 	set := appui.BuildBoardSet(nil)
+	initialBoards, initialActive := workspace.BoardCount(), workspace.ActiveBoard()
 	if applyBoardResult(fakeWindow{}, workspace, stale, set, nil) {
 		t.Fatal("stale load result was published")
 	}
-	if workspace.BoardCount() != 1 || workspace.ActiveBoard() != 0 {
-		t.Fatal("stale result changed the demo workspace")
+	if workspace.BoardCount() != initialBoards || workspace.ActiveBoard() != initialActive {
+		t.Fatal("stale result changed the active board set")
 	}
 	if applyBoardResult(fakeWindow{destroyed: true}, workspace, current, set, nil) {
 		t.Fatal("destroyed-window result was published")

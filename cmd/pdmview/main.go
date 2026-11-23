@@ -24,11 +24,13 @@ var pdmChooserOpen atomic.Bool
 var saveDialogOpen atomic.Bool
 
 const (
-	appName       = "PdmView"
-	defaultWidth  = 1200
-	defaultHeight = 800
-	minWidth      = 800
-	minHeight     = 600
+	appName             = "PdmView"
+	defaultWidth        = 1280
+	defaultHeight       = 900
+	minWidth            = 800
+	minHeight           = 600
+	propertiesMinWidth  = 640
+	propertiesMinHeight = 480
 )
 
 func windowOptions(state *app.State, workspace *appui.Workspace) mygo.WindowOptions {
@@ -163,14 +165,16 @@ func openTablePropertiesWindow(
 	if !workspace.OpenTableProperties(tableID) {
 		return
 	}
+	width, height := parent.ContentSize()
+	width, height = tablePropertiesSize(width, height)
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:          workspace.TablePropertiesTitle(state),
 		Parent:         parent,
-		Width:          720,
-		Height:         520,
+		Width:          width,
+		Height:         height,
 		UseContentSize: true,
-		MinWidth:       640,
-		MinHeight:      480,
+		MinWidth:       propertiesMinWidth,
+		MinHeight:      propertiesMinHeight,
 		Content:        ui.View(workspace.TablePropertiesView(state)),
 	})
 	*properties = window
@@ -182,6 +186,15 @@ func openTablePropertiesWindow(
 		workspace.CloseTableProperties()
 	})
 	window.Focus()
+}
+
+func tablePropertiesSize(parentWidth, parentHeight int) (int, int) {
+	if parentWidth <= 0 || parentHeight <= 0 {
+		parentWidth, parentHeight = defaultWidth, defaultHeight
+	}
+	width := max(propertiesMinWidth, parentWidth*3/4)
+	height := max(propertiesMinHeight, parentHeight*3/4)
+	return width, height
 }
 
 func optionalPDMPath(args []string) (string, bool) {
