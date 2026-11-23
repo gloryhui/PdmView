@@ -17,12 +17,17 @@ PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm`
 
 启动 PdmView 后，点「打开 PDM…」，选择 UTF-8 XML 格式的 `.pdm` 文件。选中画板就能浏览模型，按住 `Ctrl` 滚动鼠标滚轮可按指针位置缩放。需要生成全库脚本时，打开「数据库 SQL」。
 
-| 平台 | 运行与验收状态 |
-| --- | --- |
-| macOS Apple Silicon | 需要 macOS 13.0 或更新版本。解压 ZIP 后打开 `PdmView.app`。已有本地构建和桌面验收记录。 |
-| Windows x64 | 解压 ZIP 后运行 `PdmView.exe`。已有交叉构建记录，Windows 桌面验收待完成。 |
+输入格式和已验证样本见 [PDM 格式验证](docs/PDM_FORMAT.md)，SQL 生成范围见 [MySQL 类型映射](docs/MYSQL_TYPE_MAPPING.md)。
 
-打包命令、签名状态和产物校验见[发布记录](RELEASE.md)。输入格式和已验证样本见 [PDM 格式验证](docs/PDM_FORMAT.md)，SQL 生成范围见 [MySQL 类型映射](docs/MYSQL_TYPE_MAPPING.md)。
+## 平台兼容性
+
+| 平台 | 系统版本与架构 | 验证状态 |
+| --- | --- | --- |
+| macOS | macOS 13 Ventura 及以上，Apple Silicon（arm64） | 已在 macOS 15.8.1 的 Apple M4 上进行桌面验收。解压 ZIP 后打开 `PdmView.app`。Intel Mac 暂无发行包。 |
+| Windows | Windows 10 / 11，x64 | 已通过交叉构建和 ZIP 校验，Windows 10 / 11 桌面验收待完成。解压后运行 `PdmView.exe`。Windows ARM64 暂无发行包。 |
+| Linux | 首个发行目标为 Ubuntu 24.04 LTS 桌面版，x64，需要 GTK 3 | MyGo 提供 Linux 原生后端，PdmView 的 Linux 桌面验收待完成。其他发行版和 Linux ARM64 暂无验证记录。 |
+
+打包命令、签名状态和产物校验见[发布记录](RELEASE.md)。Windows 和 Linux 的桌面运行要求参考 [MyGo v0.10.0](https://github.com/egoist/mygo/blob/v0.10.0/docs/README.md#requirements)。
 
 ## 界面截图
 
