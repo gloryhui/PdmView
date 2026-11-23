@@ -44,6 +44,8 @@ const (
 	labelInset         = 8
 
 	referenceNodeWidth = 236.0
+	tableTextMinWidth  = 20.0
+	tableTextMinHeight = 8.0
 	nodeVisualLimit    = 256
 	prefillNodeLimit   = 64
 	labelInternLimit   = 512
@@ -214,11 +216,16 @@ func (c *Canvas) PrepareNode(offset int) bool {
 		c.nodeOrder = c.nodeOrder[1:]
 		delete(c.nodes, oldest)
 	}
+	c.prepareNode(offset)
+	return true
+}
+
+func (c *Canvas) prepareNode(offset int) {
 	node := c.scene.Nodes[offset]
 	if node.Presentation != nil {
 		c.nodes[offset] = &nodeVisual{table: c.prepareTable(node)}
 		c.nodeOrder = append(c.nodeOrder, offset)
-		return true
+		return
 	}
 	titleFont := ui.Font{Size: 11.5, Weight: 650}
 	codeFont := ui.Font{Size: 9.5, Weight: 500}
@@ -246,60 +253,61 @@ func (c *Canvas) PrepareNode(offset int) bool {
 	}
 	c.nodes[offset] = visual
 	c.nodeOrder = append(c.nodeOrder, offset)
-	return true
 }
 
-// PrepareVisible prepares up to the node-cache capacity of visible nodes and
-// prioritizes the selected node. Existing offscreen visuals stay cached while
-// capacity permits; only the oldest unpinned entries needed for missing desired
-// nodes are evicted. It must be called outside Draw when a board exceeds the
-// eager preparation window.
+// PrepareVisible prepares text for visible nodes and prioritizes the selected
+// node. The cache grows to fit eligible PDM tables on dense views and retains
+// offscreen layouts within the usual capacity. Call outside Draw.
 func (c *Canvas) PrepareVisible(camera *graph.Camera, selected graph.Hit) int {
 	if c == nil || camera == nil {
 		return 0
 	}
-	if c.nextLOD(camera.Scale()*c.lodWidthFactor) == Far {
-		return 0
-	}
+	scale := camera.Scale()
+	lod := c.nextLOD(scale * c.lodWidthFactor)
 	c.prepareOffsets = c.index.QueryNodes(camera.VisibleWorld(), c.prepareOffsets[:0])
-	desired := make([]int, 0, nodeVisualLimit)
+	var desired []int
 	desiredSet := make(map[int]bool)
 	addDesired := func(offset int) {
-		if offset >= 0 && offset < len(c.scene.Nodes) && !desiredSet[offset] &&
-			len(desired) < nodeVisualLimit {
-			desiredSet[offset] = true
-			desired = append(desired, offset)
+		if offset < 0 || offset >= len(c.scene.Nodes) || desiredSet[offset] {
+			return
 		}
+		node := c.scene.Nodes[offset]
+		if !nodeTextEligible(node, scale, lod) ||
+			(node.Presentation == nil && len(desired) >= nodeVisualLimit) {
+			return
+		}
+		desiredSet[offset] = true
+		desired = append(desired, offset)
 	}
-	if selected.Kind == graph.HitNode && selected.Index >= 0 && selected.Index < len(c.scene.Nodes) {
+	if selected.Kind == graph.HitNode {
 		addDesired(selected.Index)
 	}
 	for _, offset := range c.prepareOffsets {
 		addDesired(offset)
 	}
 
-	missing := 0
-	for _, offset := range desired {
-		if c.nodes[offset] == nil {
-			missing++
-		}
-	}
-	evict := max(0, len(c.nodes)+missing-nodeVisualLimit)
-	kept := c.nodeOrder[:0]
-	for _, offset := range c.nodeOrder {
-		if !desiredSet[offset] && evict > 0 {
-			delete(c.nodes, offset)
-			evict--
-		} else {
-			kept = append(kept, offset)
-		}
-	}
-	c.nodeOrder = kept
-
 	prepared := 0
 	for _, offset := range desired {
-		if c.nodes[offset] == nil && c.PrepareNode(offset) {
+		if c.nodes[offset] == nil {
 			prepared++
+		}
+	}
+	if evict := len(c.nodes) + prepared - max(nodeVisualLimit, len(desired)); evict > 0 {
+		kept := c.nodeOrder[:0]
+		for _, offset := range c.nodeOrder {
+			if !desiredSet[offset] && evict > 0 {
+				delete(c.nodes, offset)
+				evict--
+			} else {
+				kept = append(kept, offset)
+			}
+		}
+		c.nodeOrder = kept
+	}
+
+	for _, offset := range desired {
+		if c.nodes[offset] == nil {
+			c.prepareNode(offset)
 		}
 	}
 	return prepared
@@ -310,6 +318,14 @@ func (c *Canvas) nodeVisual(offset int) *nodeVisual {
 		return nil
 	}
 	return c.nodes[offset]
+}
+
+func nodeTextEligible(node graph.Node, scale float64, lod LOD) bool {
+	if node.Presentation != nil {
+		return node.Bounds.Width()*scale >= tableTextMinWidth &&
+			node.Bounds.Height()*scale >= tableTextMinHeight
+	}
+	return lod != Far
 }
 
 func sceneLODWidthFactor(nodes []graph.Node) float64 {
@@ -480,13 +496,14 @@ func (c *Canvas) DrawWithHover(
 	if p == nil || camera == nil || area.W <= 0 || area.H <= 0 {
 		return stats
 	}
-	stats.LOD = c.updateLOD(camera.Scale() * c.lodWidthFactor)
+	scale := camera.Scale()
+	stats.LOD = c.updateLOD(scale * c.lodWidthFactor)
 	t := p.Theme()
 	visible := camera.VisibleWorld()
 
 	p.Clip(area, 0, func() {
 		c.drawGrid(p, area, camera, t, &stats)
-		edgePadding := edgeCullPaddingDIP(stats.LOD) / camera.Scale()
+		edgePadding := edgeCullPaddingDIP(stats.LOD) / scale
 		edgeArea := graph.Rect{
 			Min: graph.Point{X: visible.Min.X - edgePadding, Y: visible.Min.Y - edgePadding},
 			Max: graph.Point{X: visible.Max.X + edgePadding, Y: visible.Max.Y + edgePadding},
@@ -508,10 +525,15 @@ func (c *Canvas) DrawWithHover(
 			if offset < 0 || offset >= len(c.scene.Nodes) {
 				continue
 			}
-			if stats.LOD != Far && c.nodes[offset] == nil {
+			node := c.scene.Nodes[offset]
+			rect := canvasRect(camera, node.Bounds)
+			textEligible := nodeTextEligible(node, scale, stats.LOD)
+			if textEligible && c.nodes[offset] == nil {
 				stats.UnpreparedNodes++
 			}
-			stats.FieldRows += c.drawNode(p, offset, selected, hovered, camera, t, stats.LOD)
+			stats.FieldRows += c.drawNode(
+				p, offset, rect, selected, hovered, camera, t, stats.LOD, textEligible,
+			)
 		}
 		c.drawAnnotations(p, camera, visible, t)
 	})
@@ -720,17 +742,19 @@ func edgeArrow(dst [][2]float32, points [][2]float32) [][2]float32 {
 func (c *Canvas) drawNode(
 	p *ui.Painter,
 	offset int,
+	rect ui.Rect,
 	selected, hovered graph.Hit,
 	camera *graph.Camera,
 	t *ui.Theme,
 	lod LOD,
+	textEligible bool,
 ) int {
 	node := c.scene.Nodes[offset]
-	rect := canvasRect(camera, node.Bounds)
 	if node.Presentation != nil {
-		return c.drawTable(p, rect, node, c.nodeVisual(offset), t, lod, camera,
+		return c.drawTable(p, rect, node, c.nodeVisual(offset), t, camera,
 			selected.Kind == graph.HitNode && selected.Index == offset,
 			hovered.Kind == graph.HitNode && hovered.Index == offset,
+			textEligible,
 		)
 	}
 	fill, border, width := nodeCardStyle(
@@ -741,7 +765,7 @@ func (c *Canvas) drawNode(
 	drawCardShadow(p, rect, 5, t)
 	p.Fill(rect, fill, 5)
 	p.Stroke(rect, canvasOutline(border, t), 5, width)
-	if lod == Far {
+	if !textEligible {
 		return 0
 	}
 

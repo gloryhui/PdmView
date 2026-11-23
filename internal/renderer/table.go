@@ -113,7 +113,7 @@ func colorFromPDM(saved *pdm.RGBColor, fallback ui.Color) ui.Color {
 
 func (c *Canvas) drawTable(
 	p *ui.Painter, rect ui.Rect, node graph.Node, visual *nodeVisual, theme *ui.Theme,
-	lod LOD, camera *graph.Camera, selected, hovered bool,
+	camera *graph.Camera, selected, hovered, textEligible bool,
 ) int {
 	style := node.Presentation.Style
 	fill := colorFromPDM(style.Fill, theme.Surface)
@@ -139,7 +139,7 @@ func (c *Canvas) drawTable(
 		p.Stroke(ui.Rect{X: rect.X - extent, Y: rect.Y - extent, W: rect.W + 2*extent, H: rect.H + 2*extent}, accent, 0, extent)
 	}
 	p.Stroke(rect, border, 0, 1)
-	if lod == Far || visual == nil || visual.table == nil {
+	if !textEligible || visual == nil || visual.table == nil {
 		return 0
 	}
 

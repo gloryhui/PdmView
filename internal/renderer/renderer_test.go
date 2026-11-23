@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -79,6 +80,247 @@ func TestPresentationDrawsAllRowsAndFontScalesWithZoom(t *testing.T) {
 	if zoom1 <= 0 || zoom1 >= zoom2 || zoom2 >= zoom3 {
 		t.Fatalf("table zoom not monotonic: %v, %v, %v", zoom1, zoom2, zoom3)
 	}
+}
+
+func TestPDMTableTextSurvivesThreeZoomOutNotchesBeyondEagerPrefill(t *testing.T) {
+	const (
+		targetOffset = 64
+		referenceW   = 236
+		initialDIP   = 85.0
+	)
+	nodes := make([]graph.Node, targetOffset+nodeVisualLimit+1)
+	for offset := range nodes {
+		x := 10000.0 + float64(offset*240)
+		nodes[offset] = graph.Node{
+			ID:     offset,
+			Bounds: graph.Rect{Min: graph.Point{X: x}, Max: graph.Point{X: x + referenceW, Y: 144}},
+		}
+	}
+	nodes[targetOffset] = graph.Node{
+		ID:     targetOffset,
+		Bounds: graph.Rect{Min: graph.Point{X: 10, Y: 10}, Max: graph.Point{X: 246, Y: 154}},
+		Presentation: &graph.TablePresentation{
+			Style: pdm.TableAppearance{
+				Fill:        &pdm.RGBColor{R: 255, G: 255, B: 255},
+				Border:      &pdm.RGBColor{},
+				TitleColor:  &pdm.RGBColor{},
+				ColumnColor: &pdm.RGBColor{},
+			},
+			Title: "Wide PDM Table",
+			Columns: []graph.ColumnPresentation{
+				{Name: "user_id", DataType: "BIGINT"},
+				{Name: "display", DataType: "VARCHAR"},
+			},
+		},
+	}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 200, Y: 100}})
+	setScale(camera, initialDIP/referenceW)
+	scene := graph.Scene{Nodes: nodes}
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	if renderer.nodeVisual(targetOffset) != nil {
+		t.Fatal("target unexpectedly received eager prefill")
+	}
+	if prepared := renderer.PrepareVisible(camera, graph.Hit{}); prepared != 1 {
+		t.Fatalf("baseline preparation = %d, want 1", prepared)
+	}
+	stats := FrameStats{}
+	tt := host(renderer, camera, graph.Hit{}, 200, 100, &stats)
+	tt.SetScale(2)
+	if stats.LOD != Medium || stats.FieldRows != 2 || stats.UnpreparedNodes != 0 {
+		t.Fatalf("baseline PDM text = %+v", stats)
+	}
+
+	for offset := targetOffset + 1; offset < len(scene.Nodes) && renderer.nodeVisual(targetOffset) != nil; offset++ {
+		renderer.PrepareNode(offset)
+	}
+	if renderer.nodeVisual(targetOffset) != nil {
+		t.Fatal("target was not evicted before the far-zoom preparation check")
+	}
+
+	step := math.Exp(-0.36)
+	for notch := 1; notch <= 3; notch++ {
+		setScale(camera, camera.Scale()*step)
+		prepared := renderer.PrepareVisible(camera, graph.Hit{})
+		tt.Frame()
+		if notch == 1 && prepared == 0 {
+			t.Fatal("far LOD skipped preparation for eligible PDM table text")
+		}
+		if stats.LOD != Far || stats.VisibleNodes != 1 || stats.FieldRows != 2 ||
+			stats.UnpreparedNodes != 0 {
+			t.Fatalf("notch %d PDM text = %+v", notch, stats)
+		}
+	}
+
+	tableRect := canvasRect(camera, nodes[targetOffset].Bounds)
+	if tableRect.W < 27 || tableRect.W > 30 || tableRect.H < 8 {
+		t.Fatalf("three-notch table size = %.3fx%.3f DIP", tableRect.W, tableRect.H)
+	}
+	imageFrame := tt.Image()
+	titleBand := ui.Rect{
+		X: tableRect.X + tableRect.W*0.08,
+		Y: tableRect.Y + 0.5,
+		W: tableRect.W * 0.84,
+		H: 2.5,
+	}
+	if !imageHasPixelInDIPRect(imageFrame, titleBand, 2, func(pixel color.RGBA) bool {
+		return pixel.R < 180 && pixel.G < 180 && pixel.B < 180
+	}) {
+		t.Fatalf("three-notch PDM table title was not rasterized in %+v", titleBand)
+	}
+	fieldBand := ui.Rect{
+		X: tableRect.X + 0.5,
+		Y: tableRect.Y + 3.2,
+		W: tableRect.W - 1,
+		H: tableRect.H - 4.2,
+	}
+	if !imageHasPixelInDIPRect(imageFrame, fieldBand, 2, func(pixel color.RGBA) bool {
+		return pixel.R < 180 && pixel.G < 180 && pixel.B < 180
+	}) {
+		t.Fatalf("three-notch PDM table fields were not rasterized in %+v", fieldBand)
+	}
+
+	setScale(camera, (tableTextMinWidth-0.2)/referenceW)
+	renderer.PrepareVisible(camera, graph.Hit{})
+	tt.Frame()
+	if stats.FieldRows != 0 {
+		t.Fatalf("below-threshold PDM table text remained visible: %+v", stats)
+	}
+}
+
+func TestOverviewKeepsTextForAllVisiblePDMTables(t *testing.T) {
+	const tableCount = 300
+	presentation := &graph.TablePresentation{
+		Title:   "Stock",
+		Columns: []graph.ColumnPresentation{{Name: "id", DataType: "INT"}},
+	}
+	scene := graph.Scene{Nodes: make([]graph.Node, tableCount)}
+	for index := range scene.Nodes {
+		x, y := float64(index%20*245), float64(index/20*152)
+		scene.Nodes[index] = graph.Node{
+			ID: index,
+			Bounds: graph.Rect{
+				Min: graph.Point{X: x, Y: y},
+				Max: graph.Point{X: x + 236, Y: y + 144},
+			},
+			Presentation: presentation,
+		}
+	}
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 700, Y: 300}})
+	setScale(camera, 0.12)
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	renderer.PrepareVisible(camera, graph.Hit{})
+	var stats FrameStats
+	tt := host(renderer, camera, graph.Hit{}, 700, 300, &stats)
+	if stats.VisibleNodes != tableCount || stats.FieldRows != tableCount || stats.UnpreparedNodes != 0 {
+		t.Fatalf("dense overview text = %+v", stats)
+	}
+	setScale(camera, 0.03)
+	renderer.PrepareVisible(camera, graph.Hit{})
+	tt.Frame()
+	if stats.FieldRows != 0 || len(renderer.nodes) > nodeVisualLimit {
+		t.Fatalf("tiny overview should prune excess cached layouts: frame=%+v cached=%d", stats, len(renderer.nodes))
+	}
+}
+
+func TestTinyPDMCardsSkipPreparationAndStatsAtMediumAndNear(t *testing.T) {
+	for _, lod := range []LOD{Medium, Near} {
+		nodes := make([]graph.Node, 65)
+		for offset := range nodes {
+			nodes[offset] = graph.Node{
+				ID:     offset,
+				Bounds: graph.Rect{Max: graph.Point{X: 236, Y: 80}},
+			}
+		}
+		nodes[64] = graph.Node{
+			ID:     64,
+			Bounds: graph.Rect{Min: graph.Point{X: 10}, Max: graph.Point{X: 33.75, Y: 20}},
+			Presentation: &graph.TablePresentation{
+				Title: "Tiny",
+				Columns: []graph.ColumnPresentation{
+					{Name: "id", DataType: "INT"},
+				},
+			},
+		}
+		scene := graph.Scene{Nodes: nodes}
+		camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 100, Y: 40}})
+		camera.ZoomAt(graph.Point{}, 0.8)
+		renderer := New(scene, graph.NewSpatialIndex(scene))
+		renderer.lod = lod
+		if prepared := renderer.PrepareVisible(camera, graph.Hit{}); prepared != 0 {
+			t.Fatalf("LOD %q prepared %d tiny PDM cards", lod, prepared)
+		}
+		stats := FrameStats{}
+		host(renderer, camera, graph.Hit{}, 100, 40, &stats)
+		if stats.LOD != lod || stats.FieldRows != 0 || stats.UnpreparedNodes != 0 ||
+			renderer.nodeVisual(64) != nil {
+			t.Fatalf("LOD %q tiny PDM card = %+v", lod, stats)
+		}
+	}
+}
+
+func TestShortMultilineAnnotationRemainsVisibleThroughThreeZoomOutNotches(t *testing.T) {
+	const (
+		referenceW = 236.0
+		initialDIP = 85.0
+	)
+	camera := graph.NewCamera(graph.Rect{Max: graph.Point{X: 100, Y: 40}})
+	setScale(camera, initialDIP/referenceW)
+	annotation := graph.Annotation{
+		Bounds: graph.Rect{
+			Min: graph.Point{X: 10, Y: 10},
+			Max: graph.Point{X: 10 + referenceW, Y: 10 + 11/camera.Scale()},
+		},
+		Text:      "First\nSecond",
+		Fill:      &pdm.RGBColor{},
+		Border:    &pdm.RGBColor{},
+		TextColor: &pdm.RGBColor{R: 255, G: 255, B: 255},
+	}
+	scene := graph.Scene{Annotations: []graph.Annotation{annotation}}
+	renderer := New(scene, graph.NewSpatialIndex(scene))
+	step := math.Exp(-0.36)
+	stats := FrameStats{}
+	tt := host(renderer, camera, graph.Hit{}, 100, 40, &stats)
+	tt.SetScale(2)
+
+	baseline := canvasRect(camera, annotation.Bounds)
+	if baseline.H < 10.9 || baseline.H > 11.1 {
+		t.Fatalf("baseline annotation height = %.3f DIP", baseline.H)
+	}
+	for notch := 1; notch <= 3; notch++ {
+		setScale(camera, camera.Scale()*step)
+		tt.Frame()
+	}
+
+	rect := canvasRect(camera, annotation.Bounds)
+	if rect.H < 3.7 || rect.H > 3.8 {
+		t.Fatalf("three-notch annotation height = %.3f DIP", rect.H)
+	}
+	imageFrame := tt.Image()
+	insetX := min(0.5, rect.W/8)
+	insetY := min(0.25, rect.H/8)
+	middle := rect.Y + rect.H/2
+	lineBands := []ui.Rect{
+		{
+			X: rect.X + insetX,
+			Y: rect.Y + insetY,
+			W: rect.W - 2*insetX,
+			H: middle - rect.Y - 2*insetY,
+		},
+		{
+			X: rect.X + insetX,
+			Y: middle,
+			W: rect.W - 2*insetX,
+			H: rect.Y + rect.H - middle - insetY,
+		},
+	}
+	for index, band := range lineBands {
+		if !imageHasPixelInDIPRect(imageFrame, band, 2, func(pixel color.RGBA) bool {
+			return pixel.R > 80 && pixel.G > 80 && pixel.B > 80
+		}) {
+			t.Fatalf("three-notch annotation line %d was not visible in %+v", index+1, band)
+		}
+	}
+
 }
 
 func TestRendererVisibleEdgesUseExactViewportCrossings(t *testing.T) {
@@ -806,4 +1048,24 @@ func layoutWithin(layout *ui.TextLayout, x, y, width, height float32) bool {
 	}
 	w, h := layout.Size()
 	return w <= width && h <= height && x >= 0 && y >= 0
+}
+
+func imageHasPixelInDIPRect(
+	img *image.RGBA,
+	rect ui.Rect,
+	pixelScale float64,
+	match func(color.RGBA) bool,
+) bool {
+	x0 := max(0, int(math.Ceil(float64(rect.X)*pixelScale)))
+	y0 := max(0, int(math.Ceil(float64(rect.Y)*pixelScale)))
+	x1 := min(img.Rect.Dx(), int(math.Floor(float64(rect.X+rect.W)*pixelScale)))
+	y1 := min(img.Rect.Dy(), int(math.Floor(float64(rect.Y+rect.H)*pixelScale)))
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			if match(img.RGBAAt(x, y)) {
+				return true
+			}
+		}
+	}
+	return false
 }

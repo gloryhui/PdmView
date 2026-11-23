@@ -11,6 +11,7 @@ import (
 const (
 	annotationFontSize   = 14
 	annotationLineHeight = 17
+	annotationMinFont    = 1
 )
 
 type annotationVisual struct {
@@ -68,8 +69,11 @@ func (c *Canvas) drawAnnotations(p *ui.Painter, camera *graph.Camera, visible gr
 
 func (v annotationVisual) draw(p *ui.Painter, rect ui.Rect, text ui.Color) {
 	height := float32(len(v.lines)) * annotationLineHeight
-	zoom := min((rect.W-2)/(v.width+12), (rect.H-2)/(height+4))
-	if zoom*annotationFontSize < 7 {
+	// A fixed inset takes up too much of a short annotation at overview zoom.
+	paddingX := min(2, rect.W/8)
+	paddingY := min(2, rect.H/8)
+	zoom := min((rect.W-paddingX)/(v.width+12), (rect.H-paddingY)/(height+4))
+	if zoom*annotationFontSize < annotationMinFont {
 		return
 	}
 	centerX, centerY := rect.X+rect.W/2, rect.Y+rect.H/2
