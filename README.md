@@ -1,14 +1,15 @@
 # PdmView
 
-PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm` 数据库模型、编辑表和字段的基础信息，以及生成 MySQL 8.0 建表脚本。
+PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm` 数据库模型、查询表结构，以及预览和导出 MySQL 8.0 建表 SQL。
 
-![PdmView 工作区，展示合成 PDM 模型的画板、对象树和表详情](docs/screenshots/workspace-zh.png)
+> **当前版本仅建议用于查询和浏览。** 界面中仍有「保存」按钮，但修改后的 `.pdm` 能否在不同版本的 PowerDesigner 中正常打开尚未经过兼容性测试，请勿修改或保存原始模型。画板支持缩放和平移，暂不支持拖拽表来重新排版。
+
+![PdmView 画板总览，左侧为模型导航，右侧为原始画板上的表布局](docs/screenshots/diagram-overview.png)
 
 ## 主要功能
 
 - **查看模型**。浏览原始画板、表关系和 Package，缩放或平移画布，搜索并定位表。
-- **查看表属性**。检查字段、主键、外键和索引，沿外键关系跳到关联表。双击画布中的表打开表属性。
-- **写回 PDM**。在表属性中保存表和字段的名称、编码与注释。窗口中的其他修改只保留为草稿。
+- **查看表属性**。双击画布中的表，查看字段、数据类型、主键、外键和索引。可沿外键关系跳到关联表。
 - **生成 MySQL 8.0 SQL**。单表支持「完整 SQL」「一般 SQL」「裸 SQL」三种预览。全库可查看生成诊断、预览、复制或导出 `.sql`。
 - **界面偏好**。支持简体中文和英文，可选择亮色、暗色或跟随系统。
 
@@ -22,6 +23,23 @@ PdmView 是一款原生桌面应用，用于在本地查看 PowerDesigner `.pdm`
 | Windows x64 | 解压 ZIP 后运行 `PdmView.exe`。已有交叉构建记录，Windows 桌面验收待完成。 |
 
 打包命令、签名状态和产物校验见[发布记录](RELEASE.md)。输入格式和已验证样本见 [PDM 格式验证](docs/PDM_FORMAT.md)，SQL 生成范围见 [MySQL 类型映射](docs/MYSQL_TYPE_MAPPING.md)。
+
+## 界面截图
+
+### 表属性
+
+![表属性的字段页，显示字段名称、类型、默认值以及键标记](docs/screenshots/table-properties.png)
+
+### 单表 SQL 预览
+
+![表属性的预览页，显示三种 SQL 格式和 MySQL 建表语句](docs/screenshots/table-sql-preview.png)
+
+<details>
+<summary>启动后的空白工作区</summary>
+
+![启动后的工作区，打开 PDM 按钮位于左侧导航区](docs/screenshots/empty-workspace.png)
+
+</details>
 
 ## 从源码运行
 
