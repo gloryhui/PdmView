@@ -8,15 +8,15 @@ die() {
 	exit 1
 }
 
-[ "$#" -eq 4 ] || die "usage: package-notices.sh macos|windows DEST BINARY AUDIT"
+[ "$#" -eq 4 ] || die "usage: package-notices.sh macos|windows|linux DEST BINARY AUDIT"
 TARGET=$1
 DEST=$2
 BINARY=$3
 AUDIT=$4
 
 case "$TARGET" in
-macos | windows) ;;
-*) die "target must be macos or windows" ;;
+macos | windows | linux) ;;
+*) die "target must be macos, windows or linux" ;;
 esac
 [ -f "$BINARY" ] || die "binary not found: $BINARY"
 [ -d "$DEST" ] || die "notices directory not found: $DEST"
